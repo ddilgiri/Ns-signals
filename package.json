@@ -1,0 +1,18 @@
+{
+  "name": "nse-fno-signal-engine",
+  "version": "2.0.0",
+  "description": "NSE F&O Signal Engine - Angel One SmartAPI Proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["nse", "options", "signals", "angel-one"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0",
+    "speakeasy": "^2.0.0"
+  }
+}

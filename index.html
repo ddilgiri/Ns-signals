@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#080c14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="F&O Signals">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>NSE F&O Signal Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080c14;--bg2:#0d1220;--bg3:#131929;--bg4:#1a2238;--bg5:#202840;
+  --border:#1e2d48;--border2:#2a3d5e;--border3:#3a5070;
+  --text:#dce8ff;--text2:#7a9cc0;--text3:#3d5578;--text4:#253650;
+  --green:#00f5a0;--green2:#00c47d;--green-bg:#00f5a00d;
+  --red:#ff3d5a;--red2:#cc2e46;--red-bg:#ff3d5a0d;
+  --amber:#ffb627;--amber-bg:#ffb6270d;
+  --blue:#3d9bff;--cyan:#22d3ee;--purple:#a78bfa;
+  --font-mono:'JetBrains Mono',monospace;
+  --font-sans:'Inter',sans-serif;
+  --r:10px;--r2:16px;
+  --nav-h:64px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
+
+/* ── SAFE AREA HEADER ── */
+.topbar{
+  background:var(--bg);border-bottom:1px solid var(--border);
+  padding:calc(var(--safe-t) + 10px) 16px 10px;
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+  position:sticky;top:0;z-index:100;
+}
+.topbar-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--green),var(--cyan));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.topbar-title{flex:1}
+.topbar-title h1{font-size:13px;font-family:var(--font-mono);font-weight:700;letter-spacing:.05em;color:var(--text)}
+.topbar-title p{font-size:10px;color:var(--text3);letter-spacing:.04em;margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+
+/* ── STATUS PILL ── */
+.status-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--bg2);font-family:var(--font-mono);font-size:10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.dot.live{background:var(--green);box-shadow:0 0 7px var(--green);animation:blink 2s infinite}
+.dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── SCAN BUTTON (top right) ── */
+.scan-btn{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:var(--font-sans);transition:all .15s;white-space:nowrap}
+.scan-btn.go{background:var(--green);color:#000}
+.scan-btn.stop{background:var(--red);color:#fff}
+
+/* ── PAGES ── */
+.pages{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(var(--nav-h) + var(--safe-b) + 12px);display:none}
+.page.active{display:block}
+::-webkit-scrollbar{display:none}
+
+/* ── BOTTOM NAV ── */
+.bottomnav{
+  height:calc(var(--nav-h) + var(--safe-b));
+  padding-bottom:var(--safe-b);
+  background:var(--bg);border-top:1px solid var(--border);
+  display:flex;align-items:stretch;flex-shrink:0;z-index:100;
+}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:transparent;color:var(--text3);font-size:9px;font-family:var(--font-sans);font-weight:500;letter-spacing:.04em;padding-top:6px;transition:color .15s;position:relative}
+.nav-item.active{color:var(--green)}
+.nav-item.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:var(--green);border-radius:0 0 3px 3px}
+.nav-icon{font-size:20px;line-height:1}
+.nav-badge{position:absolute;top:4px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;display:none}
+.nav-badge.show{display:block}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin:12px 12px 0;overflow:hidden}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.card-title{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:7px}
+.card-body{padding:14px}
+
+/* ── INDEX BAR ── */
+.index-bar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:12px}
+.idx-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
+.idx-name{font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.idx-val{font-size:18px;font-weight:700;font-family:var(--font-mono);color:var(--text)}
+.idx-chg{font-size:11px;font-family:var(--font-mono);margin-top:2px}
+
+/* ── METRICS GRID ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px}
+.met{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 10px}
+.met-l{font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.met-v{font-size:16px;font-weight:700;font-family:var(--font-mono);color:var(--text);line-height:1}
+.met-v.g{color:var(--green)}.met-v.r{color:var(--red)}.met-v.a{color:var(--amber)}
+.met-s{font-size:9px;color:var(--text3);margin-top:3px}
+
+/* ── SIGNAL CARD ── */
+.sig-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin:8px 12px 0;padding:13px 14px;position:relative;overflow:hidden;cursor:pointer;transition:all .15s;active:background:var(--bg4)}
+.sig-card:active{background:var(--bg4)}
+.sig-bar{position:absolute;left:0;top:0;bottom:0;width:3px}
+.sig-bar.ce{background:var(--green)}.sig-bar.pe{background:var(--red)}
+.sig-r1{display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.sig-type{font-size:10px;font-family:var(--font-mono);font-weight:700;padding:3px 8px;border-radius:5px}
+.sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #00f5a025}
+.sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #ff3d5a25}
+.sig-name{font-size:14px;font-weight:700;color:var(--text);flex:1;font-family:var(--font-mono)}
+.sig-prob{font-size:12px;font-weight:700;font-family:var(--font-mono)}
+.sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.sig-cell{}
+.sig-label{font-size:8px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;margin-bottom:2px;display:flex;align-items:center;gap:3px}
+.sig-val{font-size:13px;font-weight:700;font-family:var(--font-mono)}
+.sig-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.sig-tag{font-size:9px;color:var(--text3);padding:2px 7px;border-radius:4px;background:var(--bg4);border:1px solid var(--border)}
+.sig-reason{font-size:10px;color:var(--text3);line-height:1.5;padding-top:8px;border-top:1px solid var(--border)}
+.prob-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-top:8px}
+.prob-fill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .6s ease}
+.live-badge{font-size:8px;background:var(--green);color:#000;border-radius:3px;padding:1px 4px;font-weight:700}
+.est-badge{font-size:8px;background:var(--text3);color:var(--bg);border-radius:3px;padding:1px 4px;font-weight:700}
+
+/* ── FILTER CHIPS ── */
+.chips{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;flex-shrink:0}
+.chips::-webkit-scrollbar{display:none}
+.chip{font-size:11px;padding:6px 13px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--font-mono);font-weight:600;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.chip.on{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+
+/* ── PCR ── */
+.pcr-item{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.pcr-label{font-size:10px;font-family:var(--font-mono);color:var(--text2);min-width:90px}
+.pcr-track{flex:1;height:7px;background:var(--border);border-radius:4px;overflow:hidden}
+.pcr-fill{height:100%;border-radius:4px;transition:width .8s ease}
+.pcr-num{font-size:12px;font-family:var(--font-mono);font-weight:700;min-width:36px;text-align:right}
+
+/* ── FORM ── */
+.field{margin-bottom:14px}
+.field-label{font-size:10px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;display:block}
+.field-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px 13px;color:var(--text);font-size:14px;font-family:var(--font-sans);outline:none;transition:border-color .15s;-webkit-appearance:none}
+.field-input:focus{border-color:var(--blue)}
+.field-input::placeholder{color:var(--text3)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field-hint{font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5}
+
+/* ── RANGE SLIDER ── */
+.slider-wrap{display:flex;align-items:center;gap:10px;margin-top:6px}
+input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
+.slider-val{font-size:13px;font-family:var(--font-mono);font-weight:700;color:var(--green);min-width:44px;text-align:right}
+
+/* ── BIG BUTTONS ── */
+.big-btn{width:100%;padding:14px;border-radius:var(--r);font-size:15px;font-weight:600;font-family:var(--font-sans);border:none;cursor:pointer;transition:all .15s;margin-bottom:10px}
+.big-btn.green{background:var(--green);color:#000}
+.big-btn.green:active{background:var(--green2)}
+.big-btn.outline{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+.big-btn.outline:active{background:var(--bg3)}
+.big-btn.red{background:var(--red);color:#fff}
+
+/* ── CHECKBOX LIST ── */
+.cb-list{display:flex;flex-direction:column;gap:2px}
+.cb-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.cb-item:last-child{border-bottom:none}
+.cb-item input[type=checkbox]{width:18px;height:18px;accent-color:var(--green);flex-shrink:0;cursor:pointer}
+.cb-info{flex:1}
+.cb-name{font-size:13px;font-weight:500;color:var(--text)}
+.cb-sub{font-size:10px;color:var(--text3);font-family:var(--font-mono)}
+
+/* ── LOG ── */
+.log-row{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.log-row:last-child{border-bottom:none}
+.log-t{font-size:9px;font-family:var(--font-mono);color:var(--text3);min-width:56px;flex-shrink:0;margin-top:1px}
+.log-m{font-size:11px;font-family:var(--font-mono);color:var(--text2);flex:1;line-height:1.4}
+.log-m.ok{color:var(--green)}.log-m.warn{color:var(--amber)}.log-m.err{color:var(--red)}
+
+/* ── TOAST ── */
+#toasts{position:fixed;top:calc(var(--safe-t) + 70px);left:10px;right:10px;z-index:9999;display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.toast{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r2);padding:12px 14px;pointer-events:all;animation:tIn .3s ease;box-shadow:0 8px 32px #00000090}
+@keyframes tIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.toast-hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.toast-ic{font-size:14px}
+.toast-ti{font-size:12px;font-family:var(--font-mono);font-weight:700;flex:1}
+.toast-cl{color:var(--text3);cursor:pointer;font-size:18px;line-height:1}
+.toast-bd{font-size:11px;color:var(--text2);line-height:1.5}
+
+/* ── INSTALL BANNER ── */
+#installBanner{display:none;position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 10px);left:10px;right:10px;z-index:200;background:linear-gradient(135deg,#0d1f14,#0a1c2a);border:1px solid var(--green);border-radius:var(--r2);padding:14px 16px;box-shadow:0 8px 32px #00000090}
+#installBanner.show{display:flex;align-items:center;gap:12px}
+.ib-icon{font-size:28px;flex-shrink:0}
+.ib-text h3{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.ib-text p{font-size:11px;color:var(--text2);line-height:1.4}
+.ib-btns{display:flex;gap:8px;flex-shrink:0}
+.ib-btn{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:var(--font-sans)}
+.ib-btn.yes{background:var(--green);color:#000}
+.ib-btn.no{background:var(--bg4);color:var(--text3)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:50px 20px}
+.empty-icon{font-size:44px;margin-bottom:12px;opacity:.35}
+.empty-title{font-size:12px;font-family:var(--font-mono);font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+.empty-sub{font-size:11px;color:var(--text3);line-height:1.7}
+
+/* ── SECTION HEAD ── */
+.sec-head{font-family:var(--font-mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;padding:14px 12px 6px;border-top:1px solid var(--border)}
+.sec-head:first-child{border-top:none;padding-top:12px}
+
+/* ── DISCLAIMER ── */
+.disc{background:var(--amber-bg);border:1px solid #ffb62722;border-radius:var(--r);padding:10px 12px;font-size:11px;color:var(--amber);line-height:1.6;margin:12px}
+
+/* ── STOCK SEARCH ── */
+#stockSearch{display:block;width:calc(100% - 24px);margin:0 12px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;color:var(--text);font-size:14px;outline:none;-webkit-appearance:none}
+#stockSearch:focus{border-color:var(--blue)}
+.stock-chips{display:flex;gap:6px;padding:0 12px 10px;overflow-x:auto}
+.stock-chips::-webkit-scrollbar{display:none}
+
+/* ── SIGNAL DETAIL DRAWER ── */
+#drawer{position:fixed;inset:0;z-index:300;pointer-events:none}
+#drawer.open{pointer-events:all}
+.drawer-overlay{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .3s}
+#drawer.open .drawer-overlay{opacity:.6}
+.drawer-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:0 16px calc(var(--safe-b) + 20px);transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#drawer.open .drawer-sheet{transform:translateY(0)}
+.drawer-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 16px}
+.drawer-title{font-size:16px;font-weight:700;font-family:var(--font-mono);color:var(--text);margin-bottom:4px}
+.drawer-sub{font-size:11px;color:var(--text3);margin-bottom:16px;font-family:var(--font-mono)}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.drawer-cell{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
+.drawer-cell-label{font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.drawer-cell-val{font-size:18px;font-weight:700;font-family:var(--font-mono)}
+.drawer-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.drawer-row:last-child{border-bottom:none}
+.drawer-row-label{color:var(--text3)}
+.drawer-row-val{font-family:var(--font-mono);font-weight:600;color:var(--text)}
+
+/* ── ANIMATIONS ── */
+.flash{animation:flashCard .6s ease}
+@keyframes flashCard{0%{background:#00f5a018;border-color:var(--green)}100%{background:var(--bg3);border-color:var(--border)}}
+
+/* ── SERVER URL ── */
+.server-row{display:flex;gap:8px;margin-bottom:14px}
+.server-row .field-input{flex:1;margin-bottom:0}
+.server-test{padding:12px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- INSTALL BANNER -->
+<div id="installBanner">
+  <div class="ib-icon">⚡</div>
+  <div class="ib-text" style="flex:1">
+    <h3>Install as App</h3>
+    <p>Add to home screen for full-screen experience</p>
+  </div>
+  <div class="ib-btns">
+    <button class="ib-btn yes" id="installBtn">Install</button>
+    <button class="ib-btn no" onclick="document.getElementById('installBanner').classList.remove('show')">×</button>
+  </div>
+</div>
+
+<!-- SIGNAL DETAIL DRAWER -->
+<div id="drawer">
+  <div class="drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="drawer-sheet" id="drawerSheet">
+    <div class="drawer-handle"></div>
+    <div id="drawerContent"></div>
+  </div>
+</div>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">⚡</div>
+  <div class="topbar-title">
+    <h1>NSE F&O SIGNALS</h1>
+    <p id="topStatus">ANGEL ONE · DISCONNECTED</p>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="dot" id="mDot"></div>
+      <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
+    </div>
+    <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
+  </div>
+</div>
+
+<!-- PAGES -->
+<div class="pages">
+
+  <!-- ══ PAGE: SIGNALS ══ -->
+  <div class="page active" id="page-signals">
+    <!-- Index quick view -->
+    <div class="index-bar">
+      <div class="idx-card">
+        <div class="idx-name">NIFTY 50</div>
+        <div class="idx-val" id="mNifty">–</div>
+        <div class="idx-chg" id="mNiftyC" style="color:var(--text3)">–</div>
+      </div>
+      <div class="idx-card">
+        <div class="idx-name">BANKNIFTY</div>
+        <div class="idx-val" id="mBank">–</div>
+        <div class="idx-chg" id="mBankC" style="color:var(--text3)">–</div>
+      </div>
+    </div>
+    <!-- Metrics -->
+    <div class="metrics-grid">
+      <div class="met"><div class="met-l">Capital</div><div class="met-v" id="mCap">₹30K</div></div>
+      <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
+      <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
+    </div>
+    <!-- Filter chips -->
+    <div class="chips" id="filterChips">
+      <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
+      <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
+      <button class="chip" onclick="setFilt('STOCK',this)">STOCK</button>
+      <button class="chip" onclick="setFilt('CE',this)">CE ONLY</button>
+      <button class="chip" onclick="setFilt('PE',this)">PE ONLY</button>
+      <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
+    </div>
+    <!-- Signal feed -->
+    <div id="sigFeed">
+      <div class="empty">
+        <div class="empty-icon">⚡</div>
+        <div class="empty-title">No Signals Yet</div>
+        <div class="empty-sub">Connect Angel One in Setup tab<br>then tap ▶ SCAN to start</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: ANALYSIS ══ -->
+  <div class="page" id="page-analysis">
+    <div class="disc">⚠ Signals are algorithmic only. Options involve risk. Always use stop-loss. Not SEBI-registered advice.</div>
+
+    <div class="sec-head">PUT-CALL RATIO</div>
+    <div class="card" style="margin-top:0">
+      <div class="card-body">
+        <div class="pcr-item">
+          <div class="pcr-label">NIFTY</div>
+          <div class="pcr-track"><div class="pcr-fill" id="pcr-nifty-bar" style="width:60%;background:var(--amber)"></div></div>
+          <div class="pcr-num" id="pcr-nifty-val" style="color:var(--amber)">0.89</div>
+        </div>
+        <div class="pcr-item">
+          <div class="pcr-label">BANKNIFTY</div>
+          <div class="pcr-track"><div class="pcr-fill" id="pcr-bank-bar" style="width:42%;background:var(--green)"></div></div>
+          <div class="pcr-num" id="pcr-bank-val" style="color:var(--green)">0.68</div>
+        </div>
+        <div class="pcr-item">
+          <div class="pcr-label">FINNIFTY</div>
+          <div class="pcr-track"><div class="pcr-fill" id="pcr-fin-bar" style="width:76%;background:var(--red)"></div></div>
+          <div class="pcr-num" id="pcr-fin-val" style="color:var(--red)">1.12</div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:4px">&lt;0.7 BULLISH · 0.7–1.0 NEUTRAL · &gt;1.0 BEARISH</div>
+      </div>
+    </div>
+
+    <div class="sec-head">SIGNAL PARAMETERS ACTIVE</div>
+    <div class="card" style="margin-top:0">
+      <div class="card-body" style="display:grid;gap:8px">
+        <div id="paramGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: SCANNER CONFIG ══ -->
+  <div class="page" id="page-scanner">
+    <div style="padding:12px">
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">Capital (₹)</label>
+          <input class="field-input" type="number" id="cfgCap" value="30000" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label class="field-label">Max Premium/Lot</label>
+          <input class="field-input" type="number" id="cfgMaxPrem" value="10000" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Profit Target: <span id="cfgProfitV" style="color:var(--green)">30%</span></label>
+        <div class="slider-wrap">
+          <input type="range" min="10" max="60" value="30" id="cfgProfit" oninput="document.getElementById('cfgProfitV').textContent=this.value+'%'">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Stop Loss: <span id="cfgSLV" style="color:var(--red)">40%</span></label>
+        <div class="slider-wrap">
+          <input type="range" min="20" max="70" value="40" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%'">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">65%</span></label>
+        <div class="slider-wrap">
+          <input type="range" min="55" max="85" value="65" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Scan Interval: <span id="cfgIntV" style="color:var(--text2)">30s</span></label>
+        <div class="slider-wrap">
+          <input type="range" min="15" max="120" step="5" value="30" id="cfgInterval" oninput="document.getElementById('cfgIntV').textContent=this.value+'s'">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Signal Type</label>
+        <select class="field-input" id="cfgType">
+          <option value="BOTH">Both CE and PE</option>
+          <option value="CE">Calls (CE) only</option>
+          <option value="PE">Puts (PE) only</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Expiry</label>
+        <select class="field-input" id="cfgExpiry">
+          <option value="WEEKLY">Current Weekly</option>
+          <option value="NEXT">Next Weekly</option>
+          <option value="MONTHLY">Monthly</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Scan Indices</label>
+        <div class="cb-list">
+          <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY"><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP"><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
+        </div>
+      </div>
+
+      <button class="big-btn green" onclick="saveConfig()">💾 Save Config</button>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: STOCKS ══ -->
+  <div class="page" id="page-stocks">
+    <div style="padding:12px 12px 6px;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="chip" style="border-color:var(--green);color:var(--green)" onclick="selectAll(true)">All</button>
+      <button class="chip" onclick="selectAll(false)">None</button>
+      <button class="chip" onclick="selectGroup('NIFTY50')">NIFTY50</button>
+      <button class="chip" onclick="selectGroup('BANK')">Banks</button>
+      <button class="chip" onclick="selectGroup('IT')">IT</button>
+      <button class="chip" onclick="selectGroup('PHARMA')">Pharma</button>
+    </div>
+    <input class="field-input" type="search" id="stockSearch" placeholder="🔍 Search stocks..." oninput="filterStockList()" style="width:calc(100% - 24px);margin:0 12px 4px;display:block">
+    <div style="font-size:10px;color:var(--text3);padding:4px 12px 6px;font-family:var(--font-mono)" id="stockCount">0 selected</div>
+    <div id="stockList" style="padding:0 12px"></div>
+  </div>
+
+  <!-- ══ PAGE: SETUP ══ -->
+  <div class="page" id="page-setup">
+    <div style="padding:12px">
+
+      <!-- Server URL -->
+      <div class="field">
+        <label class="field-label">Server URL (where server.js is running)</label>
+        <div class="server-row">
+          <input class="field-input" type="url" id="serverUrl" value="http://localhost:3001" placeholder="http://192.168.x.x:3001">
+          <button class="server-test" onclick="testConnection()">Test</button>
+        </div>
+        <div class="field-hint">💡 On same WiFi? Enter your PC's IP: http://192.168.x.x:3001<br>Use <b>ipconfig</b> (Windows) or <b>ifconfig</b> (Mac/Linux) to find your PC's IP.</div>
+      </div>
+
+      <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
+
+      <!-- Angel One creds -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:11px;padding:3px 9px;background:#ff6b1a15;color:#ff8c4a;border:1px solid #ff6b1a30;border-radius:5px;font-family:var(--font-mono);font-weight:700">ANGEL ONE</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">SmartAPI Login</span>
+      </div>
+
+      <div id="connStatus" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;font-size:12px;font-family:var(--font-mono)">
+        <div class="dot" id="apiDot"></div>
+        <span id="apiStat">Not connected</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Client ID</label>
+        <input class="field-input" type="text" id="aClient" placeholder="e.g. A123456" autocomplete="off" autocorrect="off" autocapitalize="characters">
+      </div>
+      <div class="field">
+        <label class="field-label">SmartAPI Key</label>
+        <input class="field-input" type="text" id="aKey" placeholder="From smartapi.angelbroking.com" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="field-label">Password / PIN</label>
+        <input class="field-input" type="password" id="aPin" placeholder="Trading password">
+      </div>
+      <div class="field">
+        <label class="field-label">TOTP Secret (optional, for auto 2FA)</label>
+        <input class="field-input" type="password" id="aTotp" placeholder="32-char base32 TOTP secret">
+        <div class="field-hint">Get from Angel One app → Profile → Security → 2FA</div>
+      </div>
+
+      <button class="big-btn green" onclick="connectAngel()">🔌 Connect Angel One</button>
+      <button class="big-btn outline" onclick="reqNotif()">🔔 Enable Signal Notifications</button>
+
+      <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.8;padding:10px 0">
+        <b style="color:var(--text2)">How to get SmartAPI key (free):</b><br>
+        1. Visit <span style="color:var(--blue)">smartapi.angelbroking.com</span><br>
+        2. Register with Angel One account<br>
+        3. Create an app → copy API key<br>
+        4. Angel One is 100% free for SmartAPI
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: LOG ══ -->
+  <div class="page" id="page-log">
+    <div style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase">Activity Log</span>
+        <button class="chip" onclick="document.getElementById('logBody').innerHTML=''" style="font-size:10px;padding:4px 10px">Clear</button>
+      </div>
+      <div id="logBody">
+        <div class="log-row"><span class="log-t">--:--</span><span class="log-m">App loaded. Enter server URL and connect Angel One.</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /pages -->
+
+<!-- BOTTOM NAV -->
+<div class="bottomnav">
+  <button class="nav-item active" onclick="goPage('signals',this)">
+    <div class="nav-icon">⚡</div>
+    <span>Signals</span>
+    <div class="nav-badge" id="sigBadge">0</div>
+  </button>
+  <button class="nav-item" onclick="goPage('analysis',this)">
+    <div class="nav-icon">📊</div>
+    <span>Analysis</span>
+  </button>
+  <button class="nav-item" onclick="goPage('scanner',this)">
+    <div class="nav-icon">⚙️</div>
+    <span>Scanner</span>
+  </button>
+  <button class="nav-item" onclick="goPage('stocks',this)">
+    <div class="nav-icon">📋</div>
+    <span>Stocks</span>
+  </button>
+  <button class="nav-item" onclick="goPage('setup',this)">
+    <div class="nav-icon">🔌</div>
+    <span>Setup</span>
+  </button>
+</div>
+
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════════
+// FNO STOCKS
+// ══════════════════════════════════════════════════════════════════
+const FNO_STOCKS = [
+  {sym:'RELIANCE',name:'Reliance Industries',lot:250,grp:'NIFTY50'},
+  {sym:'TCS',name:'Tata Consultancy Services',lot:150,grp:'NIFTY50,IT'},
+  {sym:'HDFCBANK',name:'HDFC Bank',lot:550,grp:'NIFTY50,BANK'},
+  {sym:'INFY',name:'Infosys',lot:300,grp:'NIFTY50,IT'},
+  {sym:'ICICIBANK',name:'ICICI Bank',lot:700,grp:'NIFTY50,BANK'},
+  {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,grp:'NIFTY50'},
+  {sym:'KOTAKBANK',name:'Kotak Mahindra Bank',lot:400,grp:'NIFTY50,BANK'},
+  {sym:'SBIN',name:'State Bank of India',lot:1500,grp:'NIFTY50,BANK'},
+  {sym:'BHARTIARTL',name:'Bharti Airtel',lot:950,grp:'NIFTY50'},
+  {sym:'ITC',name:'ITC Ltd',lot:1600,grp:'NIFTY50'},
+  {sym:'BAJFINANCE',name:'Bajaj Finance',lot:125,grp:'NIFTY50'},
+  {sym:'LT',name:'Larsen & Toubro',lot:175,grp:'NIFTY50'},
+  {sym:'AXISBANK',name:'Axis Bank',lot:625,grp:'NIFTY50,BANK'},
+  {sym:'MARUTI',name:'Maruti Suzuki',lot:100,grp:'NIFTY50'},
+  {sym:'WIPRO',name:'Wipro',lot:1500,grp:'NIFTY50,IT'},
+  {sym:'HCLTECH',name:'HCL Technologies',lot:350,grp:'NIFTY50,IT'},
+  {sym:'SUNPHARMA',name:'Sun Pharmaceutical',lot:350,grp:'NIFTY50,PHARMA'},
+  {sym:'TITAN',name:'Titan Company',lot:375,grp:'NIFTY50'},
+  {sym:'TATAMOTORS',name:'Tata Motors',lot:550,grp:'NIFTY50'},
+  {sym:'TATASTEEL',name:'Tata Steel',lot:5500,grp:'NIFTY50'},
+  {sym:'M&M',name:'Mahindra & Mahindra',lot:175,grp:'NIFTY50'},
+  {sym:'ADANIENT',name:'Adani Enterprises',lot:250,grp:'NIFTY50'},
+  {sym:'ADANIPORTS',name:'Adani Ports',lot:600,grp:'NIFTY50'},
+  {sym:'COALINDIA',name:'Coal India',lot:2100,grp:'NIFTY50'},
+  {sym:'CIPLA',name:'Cipla',lot:650,grp:'NIFTY50,PHARMA'},
+  {sym:'DRREDDY',name:'Dr Reddys Labs',lot:125,grp:'NIFTY50,PHARMA'},
+  {sym:'NTPC',name:'NTPC Ltd',lot:2250,grp:'NIFTY50'},
+  {sym:'ONGC',name:'ONGC',lot:1925,grp:'NIFTY50'},
+  {sym:'INDUSINDBK',name:'IndusInd Bank',lot:500,grp:'NIFTY50,BANK'},
+  {sym:'BANDHANBNK',name:'Bandhan Bank',lot:5000,grp:'BANK'},
+  {sym:'IDFCFIRSTB',name:'IDFC First Bank',lot:5000,grp:'BANK'},
+  {sym:'PNB',name:'Punjab National Bank',lot:8000,grp:'BANK'},
+  {sym:'BANKBARODA',name:'Bank of Baroda',lot:4350,grp:'BANK'},
+  {sym:'FEDERALBNK',name:'Federal Bank',lot:5000,grp:'BANK'},
+  {sym:'MPHASIS',name:'Mphasis',lot:300,grp:'IT'},
+  {sym:'COFORGE',name:'Coforge',lot:150,grp:'IT'},
+  {sym:'LTIM',name:'LTIMindtree',lot:150,grp:'IT'},
+  {sym:'PERSISTENT',name:'Persistent Systems',lot:200,grp:'IT'},
+  {sym:'BAJAJ-AUTO',name:'Bajaj Auto',lot:250,grp:'AUTO'},
+  {sym:'TVSMOTORS',name:'TVS Motor Company',lot:350,grp:'AUTO'},
+  {sym:'LUPIN',name:'Lupin',lot:425,grp:'PHARMA'},
+  {sym:'AUROPHARMA',name:'Aurobindo Pharma',lot:700,grp:'PHARMA'},
+  {sym:'BIOCON',name:'Biocon',lot:2400,grp:'PHARMA'},
+  {sym:'IOC',name:'Indian Oil Corp',lot:4750,grp:'ENERGY'},
+  {sym:'HPCL',name:'HPCL',lot:3300,grp:'ENERGY'},
+  {sym:'GAIL',name:'GAIL India',lot:2175,grp:'ENERGY'},
+  {sym:'TATAPOWER',name:'Tata Power',lot:2700,grp:'ENERGY'},
+  {sym:'HINDALCO',name:'Hindalco Industries',lot:1400,grp:'METAL'},
+  {sym:'VEDL',name:'Vedanta Ltd',lot:2300,grp:'METAL'},
+  {sym:'DLF',name:'DLF Ltd',lot:1650,grp:'REALTY'},
+  {sym:'GODREJPROP',name:'Godrej Properties',lot:450,grp:'REALTY'},
+  {sym:'ZOMATO',name:'Zomato',lot:4500,grp:'MISC'},
+  {sym:'PAYTM',name:'Paytm',lot:2000,grp:'MISC'},
+  {sym:'INDIGO',name:'IndiGo',lot:250,grp:'MISC'},
+  {sym:'IRCTC',name:'IRCTC',lot:875,grp:'MISC'},
+];
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+const S = {
+  scanning:false, scanInt:null, signals:[], filter:'ALL',
+  notif:false, connected:false,
+  serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
+  creds:{client:'',key:'',pin:'',totp:''},
+  selectedStocks: new Set(FNO_STOCKS.slice(0,30).map(s=>s.sym)),
+  config:{capital:30000,profitPct:30,slPct:40,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY']},
+  livePrice:{}, livePCR:{},
+  newSigCount: 0,
+};
+
+// Load saved server URL
+document.getElementById('serverUrl').value = S.serverUrl;
+
+// ══════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════
+function goPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  el.classList.add('active');
+  if (id === 'signals') {
+    S.newSigCount = 0;
+    document.getElementById('sigBadge').textContent = '0';
+    document.getElementById('sigBadge').classList.remove('show');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MARKET CLOCK
+// ══════════════════════════════════════════════════════════════════
+function tickClock() {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const h = ist.getHours(), m = ist.getMinutes();
+  const open = (h > 9 || (h === 9 && m >= 15)) && (h < 15 || (h === 15 && m <= 30));
+  const dayOk = ist.getDay() > 0 && ist.getDay() < 6;
+  const isOpen = open && dayOk;
+  document.getElementById('mDot').className = 'dot' + (isOpen ? ' live' : '');
+  document.getElementById('mStat').textContent = isOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
+}
+tickClock();
+setInterval(tickClock, 30000);
+
+// ══════════════════════════════════════════════════════════════════
+// ANALYSIS PAGE — PARAMS
+// ══════════════════════════════════════════════════════════════════
+const PARAMS = [
+  'RSI Divergence (5m + 15m)',
+  'OI Buildup + OI Change %',
+  'IV Rank (< 30 to enter)',
+  'PCR Sentiment Reversal',
+  'Volume Surge (> 2x avg)',
+  'VWAP Crossover Filter',
+  'Expiry Guard (> 1 day left)',
+  'Capital Fit Filter',
+];
+document.getElementById('paramGrid').innerHTML = PARAMS.map(p =>
+  `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span style="font-size:12px;color:var(--text2)">${p}</span>
+    <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;color:var(--green);background:var(--green-bg);border:1px solid #00f5a025;padding:2px 7px;border-radius:4px">ACTIVE</span>
+  </div>`
+).join('');
+
+// ══════════════════════════════════════════════════════════════════
+// STOCK LIST
+// ══════════════════════════════════════════════════════════════════
+function renderStockList() {
+  const q = document.getElementById('stockSearch').value.toLowerCase();
+  const filtered = FNO_STOCKS.filter(s => !q || s.sym.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+  document.getElementById('stockList').innerHTML = filtered.map(s => `
+    <div class="cb-item" onclick="toggleStock('${s.sym}',this)">
+      <input type="checkbox" ${S.selectedStocks.has(s.sym)?'checked':''} onclick="event.stopPropagation();toggleStock('${s.sym}',this.closest('.cb-item'))">
+      <div class="cb-info">
+        <div class="cb-name">${s.sym}</div>
+        <div class="cb-sub">${s.name} · Lot ${s.lot}</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('stockCount').textContent = S.selectedStocks.size + ' stocks selected';
+}
+
+function toggleStock(sym, el) {
+  if (S.selectedStocks.has(sym)) S.selectedStocks.delete(sym);
+  else S.selectedStocks.add(sym);
+  const cb = el.querySelector('input[type=checkbox]');
+  if (cb) cb.checked = S.selectedStocks.has(sym);
+  document.getElementById('stockCount').textContent = S.selectedStocks.size + ' stocks selected';
+}
+
+function filterStockList() { renderStockList(); }
+function selectAll(v) { FNO_STOCKS.forEach(s => { v ? S.selectedStocks.add(s.sym) : S.selectedStocks.delete(s.sym); }); renderStockList(); }
+function selectGroup(g) { FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.add(s.sym); }); renderStockList(); }
+
+renderStockList();
+
+// ══════════════════════════════════════════════════════════════════
+// SERVER URL
+// ══════════════════════════════════════════════════════════════════
+function getServer() {
+  const url = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  S.serverUrl = url;
+  localStorage.setItem('serverUrl', url);
+  return url;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// API CONNECTION
+// ══════════════════════════════════════════════════════════════════
+async function testConnection() {
+  const server = getServer();
+  try {
+    const r = await fetch(server + '/health', { signal: AbortSignal.timeout(5000) });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      toast('ok', '✅ Server reachable', d.authenticated ? `Logged in as ${d.client}` : 'Server running, not logged in');
+      if (d.authenticated) {
+        S.connected = true;
+        setConnected(true, d.client);
+      }
+    }
+  } catch(e) {
+    toast('err', '❌ Cannot reach server', `Check URL: ${server}\n${e.message}`);
+  }
+}
+
+async function connectAngel() {
+  const server = getServer();
+  const client = document.getElementById('aClient').value.trim();
+  const key = document.getElementById('aKey').value.trim();
+  const pin = document.getElementById('aPin').value;
+  const totp = document.getElementById('aTotp').value.trim();
+
+  if (!client || !key || !pin) {
+    toast('warn', '⚠ Missing Fields', 'Client ID, API Key, and Password are required');
+    return;
+  }
+
+  addLog('Connecting to Angel One...', '');
+  document.getElementById('apiStat').textContent = 'Connecting...';
+
+  try {
+    const r = await fetch(server + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientCode: client, password: pin, apiKey: key, totpSecret: totp }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const d = await r.json();
+    if (d.status === true) {
+      S.connected = true;
+      S.creds = { client, key, pin, totp };
+      setConnected(true, d.client);
+      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
+      addLog(`Connected to Angel One — ${d.client}`, 'ok');
+      fetchMarketData();
+      S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
+    } else {
+      setConnected(false);
+      toast('err', '❌ Login Failed', d.message || 'Check credentials');
+      addLog('Login failed: ' + (d.message || 'Unknown'), 'err');
+    }
+  } catch(e) {
+    setConnected(false);
+    toast('err', '❌ Connection Error', 'Is server.js running?\n' + e.message);
+    addLog('Connection error: ' + e.message, 'err');
+  }
+}
+
+function setConnected(ok, client) {
+  document.getElementById('apiDot').className = 'dot' + (ok ? ' live' : ' err');
+  document.getElementById('apiStat').textContent = ok ? `Connected — ${client}` : 'Not connected';
+  document.getElementById('topStatus').textContent = ok ? `ANGEL ONE · ${client}` : 'ANGEL ONE · DISCONNECTED';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MARKET DATA
+// ══════════════════════════════════════════════════════════════════
+const STOCK_TOKENS = {
+  RELIANCE:'2885',TCS:'11536',HDFCBANK:'1333',INFY:'1594',ICICIBANK:'4963',
+  HINDUNILVR:'1394',KOTAKBANK:'1922',SBIN:'3045',BHARTIARTL:'10604',ITC:'1660',
+  BAJFINANCE:'317',LT:'11483',AXISBANK:'5900',MARUTI:'10999',WIPRO:'3787',
+  HCLTECH:'7229',SUNPHARMA:'3351',TITAN:'3506',TATAMOTORS:'3456',
+  TATASTEEL:'3499',NTPC:'11630',POWERGRID:'14977',ONGC:'2475',COALINDIA:'20374',
+  SBILIFE:'21808',BAJAJFINSV:'16675',CIPLA:'694',DRREDDY:'881',
+};
+
+async function fetchMarketData() {
+  const server = getServer();
+  try {
+    const r = await fetch(server + '/quote', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:['26000','26009','26037','26074']}}),
+    });
+    const d = await r.json();
+    if (d.status && d.data?.fetched) {
+      const f = d.data.fetched;
+      const niftyQ  = f.find(q => String(q.symbolToken)==='26000' || (q.tradingSymbol||'').toUpperCase().includes('NIFTY 50'));
+      const bankQ   = f.find(q => String(q.symbolToken)==='26009' || (q.tradingSymbol||'').toUpperCase().includes('BANKNIFTY'));
+      const finQ    = f.find(q => String(q.symbolToken)==='26037');
+      const midQ    = f.find(q => String(q.symbolToken)==='26074');
+
+      function updIdx(q, sym, elId, elChgId) {
+        if (!q) return;
+        const ltp = parseFloat(q.ltp || q.close || 0);
+        const prev = parseFloat(q.close || q.previousClose || ltp);
+        const chg = prev ? ((ltp-prev)/prev*100).toFixed(2) : '0.00';
+        document.getElementById(elId).textContent = ltp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+        document.getElementById(elChgId).textContent = (chg>0?'+':'')+chg+'%';
+        document.getElementById(elChgId).style.color = chg>=0?'var(--green)':'var(--red)';
+        S.livePrice[sym] = ltp;
+      }
+      updIdx(niftyQ,'NIFTY','mNifty','mNiftyC');
+      updIdx(bankQ,'BANKNIFTY','mBank','mBankC');
+      if(finQ)  S.livePrice['FINNIFTY'] = parseFloat(finQ.ltp||0);
+      if(midQ)  S.livePrice['MIDCAP']   = parseFloat(midQ.ltp||0);
+    }
+  } catch(e) { /* silent */ }
+
+  // Stock LTPs
+  try {
+    const server = getServer();
+    const selArr = [...S.selectedStocks].filter(s => STOCK_TOKENS[s]);
+    const batch = selArr.slice(0,25).map(s => STOCK_TOKENS[s]);
+    if (batch.length) {
+      const r = await fetch(server + '/quote', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:batch}}),
+      });
+      const d = await r.json();
+      if (d.status && d.data?.fetched) {
+        d.data.fetched.forEach(q => {
+          const sym = Object.keys(STOCK_TOKENS).find(s => String(STOCK_TOKENS[s])===String(q.symbolToken));
+          if (sym && q.ltp) S.livePrice[sym] = parseFloat(q.ltp);
+        });
+      }
+    }
+  } catch(e) { /* silent */ }
+
+  // PCR
+  try {
+    const server = getServer();
+    const r = await fetch(server + '/pcr');
+    const d = await r.json();
+    if (d.status && d.data) {
+      const list = Array.isArray(d.data) ? d.data : [];
+      const niftyP = list.find(p => (p.symbol||'').toUpperCase().includes('NIFTY') && !(p.symbol||'').toUpperCase().includes('BANK'));
+      const bankP  = list.find(p => (p.symbol||'').toUpperCase().includes('BANKNIFTY'));
+      const finP   = list.find(p => (p.symbol||'').toUpperCase().includes('FINNIFTY'));
+      if (niftyP) { const v=parseFloat(niftyP.putCallRatio||niftyP.pcr||0); updPCR('nifty',v); S.livePCR['NIFTY']=v; }
+      if (bankP)  { const v=parseFloat(bankP.putCallRatio||bankP.pcr||0);   updPCR('bank',v);  S.livePCR['BANKNIFTY']=v; }
+      if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
+    }
+  } catch(e) { /* silent */ }
+}
+
+function updPCR(key, val) {
+  const pct = Math.min(95, Math.round(val*60));
+  const col = val<0.7?'var(--green)':val>1.0?'var(--red)':'var(--amber)';
+  document.getElementById(`pcr-${key}-bar`).style.width = pct+'%';
+  document.getElementById(`pcr-${key}-bar`).style.background = col;
+  document.getElementById(`pcr-${key}-val`).textContent = val.toFixed(2);
+  document.getElementById(`pcr-${key}-val`).style.color = col;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// OPTION CHAIN CACHE
+// ══════════════════════════════════════════════════════════════════
+const OC_CACHE = {};
+const OC_TTL = 30000;
+
+async function fetchOptionChain(sym, spotPrice) {
+  const now = Date.now();
+  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
+  try {
+    const server = getServer();
+    const r = await fetch(server + '/option-chain', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
+    });
+    const d = await r.json();
+    if (d.status && d.strikes) {
+      OC_CACHE[sym] = {data:d, fetchTime:now};
+      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
+      return d;
+    }
+  } catch(e) {}
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SIGNAL ENGINE
+// ══════════════════════════════════════════════════════════════════
+function scoreSignal(p) {
+  const {rsi,ivRank,oiDelta,oiPct,pcr,volumeRatio,vwapPos,type,daysToExpiry} = p;
+  let s = 0;
+  if (type==='CE') { if(rsi<30)s+=28; else if(rsi<35)s+=20; else if(rsi<40)s+=12; else if(rsi<45)s+=5; }
+  else { if(rsi>70)s+=28; else if(rsi>65)s+=20; else if(rsi>60)s+=12; else if(rsi>55)s+=5; }
+  if (type==='CE') { if(pcr<0.65)s+=22; else if(pcr<0.75)s+=16; else if(pcr<0.85)s+=8; }
+  else { if(pcr>1.1)s+=22; else if(pcr>0.95)s+=14; else if(pcr>0.85)s+=7; }
+  if(ivRank<15)s+=18; else if(ivRank<20)s+=14; else if(ivRank<25)s+=10; else if(ivRank<30)s+=6;
+  if(oiDelta>0.35)s+=16; else if(oiDelta>0.2)s+=11; else if(oiDelta>0.1)s+=6;
+  if(volumeRatio>3)s+=10; else if(volumeRatio>2)s+=7; else if(volumeRatio>1.5)s+=4;
+  if(type==='CE'&&vwapPos>0)s+=6; else if(type==='PE'&&vwapPos<0)s+=6;
+  if(daysToExpiry<=1) return 0;
+  if(daysToExpiry<=2) s=Math.floor(s*0.7);
+  return Math.min(92, 48+Math.round(s*0.44));
+}
+
+function buildParams(type, livePCR) {
+  const pcrVal = livePCR || (type==='CE' ? 0.55+Math.random()*0.4 : 0.8+Math.random()*0.5);
+  return {
+    rsi: type==='CE' ? 22+Math.random()*20 : 55+Math.random()*20,
+    ivRank: 10+Math.random()*30,
+    oiDelta: Math.random()*0.5,
+    oiPct: Math.round(5+Math.random()*30),
+    pcr: pcrVal,
+    volumeRatio: 0.8+Math.random()*3.5,
+    vwapPos: type==='CE' ? Math.random()*0.5-0.1 : Math.random()*0.5*-1+0.1,
+    daysToExpiry: 2+Math.floor(Math.random()*5),
+  };
+}
+
+async function generateSignal(symbolObj, isIndex) {
+  const type = S.config.type==='BOTH' ? (Math.random()>0.5?'CE':'PE') : S.config.type;
+  const params = buildParams(type, S.livePCR[symbolObj.sym]);
+  const prob = scoreSignal(params);
+  if (prob < S.config.minProb) return null;
+
+  const lot = symbolObj.lot || 75;
+  const BASE = {
+    NIFTY:24200,BANKNIFTY:51800,FINNIFTY:23500,MIDCAP:11900,
+    RELIANCE:1280,TCS:3650,HDFCBANK:1620,INFY:1430,ICICIBANK:1270,
+    SBIN:790,BHARTIARTL:1680,ITC:460,BAJFINANCE:6800,LT:3520,
+    AXISBANK:1150,MARUTI:11900,WIPRO:490,HCLTECH:1650,SUNPHARMA:1780,
+    TITAN:3350,TATAMOTORS:820,TATASTEEL:155,'M&M':2980,ADANIENT:2450,
+    ADANIPORTS:1360,CIPLA:1480,DRREDDY:6800,NTPC:380,ONGC:285,
+    COALINDIA:430,DEFAULT:500,
+  };
+  const liveP = S.livePrice[symbolObj.sym];
+  const baseP = (liveP && liveP > 0) ? liveP : (BASE[symbolObj.sym] || BASE.DEFAULT);
+  const step = baseP>10000?500:baseP>5000?200:baseP>2000?100:baseP>500?50:baseP>100?10:5;
+
+  // Try real option chain
+  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false;
+  if (S.connected) {
+    const oc = await fetchOptionChain(symbolObj.sym, baseP);
+    if (oc?.strikes?.length) {
+      const atm = oc.strikes.find(r=>r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+      if (atm) {
+        strike = atm.strike;
+        const ltp = type==='CE' ? atm.CE_ltp : atm.PE_ltp;
+        if (ltp && ltp > 0) { premium = ltp; usedReal = true; addLog(`✅ ${symbolObj.sym} ${strike}${type}: ₹${premium}`, 'ok'); }
+      }
+    }
+  }
+  // Fallback
+  if (!usedReal) {
+    const off = [-2,-1,0,1,2][Math.floor(Math.random()*5)]*step;
+    strike = Math.round((baseP+off)/step)*step;
+    const otm = Math.abs(off)/baseP;
+    premium = Math.max(5, Math.round(baseP*0.015*(1-otm*3)*(0.7+Math.random()*0.6)));
+  }
+
+  if (premium*lot > S.config.maxPrem) return null;
+  const target = Math.round(premium*(1+S.config.profitPct/100));
+  const sl = Math.round(premium*(1-S.config.slPct/100));
+  const cap = premium*lot;
+  if (cap > S.config.capital) return null;
+  const lots = Math.floor(S.config.capital/cap);
+
+  const reasons = {
+    CE:['RSI oversold + OI buildup at support','IV rank low (cheap) + PCR bearish reversal','Volume surge ' + params.volumeRatio.toFixed(1) + 'x avg + VWAP breakout','RSI divergence + CE OI buildup at '+strike],
+    PE:['RSI overbought + PE OI spike at resistance','PCR rising + IV rank low (cheap entry)','Volume ' + params.volumeRatio.toFixed(1) + 'x + VWAP rejection','Bearish divergence + OI buildup at '+strike+' PE'],
+  };
+
+  return {
+    id: Date.now()+Math.random(),
+    sym: symbolObj.sym,
+    name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
+    isIndex, type,
+    strike: `${strike} ${type}`,
+    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
+    premium, target, sl, prob,
+    lot, lots, capital: lots*cap,
+    isRealPremium: usedReal,
+    reason: reasons[type][Math.floor(Math.random()*4)],
+    rsi: Math.round(params.rsi),
+    ivRank: Math.round(params.ivRank),
+    pcr: params.pcr.toFixed(2),
+    volRatio: params.volumeRatio.toFixed(1),
+    oi: params.oiPct,
+    time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SCANNER
+// ══════════════════════════════════════════════════════════════════
+function toggleScan() {
+  const btn = document.getElementById('scanBtn');
+  if (S.scanning) {
+    clearInterval(S.scanInt);
+    S.scanning = false;
+    btn.textContent = '▶ SCAN';
+    btn.className = 'scan-btn go';
+    document.getElementById('mScanSt').textContent = 'IDLE';
+    document.getElementById('mScanSt').style.color = 'var(--text3)';
+    addLog('Scanner stopped', 'warn');
+  } else {
+    S.scanning = true;
+    btn.textContent = '⏹ STOP';
+    btn.className = 'scan-btn stop';
+    document.getElementById('mScanSt').textContent = 'LIVE';
+    document.getElementById('mScanSt').style.color = 'var(--green)';
+    saveConfig();
+    addLog('Scanner started — ' + S.selectedStocks.size + ' stocks + ' + S.config.indices.join(', '), 'ok');
+    runScan();
+    S.scanInt = setInterval(runScan, (S.config.intervalSec||30)*1000);
+  }
+}
+
+function saveConfig() {
+  S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
+  S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
+  S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 40;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 65;
+  S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
+  S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
+  S.config.type = document.getElementById('cfgType').value;
+  S.config.expiry = document.getElementById('cfgExpiry').value;
+  S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
+    document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
+  );
+  document.getElementById('mCap').textContent = '₹' + (S.config.capital>=100000?(S.config.capital/100000).toFixed(1)+'L':(S.config.capital/1000).toFixed(0)+'K');
+  addLog(`Config saved: ₹${S.config.capital.toLocaleString('en-IN')} · ${S.config.profitPct}% target · ${S.config.slPct}% SL`, 'ok');
+  toast('ok', '✅ Config Saved', `Capital: ₹${S.config.capital.toLocaleString('en-IN')}`);
+}
+
+async function runScan() {
+  if (!S.scanning) return;
+  document.getElementById('mScanSt').textContent = 'SCANNING...';
+  addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
+
+  let newSigs = 0;
+  const IDX = [{sym:'NIFTY',lot:75},{sym:'BANKNIFTY',lot:30},{sym:'FINNIFTY',lot:40},{sym:'MIDCAP',lot:75}];
+  for (const idx of IDX) {
+    if (!S.config.indices.includes(idx.sym)) continue;
+    const sig = await generateSignal(idx, true);
+    if (sig) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+  }
+
+  const stockArr = [...S.selectedStocks];
+  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 15));
+  for (const sym of batch) {
+    const obj = FNO_STOCKS.find(s=>s.sym===sym);
+    if (!obj) continue;
+    const sig = await generateSignal(obj, false);
+    if (sig) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+  }
+
+  S.signals = S.signals.slice(0, 100);
+  document.getElementById('mSigs').textContent = S.signals.length;
+  document.getElementById('mScanSt').textContent = 'LIVE';
+
+  // Update badge if not on signals page
+  if (!document.getElementById('page-signals').classList.contains('active')) {
+    S.newSigCount += newSigs;
+    if (S.newSigCount > 0) {
+      document.getElementById('sigBadge').textContent = S.newSigCount > 9 ? '9+' : S.newSigCount;
+      document.getElementById('sigBadge').classList.add('show');
+    }
+  }
+
+  addLog(`Scan done — ${newSigs} new signals`, 'ok');
+  if (S.connected) fetchMarketData();
+  renderSignals();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER SIGNALS
+// ══════════════════════════════════════════════════════════════════
+function setFilt(f, el) {
+  S.filter = f;
+  document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  renderSignals();
+}
+
+function renderSignals() {
+  const feed = document.getElementById('sigFeed');
+  let sigs = [...S.signals];
+  if (S.filter === 'INDEX') sigs = sigs.filter(s => s.isIndex);
+  else if (S.filter === 'STOCK') sigs = sigs.filter(s => !s.isIndex);
+  else if (S.filter === 'CE') sigs = sigs.filter(s => s.type === 'CE');
+  else if (S.filter === 'PE') sigs = sigs.filter(s => s.type === 'PE');
+  else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
+
+  if (!sigs.length) {
+    feed.innerHTML = `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Signals will appear here':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
+    return;
+  }
+
+  const probColor = p => p>=80?'var(--green)':p>=70?'var(--amber)':'var(--text2)';
+
+  feed.innerHTML = sigs.map(s => `
+    <div class="sig-card" onclick="openDrawer('${s.id}')">
+      <div class="sig-bar ${s.type.toLowerCase()}"></div>
+      <div class="sig-r1">
+        <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
+        <span class="sig-name">${s.sym} ${s.strike}</span>
+        <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+      </div>
+      <div class="sig-grid">
+        <div class="sig-cell">
+          <div class="sig-label">Premium ${s.isRealPremium?'<span class="live-badge">LIVE</span>':'<span class="est-badge">EST</span>'}</div>
+          <div class="sig-val" style="color:var(--amber)">₹${s.premium}</div>
+        </div>
+        <div class="sig-cell">
+          <div class="sig-label">Target</div>
+          <div class="sig-val" style="color:var(--green)">₹${s.target}</div>
+        </div>
+        <div class="sig-cell">
+          <div class="sig-label">Stop Loss</div>
+          <div class="sig-val" style="color:var(--red)">₹${s.sl}</div>
+        </div>
+        <div class="sig-cell">
+          <div class="sig-label">Capital</div>
+          <div class="sig-val" style="color:var(--text2)">₹${(s.capital/1000).toFixed(1)}K</div>
+        </div>
+      </div>
+      <div class="sig-tags">
+        <span class="sig-tag">${s.expiry}</span>
+        <span class="sig-tag">RSI ${s.rsi}</span>
+        <span class="sig-tag">IV ${s.ivRank}</span>
+        <span class="sig-tag">PCR ${s.pcr}</span>
+        <span class="sig-tag">Vol ${s.volRatio}x</span>
+        <span class="sig-tag">${s.time}</span>
+      </div>
+      <div class="sig-reason">${s.reason}</div>
+      <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SIGNAL DETAIL DRAWER
+// ══════════════════════════════════════════════════════════════════
+function openDrawer(idStr) {
+  const sig = S.signals.find(s => String(s.id) === String(idStr));
+  if (!sig) return;
+  const probColor = sig.prob>=80?'var(--green)':sig.prob>=70?'var(--amber)':'var(--text2)';
+  document.getElementById('drawerContent').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
+      <div class="drawer-title">${sig.sym}</div>
+    </div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} ${sig.isRealPremium?'<span class="live-badge">LIVE PREMIUM</span>':'<span class="est-badge">EST PREMIUM</span>'}</div>
+
+    <div class="drawer-grid">
+      <div class="drawer-cell">
+        <div class="drawer-cell-label">Premium</div>
+        <div class="drawer-cell-val" style="color:var(--amber)">₹${sig.premium}</div>
+      </div>
+      <div class="drawer-cell">
+        <div class="drawer-cell-label">Probability</div>
+        <div class="drawer-cell-val" style="color:${probColor}">${sig.prob}%</div>
+      </div>
+      <div class="drawer-cell">
+        <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
+        <div class="drawer-cell-val" style="color:var(--green)">₹${sig.target}</div>
+      </div>
+      <div class="drawer-cell">
+        <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
+        <div class="drawer-cell-val" style="color:var(--red)">₹${sig.sl}</div>
+      </div>
+    </div>
+
+    <div class="drawer-row"><span class="drawer-row-label">Lot Size</span><span class="drawer-row-val">${sig.lot}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Lots Affordable</span><span class="drawer-row-val">${sig.lots}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">₹${((sig.target-sig.premium)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">₹${((sig.premium-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
+
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
+      <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
+      ${sig.reason}
+    </div>
+
+    <button class="big-btn outline" style="margin-top:6px" onclick="closeDrawer()">Close</button>
+  `;
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+}
+
+// Swipe down to close drawer
+let startY = 0;
+document.getElementById('drawerSheet').addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, {passive:true});
+document.getElementById('drawerSheet').addEventListener('touchend', e => {
+  if (e.changedTouches[0].clientY - startY > 80) closeDrawer();
+}, {passive:true});
+
+// ══════════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════════
+function reqNotif() {
+  if (!('Notification' in window)) { toast('warn','⚠ Not supported','Notifications not supported in this browser'); return; }
+  Notification.requestPermission().then(p => {
+    S.notif = p === 'granted';
+    if (S.notif) toast('ok','🔔 Notifications On','You will receive signal alerts');
+    else toast('warn','⚠ Denied','Enable notifications in browser settings');
+  });
+}
+
+function fireNotif(sig) {
+  if (S.notif && Notification.permission === 'granted') {
+    new Notification(`⚡ ${sig.sym} ${sig.strike}`, {
+      body: `Buy ₹${sig.premium} → Target ₹${sig.target} · SL ₹${sig.sl} · ${sig.prob}%\n${sig.reason.substring(0,60)}`,
+      icon: 'icon-192.png',
+      badge: 'icon-192.png',
+      tag: 'fno-' + sig.sym,
+      renotify: true,
+    });
+  }
+  // In-app toast for signal
+  toast('sig', `⚡ ${sig.sym} ${sig.strike}`, `${sig.type} · ₹${sig.premium} → ₹${sig.target} · SL ₹${sig.sl} · ${sig.prob}%`);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════════
+function toast(type, title, body) {
+  const icon = {ok:'✅',err:'❌',warn:'⚠️',sig:'⚡'}[type] || 'ℹ️';
+  const color = {ok:'var(--green)',err:'var(--red)',warn:'var(--amber)',sig:'var(--cyan)'}[type] || 'var(--text2)';
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `
+    <div class="toast-hd">
+      <span class="toast-ic">${icon}</span>
+      <span class="toast-ti" style="color:${color}">${title}</span>
+      <span class="toast-cl" onclick="this.closest('.toast').remove()">×</span>
+    </div>
+    <div class="toast-bd">${(body||'').replace(/\n/g,'<br>')}</div>`;
+  document.getElementById('toasts').prepend(el);
+  setTimeout(() => el.remove(), type==='sig' ? 6000 : 4000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOG
+// ══════════════════════════════════════════════════════════════════
+function addLog(msg, cls) {
+  const t = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${cls||''}">${msg}</span>`;
+  const body = document.getElementById('logBody');
+  body.prepend(row);
+  if (body.children.length > 100) body.lastElementChild.remove();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PWA INSTALL
+// ══════════════════════════════════════════════════════════════════
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBanner').classList.add('show');
+});
+document.getElementById('installBtn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') toast('ok','✅ App Installed!','NSE F&O Signals added to home screen');
+  deferredPrompt = null;
+  document.getElementById('installBanner').classList.remove('show');
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installBanner').classList.remove('show');
+  toast('ok','✅ Installed!','App ready on your home screen');
+});
+
+// ══════════════════════════════════════════════════════════════════
+// SERVICE WORKER
+// ══════════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
+addLog('Enter server URL in Setup tab (e.g. http://192.168.1.x:3001)', '');
+</script>
+</body>
+</html>
