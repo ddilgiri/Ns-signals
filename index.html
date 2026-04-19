@@ -443,6 +443,24 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <button class="chip" onclick="selectGroup('BANK')">Banks</button>
       <button class="chip" onclick="selectGroup('IT')">IT</button>
       <button class="chip" onclick="selectGroup('PHARMA')">Pharma</button>
+      <button class="chip" onclick="selectGroup('AUTO')">Auto</button>
+      <button class="chip" onclick="selectGroup('FMCG')">FMCG</button>
+      <button class="chip" onclick="selectGroup('ENERGY')">Energy</button>
+      <button class="chip" onclick="selectGroup('METAL')">Metal</button>
+      <button class="chip" onclick="selectGroup('REALTY')">Realty</button>
+      <button class="chip" onclick="selectGroup('CEMENT')">Cement</button>
+      <button class="chip" onclick="selectGroup('NBFC')">NBFC</button>
+      <button class="chip" onclick="selectGroup('INSURANCE')">Insurance</button>
+      <button class="chip" onclick="selectGroup('CHEMICALS')">Chemicals</button>
+      <button class="chip" onclick="selectGroup('CAPGOODS')">Cap Goods</button>
+      <button class="chip" onclick="selectGroup('DEFENCE')">Defence</button>
+      <button class="chip" onclick="selectGroup('NEWAGE')">New Age</button>
+      <button class="chip" onclick="selectGroup('INFRA')">Infra</button>
+      <button class="chip" onclick="selectGroup('FINANCE')">Exchanges</button>
+      <button class="chip" onclick="selectGroup('RETAIL')">Retail</button>
+      <button class="chip" onclick="selectGroup('AGRI')">Agri</button>
+      <button class="chip" onclick="selectGroup('TEXTILE')">Textiles</button>
+      <button class="chip" onclick="selectGroup('TRAVEL')">Travel</button>
     </div>
     <input class="field-input" type="search" id="stockSearch" placeholder="🔍 Search stocks..." oninput="filterStockList()" style="width:calc(100% - 24px);margin:0 12px 4px;display:block">
     <div style="font-size:10px;color:var(--text3);padding:4px 12px 6px;font-family:var(--font-mono)" id="stockCount">0 selected</div>
@@ -555,61 +573,236 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 // FNO STOCKS
 // ══════════════════════════════════════════════════════════════════
 const FNO_STOCKS = [
+  // ── NIFTY 50 ──
   {sym:'RELIANCE',name:'Reliance Industries',lot:250,grp:'NIFTY50'},
   {sym:'TCS',name:'Tata Consultancy Services',lot:150,grp:'NIFTY50,IT'},
   {sym:'HDFCBANK',name:'HDFC Bank',lot:550,grp:'NIFTY50,BANK'},
   {sym:'INFY',name:'Infosys',lot:300,grp:'NIFTY50,IT'},
   {sym:'ICICIBANK',name:'ICICI Bank',lot:700,grp:'NIFTY50,BANK'},
-  {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,grp:'NIFTY50'},
+  {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,grp:'NIFTY50,FMCG'},
   {sym:'KOTAKBANK',name:'Kotak Mahindra Bank',lot:400,grp:'NIFTY50,BANK'},
   {sym:'SBIN',name:'State Bank of India',lot:1500,grp:'NIFTY50,BANK'},
-  {sym:'BHARTIARTL',name:'Bharti Airtel',lot:950,grp:'NIFTY50'},
-  {sym:'ITC',name:'ITC Ltd',lot:1600,grp:'NIFTY50'},
-  {sym:'BAJFINANCE',name:'Bajaj Finance',lot:125,grp:'NIFTY50'},
+  {sym:'BHARTIARTL',name:'Bharti Airtel',lot:950,grp:'NIFTY50,TELECOM'},
+  {sym:'ITC',name:'ITC Ltd',lot:1600,grp:'NIFTY50,FMCG'},
+  {sym:'BAJFINANCE',name:'Bajaj Finance',lot:125,grp:'NIFTY50,NBFC'},
   {sym:'LT',name:'Larsen & Toubro',lot:175,grp:'NIFTY50'},
+  {sym:'ASIANPAINT',name:'Asian Paints',lot:200,grp:'NIFTY50'},
   {sym:'AXISBANK',name:'Axis Bank',lot:625,grp:'NIFTY50,BANK'},
-  {sym:'MARUTI',name:'Maruti Suzuki',lot:100,grp:'NIFTY50'},
+  {sym:'MARUTI',name:'Maruti Suzuki',lot:100,grp:'NIFTY50,AUTO'},
   {sym:'WIPRO',name:'Wipro',lot:1500,grp:'NIFTY50,IT'},
   {sym:'HCLTECH',name:'HCL Technologies',lot:350,grp:'NIFTY50,IT'},
   {sym:'SUNPHARMA',name:'Sun Pharmaceutical',lot:350,grp:'NIFTY50,PHARMA'},
   {sym:'TITAN',name:'Titan Company',lot:375,grp:'NIFTY50'},
-  {sym:'TATAMOTORS',name:'Tata Motors',lot:550,grp:'NIFTY50'},
-  {sym:'TATASTEEL',name:'Tata Steel',lot:5500,grp:'NIFTY50'},
-  {sym:'M&M',name:'Mahindra & Mahindra',lot:175,grp:'NIFTY50'},
+  {sym:'ULTRACEMCO',name:'UltraTech Cement',lot:100,grp:'NIFTY50,CEMENT'},
+  {sym:'NESTLEIND',name:'Nestle India',lot:40,grp:'NIFTY50,FMCG'},
+  {sym:'POWERGRID',name:'Power Grid Corp',lot:2700,grp:'NIFTY50,ENERGY'},
+  {sym:'NTPC',name:'NTPC Ltd',lot:2250,grp:'NIFTY50,ENERGY'},
+  {sym:'TECHM',name:'Tech Mahindra',lot:600,grp:'NIFTY50,IT'},
+  {sym:'ONGC',name:'ONGC',lot:1925,grp:'NIFTY50,ENERGY'},
+  {sym:'TATASTEEL',name:'Tata Steel',lot:5500,grp:'NIFTY50,METAL'},
+  {sym:'TATAMOTORS',name:'Tata Motors',lot:550,grp:'NIFTY50,AUTO'},
+  {sym:'JSWSTEEL',name:'JSW Steel',lot:750,grp:'NIFTY50,METAL'},
+  {sym:'M&M',name:'Mahindra & Mahindra',lot:175,grp:'NIFTY50,AUTO'},
   {sym:'ADANIENT',name:'Adani Enterprises',lot:250,grp:'NIFTY50'},
   {sym:'ADANIPORTS',name:'Adani Ports',lot:600,grp:'NIFTY50'},
-  {sym:'COALINDIA',name:'Coal India',lot:2100,grp:'NIFTY50'},
+  {sym:'COALINDIA',name:'Coal India',lot:2100,grp:'NIFTY50,ENERGY'},
+  {sym:'BAJAJFINSV',name:'Bajaj Finserv',lot:500,grp:'NIFTY50,NBFC'},
+  {sym:'HDFCLIFE',name:'HDFC Life Insurance',lot:1100,grp:'NIFTY50,INSURANCE'},
+  {sym:'SBILIFE',name:'SBI Life Insurance',lot:750,grp:'NIFTY50,INSURANCE'},
   {sym:'CIPLA',name:'Cipla',lot:650,grp:'NIFTY50,PHARMA'},
   {sym:'DRREDDY',name:'Dr Reddys Labs',lot:125,grp:'NIFTY50,PHARMA'},
-  {sym:'NTPC',name:'NTPC Ltd',lot:2250,grp:'NIFTY50'},
-  {sym:'ONGC',name:'ONGC',lot:1925,grp:'NIFTY50'},
+  {sym:'DIVISLAB',name:'Divis Laboratories',lot:150,grp:'NIFTY50,PHARMA'},
+  {sym:'EICHERMOT',name:'Eicher Motors',lot:175,grp:'NIFTY50,AUTO'},
+  {sym:'HEROMOTOCO',name:'Hero MotoCorp',lot:150,grp:'NIFTY50,AUTO'},
+  {sym:'APOLLOHOSP',name:'Apollo Hospitals',lot:125,grp:'NIFTY50,PHARMA'},
+  {sym:'BPCL',name:'BPCL',lot:1800,grp:'NIFTY50,ENERGY'},
+  {sym:'TATACONSUM',name:'Tata Consumer Products',lot:500,grp:'NIFTY50,FMCG'},
+  {sym:'BRITANNIA',name:'Britannia Industries',lot:125,grp:'NIFTY50,FMCG'},
+  {sym:'GRASIM',name:'Grasim Industries',lot:375,grp:'NIFTY50'},
+  {sym:'SHRIRAMFIN',name:'Shriram Finance',lot:250,grp:'NIFTY50,NBFC'},
   {sym:'INDUSINDBK',name:'IndusInd Bank',lot:500,grp:'NIFTY50,BANK'},
+  // ── BANK NIFTY extras ──
   {sym:'BANDHANBNK',name:'Bandhan Bank',lot:5000,grp:'BANK'},
   {sym:'IDFCFIRSTB',name:'IDFC First Bank',lot:5000,grp:'BANK'},
+  {sym:'RBLBANK',name:'RBL Bank',lot:2750,grp:'BANK'},
   {sym:'PNB',name:'Punjab National Bank',lot:8000,grp:'BANK'},
   {sym:'BANKBARODA',name:'Bank of Baroda',lot:4350,grp:'BANK'},
   {sym:'FEDERALBNK',name:'Federal Bank',lot:5000,grp:'BANK'},
+  {sym:'CANBK',name:'Canara Bank',lot:3000,grp:'BANK'},
+  {sym:'UNIONBANK',name:'Union Bank of India',lot:10000,grp:'BANK'},
+  {sym:'INDIANB',name:'Indian Bank',lot:1400,grp:'BANK'},
+  {sym:'MAHABANK',name:'Bank of Maharashtra',lot:14000,grp:'BANK'},
+  // ── IT extras ──
   {sym:'MPHASIS',name:'Mphasis',lot:300,grp:'IT'},
   {sym:'COFORGE',name:'Coforge',lot:150,grp:'IT'},
   {sym:'LTIM',name:'LTIMindtree',lot:150,grp:'IT'},
   {sym:'PERSISTENT',name:'Persistent Systems',lot:200,grp:'IT'},
+  {sym:'KPITTECH',name:'KPIT Technologies',lot:500,grp:'IT'},
+  {sym:'OFSS',name:'Oracle Financial Services',lot:200,grp:'IT'},
+  {sym:'ZENSARTECH',name:'Zensar Technologies',lot:1400,grp:'IT'},
+  // ── Auto ──
   {sym:'BAJAJ-AUTO',name:'Bajaj Auto',lot:250,grp:'AUTO'},
   {sym:'TVSMOTORS',name:'TVS Motor Company',lot:350,grp:'AUTO'},
+  {sym:'ASHOKLEY',name:'Ashok Leyland',lot:4000,grp:'AUTO'},
+  {sym:'MOTHERSON',name:'Samvardhana Motherson',lot:5400,grp:'AUTO'},
+  {sym:'BOSCHLTD',name:'Bosch Ltd',lot:50,grp:'AUTO'},
+  {sym:'BALKRISIND',name:'Balkrishna Industries',lot:250,grp:'AUTO'},
+  {sym:'BHARATFORG',name:'Bharat Forge',lot:500,grp:'AUTO'},
+  {sym:'MRF',name:'MRF Ltd',lot:10,grp:'AUTO'},
+  // ── Pharma ──
   {sym:'LUPIN',name:'Lupin',lot:425,grp:'PHARMA'},
   {sym:'AUROPHARMA',name:'Aurobindo Pharma',lot:700,grp:'PHARMA'},
   {sym:'BIOCON',name:'Biocon',lot:2400,grp:'PHARMA'},
+  {sym:'TORNTPHARM',name:'Torrent Pharma',lot:250,grp:'PHARMA'},
+  {sym:'ALKEM',name:'Alkem Laboratories',lot:150,grp:'PHARMA'},
+  {sym:'IPCALAB',name:'IPCA Laboratories',lot:400,grp:'PHARMA'},
+  {sym:'GLENMARK',name:'Glenmark Pharmaceuticals',lot:650,grp:'PHARMA'},
+  {sym:'ABBOTINDIA',name:'Abbott India',lot:75,grp:'PHARMA'},
+  {sym:'NATCOPHARM',name:'Natco Pharma',lot:500,grp:'PHARMA'},
+  // ── Energy / Infra ──
+  {sym:'ADANIGREEN',name:'Adani Green Energy',lot:500,grp:'ENERGY'},
   {sym:'IOC',name:'Indian Oil Corp',lot:4750,grp:'ENERGY'},
   {sym:'HPCL',name:'HPCL',lot:3300,grp:'ENERGY'},
   {sym:'GAIL',name:'GAIL India',lot:2175,grp:'ENERGY'},
   {sym:'TATAPOWER',name:'Tata Power',lot:2700,grp:'ENERGY'},
+  {sym:'SUZLON',name:'Suzlon Energy',lot:14500,grp:'ENERGY'},
+  {sym:'CESC',name:'CESC Ltd',lot:2000,grp:'ENERGY'},
+  {sym:'TORNTPOWER',name:'Torrent Power',lot:750,grp:'ENERGY'},
+  {sym:'IGL',name:'Indraprastha Gas',lot:1375,grp:'ENERGY'},
+  {sym:'MGL',name:'Mahanagar Gas',lot:400,grp:'ENERGY'},
+  {sym:'PETRONET',name:'Petronet LNG',lot:3000,grp:'ENERGY'},
+  // ── Metal / Mining ──
   {sym:'HINDALCO',name:'Hindalco Industries',lot:1400,grp:'METAL'},
   {sym:'VEDL',name:'Vedanta Ltd',lot:2300,grp:'METAL'},
+  {sym:'NMDC',name:'NMDC',lot:4500,grp:'METAL'},
+  {sym:'APLAPOLLO',name:'APL Apollo Tubes',lot:600,grp:'METAL'},
+  {sym:'SAIL',name:'SAIL',lot:6500,grp:'METAL'},
+  {sym:'NATIONALUM',name:'National Aluminium',lot:6750,grp:'METAL'},
+  {sym:'HINDCOPPER',name:'Hindustan Copper',lot:2700,grp:'METAL'},
+  // ── FMCG ──
+  {sym:'GODREJCP',name:'Godrej Consumer Products',lot:500,grp:'FMCG'},
+  {sym:'DABUR',name:'Dabur India',lot:1250,grp:'FMCG'},
+  {sym:'COLPAL',name:'Colgate Palmolive',lot:350,grp:'FMCG'},
+  {sym:'MARICO',name:'Marico',lot:1200,grp:'FMCG'},
+  {sym:'EMAMILTD',name:'Emami Ltd',lot:600,grp:'FMCG'},
+  {sym:'VBL',name:'Varun Beverages',lot:500,grp:'FMCG'},
+  {sym:'UBL',name:'United Breweries',lot:350,grp:'FMCG'},
+  {sym:'RADICO',name:'Radico Khaitan',lot:400,grp:'FMCG'},
+  // ── Cement ──
+  {sym:'ACC',name:'ACC Ltd',lot:250,grp:'CEMENT'},
+  {sym:'AMBUJACEM',name:'Ambuja Cements',lot:2000,grp:'CEMENT'},
+  {sym:'SHREECEM',name:'Shree Cement',lot:25,grp:'CEMENT'},
+  {sym:'RAMCOCEM',name:'Ramco Cements',lot:500,grp:'CEMENT'},
+  {sym:'JKCEMENT',name:'JK Cement',lot:200,grp:'CEMENT'},
+  {sym:'HEIDELBERG',name:'Heidelberg Cement',lot:1500,grp:'CEMENT'},
+  // ── Telecom / Media ──
+  {sym:'IDEA',name:'Vodafone Idea',lot:70000,grp:'TELECOM'},
+  {sym:'TTML',name:'Tata Teleservices',lot:20000,grp:'TELECOM'},
+  {sym:'ZEEL',name:'Zee Entertainment',lot:2000,grp:'MEDIA'},
+  {sym:'PVRINOX',name:'PVR Inox',lot:400,grp:'MEDIA'},
+  {sym:'SUNTV',name:'Sun TV Network',lot:500,grp:'MEDIA'},
+  // ── Real Estate ──
   {sym:'DLF',name:'DLF Ltd',lot:1650,grp:'REALTY'},
   {sym:'GODREJPROP',name:'Godrej Properties',lot:450,grp:'REALTY'},
-  {sym:'ZOMATO',name:'Zomato',lot:4500,grp:'MISC'},
-  {sym:'PAYTM',name:'Paytm',lot:2000,grp:'MISC'},
-  {sym:'INDIGO',name:'IndiGo',lot:250,grp:'MISC'},
-  {sym:'IRCTC',name:'IRCTC',lot:875,grp:'MISC'},
+  {sym:'PRESTIGE',name:'Prestige Estates',lot:600,grp:'REALTY'},
+  {sym:'OBEROIRLTY',name:'Oberoi Realty',lot:400,grp:'REALTY'},
+  {sym:'PHOENIXLTD',name:'Phoenix Mills',lot:300,grp:'REALTY'},
+  {sym:'BRIGADE',name:'Brigade Enterprises',lot:600,grp:'REALTY'},
+  {sym:'SOBHA',name:'Sobha Ltd',lot:350,grp:'REALTY'},
+  {sym:'MAHLIFE',name:'Mahindra Lifespace',lot:1000,grp:'REALTY'},
+  // ── Finance / NBFC ──
+  {sym:'CHOLAFIN',name:'Cholamandalam Finance',lot:500,grp:'NBFC'},
+  {sym:'M&MFIN',name:'M&M Financial Services',lot:3000,grp:'NBFC'},
+  {sym:'LICHSGFIN',name:'LIC Housing Finance',lot:2000,grp:'NBFC'},
+  {sym:'MUTHOOTFIN',name:'Muthoot Finance',lot:400,grp:'NBFC'},
+  {sym:'MANAPPURAM',name:'Manappuram Finance',lot:5000,grp:'NBFC'},
+  {sym:'POONAWALLA',name:'Poonawalla Fincorp',lot:2000,grp:'NBFC'},
+  {sym:'ABCAPITAL',name:'Aditya Birla Capital',lot:4000,grp:'NBFC'},
+  {sym:'CDSL',name:'CDSL',lot:1200,grp:'NBFC'},
+  {sym:'BSE',name:'BSE Ltd',lot:375,grp:'NBFC'},
+  // ── Insurance ──
+  {sym:'ICICIGI',name:'ICICI Lombard General',lot:400,grp:'INSURANCE'},
+  {sym:'NIACL',name:'New India Assurance',lot:4000,grp:'INSURANCE'},
+  {sym:'STARHEALTH',name:'Star Health Insurance',lot:1000,grp:'INSURANCE'},
+  {sym:'GICRE',name:'GIC Re',lot:1350,grp:'INSURANCE'},
+  // ── Chemicals ──
+  {sym:'PIDILITIND',name:'Pidilite Industries',lot:250,grp:'CHEMICALS'},
+  {sym:'SRF',name:'SRF Ltd',lot:375,grp:'CHEMICALS'},
+  {sym:'DEEPAKNI',name:'Deepak Nitrite',lot:400,grp:'CHEMICALS'},
+  {sym:'ATUL',name:'Atul Ltd',lot:75,grp:'CHEMICALS'},
+  {sym:'NAVINFLUOR',name:'Navin Fluorine',lot:150,grp:'CHEMICALS'},
+  {sym:'CLEAN',name:'Clean Science',lot:400,grp:'CHEMICALS'},
+  {sym:'FLUOROCHEM',name:'Gujarat Fluorochem',lot:500,grp:'CHEMICALS'},
+  // ── Retail ──
+  {sym:'DMART',name:'Avenue Supermarts (DMart)',lot:150,grp:'RETAIL'},
+  {sym:'TRENT',name:'Trent Ltd',lot:375,grp:'RETAIL'},
+  {sym:'ABFRL',name:'Aditya Birla Fashion',lot:2700,grp:'RETAIL'},
+  {sym:'PAGEIND',name:'Page Industries',lot:30,grp:'RETAIL'},
+  {sym:'SHOPERSTOP',name:'Shopper Stop',lot:1400,grp:'RETAIL'},
+  // ── Aviation / Travel ──
+  {sym:'INDIGO',name:'IndiGo (InterGlobe Aviation)',lot:250,grp:'AVIATION'},
+  {sym:'IRCTC',name:'IRCTC',lot:875,grp:'TRAVEL'},
+  // ── Capital Goods / Infra ──
+  {sym:'ABB',name:'ABB India',lot:175,grp:'CAPGOODS'},
+  {sym:'SIEMENS',name:'Siemens India',lot:175,grp:'CAPGOODS'},
+  {sym:'HAVELLS',name:'Havells India',lot:500,grp:'CAPGOODS'},
+  {sym:'CUMMINSIND',name:'Cummins India',lot:300,grp:'CAPGOODS'},
+  {sym:'BEL',name:'Bharat Electronics',lot:2900,grp:'CAPGOODS'},
+  {sym:'HAL',name:'Hindustan Aeronautics',lot:150,grp:'CAPGOODS'},
+  {sym:'BHEL',name:'Bharat Heavy Electricals',lot:5500,grp:'CAPGOODS'},
+  {sym:'THERMAX',name:'Thermax Ltd',lot:300,grp:'CAPGOODS'},
+  {sym:'GRINDWELL',name:'Grindwell Norton',lot:350,grp:'CAPGOODS'},
+  // ── New-age / Fintech / Misc ──
+  {sym:'ZOMATO',name:'Zomato',lot:4500,grp:'NEWAGE'},
+  {sym:'PAYTM',name:'Paytm (One 97 Comms)',lot:2000,grp:'NEWAGE'},
+  {sym:'NYKAA',name:'FSN E-Commerce (Nykaa)',lot:3500,grp:'NEWAGE'},
+  {sym:'POLICYBZR',name:'PB Fintech (PolicyBazaar)',lot:1500,grp:'NEWAGE'},
+  {sym:'DELHIVERY',name:'Delhivery',lot:2500,grp:'NEWAGE'},
+  {sym:'CARTRADE',name:'CarTrade Tech',lot:500,grp:'NEWAGE'},
+  {sym:'HFCL',name:'HFCL Ltd',lot:10000,grp:'INFRA'},
+  {sym:'IRB',name:'IRB Infrastructure',lot:4500,grp:'INFRA'},
+  {sym:'GMRINFRA',name:'GMR Airports Infra',lot:12000,grp:'INFRA'},
+  {sym:'CONCOR',name:'Container Corp of India',lot:800,grp:'INFRA'},
+  {sym:'AFFLE',name:'Affle India',lot:400,grp:'NEWAGE'},
+  {sym:'DIXON',name:'Dixon Technologies',lot:150,grp:'CAPGOODS'},
+  {sym:'AMBER',name:'Amber Enterprises',lot:200,grp:'CAPGOODS'},
+  {sym:'SYRMA',name:'Syrma SGS Technology',lot:1200,grp:'CAPGOODS'},
+  {sym:'KAYNES',name:'Kaynes Technology',lot:300,grp:'CAPGOODS'},
+  // ── Defence ──
+  {sym:'COCHINSHIP',name:'Cochin Shipyard',lot:350,grp:'DEFENCE'},
+  {sym:'MAZAGON',name:'Mazagon Dock Shipbuilders',lot:175,grp:'DEFENCE'},
+  {sym:'MTAR',name:'MTAR Technologies',lot:300,grp:'DEFENCE'},
+  {sym:'PARAS',name:'Paras Defence',lot:400,grp:'DEFENCE'},
+  // ── Finance / Exchanges ──
+  {sym:'MCX',name:'Multi Commodity Exchange',lot:250,grp:'FINANCE'},
+  {sym:'ANGELONE',name:'Angel One',lot:300,grp:'FINANCE'},
+  {sym:'5PAISA',name:'5Paisa Capital',lot:1200,grp:'FINANCE'},
+  {sym:'CAMS',name:'Computer Age Mgmt',lot:250,grp:'FINANCE'},
+  {sym:'KFINTECH',name:'KFin Technologies',lot:600,grp:'FINANCE'},
+  // ── Retail / Consumer ──
+  {sym:'VMART',name:'V-Mart Retail',lot:200,grp:'RETAIL'},
+  {sym:'BATAINDIA',name:'Bata India',lot:375,grp:'RETAIL'},
+  {sym:'METROBRAND',name:'Metro Brands',lot:700,grp:'RETAIL'},
+  // ── LIC ──
+  {sym:'LICI',name:'LIC of India',lot:700,grp:'INSURANCE'},
+  // ── Hospitality ──
+  {sym:'INDHOTEL',name:'Indian Hotels (Taj)',lot:1400,grp:'TRAVEL'},
+  {sym:'LEMONTREE',name:'Lemon Tree Hotels',lot:3500,grp:'TRAVEL'},
+  {sym:'EIHOTEL',name:'EIH Ltd (Oberoi Hotels)',lot:2000,grp:'TRAVEL'},
+  // ── Aviation ──
+  // ── Agri / Food ──
+  {sym:'UPL',name:'UPL Ltd',lot:1300,grp:'AGRI'},
+  {sym:'PIIND',name:'PI Industries',lot:200,grp:'AGRI'},
+  {sym:'COROMANDEL',name:'Coromandel International',lot:500,grp:'AGRI'},
+  {sym:'CHAMBLFERT',name:'Chambal Fertilisers',lot:1500,grp:'AGRI'},
+  {sym:'GNFC',name:'Gujarat Narmada Valley Fert',lot:1000,grp:'AGRI'},
+  // ── Healthcare / Diagnostics ──
+  {sym:'MAXHEALTH',name:'Max Healthcare',lot:700,grp:'PHARMA'},
+  {sym:'FORTIS',name:'Fortis Healthcare',lot:1400,grp:'PHARMA'},
+  {sym:'HEALTHGDS',name:'Health & Glow',lot:1000,grp:'PHARMA'},
+  // ── Textiles ──
+  {sym:'KPRMILL',name:'KPR Mill',lot:500,grp:'TEXTILE'},
+  {sym:'SUPREMEIND',name:'Supreme Industries',lot:200,grp:'CAPGOODS'},
 ];
 
 // ══════════════════════════════════════════════════════════════════
@@ -620,7 +813,7 @@ const S = {
   notif:false, connected:false,
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
-  selectedStocks: new Set(FNO_STOCKS.slice(0,30).map(s=>s.sym)),
+  selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
   config:{capital:30000,profitPct:30,slPct:40,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY']},
   livePrice:{}, livePCR:{},
   newSigCount: 0,
@@ -1009,6 +1202,7 @@ async function generateSignal(symbolObj, isIndex) {
     volRatio: params.volumeRatio.toFixed(1),
     oi: params.oiPct,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    ts: Date.now(),
   };
 }
 
@@ -1069,7 +1263,7 @@ async function runScan() {
   }
 
   const stockArr = [...S.selectedStocks];
-  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 15));
+  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 40));
   for (const sym of batch) {
     const obj = FNO_STOCKS.find(s=>s.sym===sym);
     if (!obj) continue;
@@ -1098,7 +1292,25 @@ async function runScan() {
 // ══════════════════════════════════════════════════════════════════
 // RENDER SIGNALS
 // ══════════════════════════════════════════════════════════════════
-function setFilt(f, el) {
+function ageLabel(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  return hrs + 'h ago';
+}
+
+function ageColor(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 5)  return 'var(--green)';   // fresh — green
+  if (mins < 30) return 'var(--amber)';   // getting old — amber
+  return 'var(--red)';                    // stale — red
+}
+
+// Re-render signal age labels every 60 seconds automatically
+setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
+
+
   S.filter = f;
   document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
   el.classList.add('on');
@@ -1153,7 +1365,7 @@ function renderSignals() {
         <span class="sig-tag">IV ${s.ivRank}</span>
         <span class="sig-tag">PCR ${s.pcr}</span>
         <span class="sig-tag">Vol ${s.volRatio}x</span>
-        <span class="sig-tag">${s.time}</span>
+        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
