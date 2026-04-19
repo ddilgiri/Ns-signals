@@ -1302,15 +1302,15 @@ function ageLabel(ts) {
 
 function ageColor(ts) {
   const mins = Math.floor((Date.now() - ts) / 60000);
-  if (mins < 5)  return 'var(--green)';   // fresh — green
-  if (mins < 30) return 'var(--amber)';   // getting old — amber
-  return 'var(--red)';                    // stale — red
+  if (mins < 5)  return 'var(--green)';
+  if (mins < 30) return 'var(--amber)';
+  return 'var(--red)';
 }
 
 // Re-render signal age labels every 60 seconds automatically
 setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
 
-
+function setFilt(f, el) {
   S.filter = f;
   document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
   el.classList.add('on');
