@@ -1271,10 +1271,8 @@ async function updateSignalLivePrices() {
       sig.livePremium = optionLTPs[sig.optionToken];
       changed = true;
     }
-    if (sig.stockToken && S.livePrice[sig.stockToken] !== undefined) {
-      sig.livePrice = S.livePrice[sig.stockToken];
-      changed = true;
-    } else if (S.livePrice[sig.sym]) {
+    // Fix: always match by symbol name (S.livePrice is keyed by sym, not numeric token)
+    if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
       sig.livePrice = S.livePrice[sig.sym];
       changed = true;
     }
@@ -1283,23 +1281,22 @@ async function updateSignalLivePrices() {
   if (changed) {
     // Update signal cards in-place without full re-render (smooth, no flicker)
     S.signals.forEach(sig => {
-      const premEl   = document.getElementById(`sig-prem-${sig.id}`);
-      const priceEl  = document.getElementById(`sig-price-${sig.id}`);
-      const pnlEl    = document.getElementById(`sig-pnl-${sig.id}`);
-      if (premEl && sig.livePremium) {
+      const premEl  = document.getElementById(`sig-prem-${sig.id}`);
+      const priceEl = document.getElementById(`sig-price-${sig.id}`);
+      const pnlEl   = document.getElementById(`sig-pnl-${sig.id}`);
+      if (premEl && sig.livePremium && sig.livePremium > 0) {
+        const chg = sig.livePremium - (sig.entryPremium || sig.premium);
         premEl.textContent = '₹' + sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        // Color vs entry: green if premium up (good for buyer), red if down
-        const chg = sig.livePremium - sig.entryPremium;
         premEl.style.color = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--amber)';
       }
-      if (priceEl && sig.livePrice) {
+      if (priceEl && sig.livePrice && sig.livePrice > 0) {
+        const chg = sig.livePrice - (sig.entryPrice || 0);
         priceEl.textContent = '₹' + sig.livePrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        const chg = sig.livePrice - sig.entryPrice;
         priceEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
       }
-      if (pnlEl && sig.livePremium) {
-        const pnl = (sig.livePremium - sig.entryPremium) * sig.lot * sig.lots;
-        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.round(pnl).toLocaleString('en-IN');
+      if (pnlEl && sig.livePremium && sig.livePremium > 0 && sig.entryPremium > 0) {
+        const pnl = Math.round((sig.livePremium - sig.entryPremium) * sig.lot * sig.lots);
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toLocaleString('en-IN');
         pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
       }
     });
@@ -1439,7 +1436,17 @@ function renderSignals() {
 
   const probColor = p => p>=80?'var(--green)':p>=70?'var(--amber)':'var(--text2)';
 
-  feed.innerHTML = sigs.map(s => `
+  feed.innerHTML = sigs.map(s => {
+    // Best premium: live > entry — never show 0
+    const dispPrem = (s.livePremium && s.livePremium > 0) ? s.livePremium : (s.entryPremium && s.entryPremium > 0) ? s.entryPremium : s.premium;
+    // Best share price: live > entry — never show 0
+    const dispPrice = (s.livePrice && s.livePrice > 0) ? s.livePrice : (s.entryPrice && s.entryPrice > 0) ? s.entryPrice : null;
+    const premChg = (s.livePremium && s.livePremium > 0 && s.entryPremium > 0) ? (s.livePremium - s.entryPremium) : null;
+    const priceChg = (s.livePrice && s.livePrice > 0 && s.entryPrice > 0) ? (s.livePrice - s.entryPrice) : null;
+    const pnl = (s.livePremium && s.livePremium > 0 && s.entryPremium > 0) ? Math.round((s.livePremium - s.entryPremium) * s.lot * s.lots) : null;
+    const premColor = premChg === null ? 'var(--amber)' : premChg > 0 ? 'var(--green)' : premChg < 0 ? 'var(--red)' : 'var(--amber)';
+    const priceColor = priceChg === null ? 'var(--text)' : priceChg >= 0 ? 'var(--green)' : 'var(--red)';
+    return `
     <div class="sig-card" onclick="openDrawer('${s.id}')">
       <div class="sig-bar ${s.type.toLowerCase()}"></div>
       <div class="sig-r1">
@@ -1450,13 +1457,13 @@ function renderSignals() {
       <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
         <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
           <div class="sig-label" style="font-size:8px;color:var(--text3);margin-bottom:3px">OPTION PREMIUM <span class="live-badge">LIVE</span></div>
-          <div id="sig-prem-${s.id}" class="sig-val" style="color:var(--amber);font-size:15px">₹${(s.livePremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry: ₹${s.entryPremium||s.premium}</div>
+          <div id="sig-prem-${s.id}" class="sig-val" style="color:${premColor};font-size:15px">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChg!==null?' · '+(premChg>=0?'▲':'▼')+'₹'+Math.abs(premChg).toFixed(2):''}</div>
         </div>
         <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
           <div class="sig-label" style="font-size:8px;color:var(--text3);margin-bottom:3px">SHARE PRICE <span class="live-badge">LIVE</span></div>
-          <div id="sig-price-${s.id}" class="sig-val" style="color:var(--text);font-size:15px">₹${(s.livePrice||s.entryPrice||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry: ₹${(s.entryPrice||0).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+          <div id="sig-price-${s.id}" class="sig-val" style="color:${priceColor};font-size:15px">${dispPrice ? '₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChg!==null?' · '+(priceChg>=0?'▲':'▼')+'₹'+Math.abs(priceChg).toFixed(2):''}</div>
         </div>
       </div>
       <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
@@ -1470,7 +1477,7 @@ function renderSignals() {
         </div>
         <div class="sig-cell">
           <div class="sig-label">Live P&L</div>
-          <div id="sig-pnl-${s.id}" class="sig-val" style="color:var(--text2);font-size:12px">${s.livePremium ? ((s.livePremium-s.entryPremium)>=0?'+':'')+'₹'+Math.round((s.livePremium-(s.entryPremium||s.premium))*s.lot*s.lots).toLocaleString('en-IN') : '–'}</div>
+          <div id="sig-pnl-${s.id}" class="sig-val" style="color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'};font-size:12px">${pnl===null?'–':(pnl>=0?'+':'')+'₹'+Math.abs(pnl).toLocaleString('en-IN')}</div>
         </div>
       </div>
       <div class="sig-tags">
@@ -1483,7 +1490,8 @@ function renderSignals() {
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════
