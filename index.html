@@ -307,14 +307,17 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
       <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
     </div>
-    <!-- Filter chips -->
-    <div class="chips" id="filterChips">
-      <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
-      <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
-      <button class="chip" onclick="setFilt('STOCK',this)">STOCK</button>
-      <button class="chip" onclick="setFilt('CE',this)">CE ONLY</button>
-      <button class="chip" onclick="setFilt('PE',this)">PE ONLY</button>
-      <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
+    <!-- Filter chips + Clear button -->
+    <div style="display:flex;align-items:center;gap:0;border-bottom:1px solid var(--border)">
+      <div class="chips" id="filterChips" style="flex:1;border-bottom:none">
+        <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
+        <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
+        <button class="chip" onclick="setFilt('STOCK',this)">STOCK</button>
+        <button class="chip" onclick="setFilt('CE',this)">CE ONLY</button>
+        <button class="chip" onclick="setFilt('PE',this)">PE ONLY</button>
+        <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
+      </div>
+      <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;white-space:nowrap">🗑 CLEAR</button>
     </div>
     <!-- Signal feed -->
     <div id="sigFeed">
@@ -1275,6 +1278,8 @@ async function runScan() {
   }
 
   S.signals = S.signals.slice(0, 100);
+  // Persist signals so they survive app close/refresh
+  try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
   document.getElementById('mSigs').textContent = S.signals.length;
   document.getElementById('mScanSt').textContent = 'LIVE';
 
@@ -1545,6 +1550,28 @@ if ('serviceWorker' in navigator) {
 // INIT — Load saved credentials and auto-reconnect
 // ══════════════════════════════════════════════════════════════════
 addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
+
+// Restore signals from last session
+try {
+  const saved = localStorage.getItem('fno_signals');
+  if (saved) {
+    S.signals = JSON.parse(saved);
+    document.getElementById('mSigs').textContent = S.signals.length;
+    renderSignals();
+    addLog(`Restored ${S.signals.length} signals from last session`, 'ok');
+  }
+} catch(e) {}
+
+function clearSignals() {
+  S.signals = [];
+  localStorage.removeItem('fno_signals');
+  document.getElementById('mSigs').textContent = '0';
+  renderSignals();
+  S.newSigCount = 0;
+  document.getElementById('sigBadge').classList.remove('show');
+  toast('ok', '🗑 Signals Cleared', 'All signals removed');
+  addLog('Signals cleared manually', 'warn');
+}
 
 (async function autoLogin() {
   const saved = localStorage.getItem('ao_creds');
