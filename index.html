@@ -1171,13 +1171,8 @@ async function generateSignal(symbolObj, isIndex) {
       }
     }
   }
-  // Fallback
-  if (!usedReal) {
-    const off = [-2,-1,0,1,2][Math.floor(Math.random()*5)]*step;
-    strike = Math.round((baseP+off)/step)*step;
-    const otm = Math.abs(off)/baseP;
-    premium = Math.max(5, Math.round(baseP*0.015*(1-otm*3)*(0.7+Math.random()*0.6)));
-  }
+  // No real data — skip entirely. Never show fake/estimated signals.
+  if (!usedReal) return null;
 
   if (premium*lot > S.config.maxPrem) return null;
   const target = Math.round(premium*(1+S.config.profitPct/100));
@@ -1335,7 +1330,7 @@ function renderSignals() {
   else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
 
   if (!sigs.length) {
-    feed.innerHTML = `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Signals will appear here':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
+    feed.innerHTML = `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning for LIVE signals...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Only real Angel One NFO prices shown<br>Signals appear during market hours<br><b style="color:var(--amber)">9:15 AM – 3:30 PM · Mon–Fri</b>':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
     return;
   }
 
@@ -1351,7 +1346,7 @@ function renderSignals() {
       </div>
       <div class="sig-grid">
         <div class="sig-cell">
-          <div class="sig-label">Premium ${s.isRealPremium?'<span class="live-badge">LIVE</span>':'<span class="est-badge">EST</span>'}</div>
+          <div class="sig-label">Premium <span class="live-badge">LIVE</span></div>
           <div class="sig-val" style="color:var(--amber)">₹${s.premium}</div>
         </div>
         <div class="sig-cell">
@@ -1392,7 +1387,7 @@ function openDrawer(idStr) {
       <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
       <div class="drawer-title">${sig.sym}</div>
     </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} ${sig.isRealPremium?'<span class="live-badge">LIVE PREMIUM</span>':'<span class="est-badge">EST PREMIUM</span>'}</div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
 
     <div class="drawer-grid">
       <div class="drawer-cell">
