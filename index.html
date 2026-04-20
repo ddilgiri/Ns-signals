@@ -428,8 +428,8 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         <div class="cb-list">
           <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
           <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY"><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP"><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
         </div>
       </div>
 
@@ -531,14 +531,39 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   </div>
 
   <!-- ══ PAGE: LOG ══ -->
-  <!-- ══ PAGE: MCX COMMODITIES ══ -->
+  <!-- ══ PAGE: MCX COMMODITIES DASHBOARD ══ -->
   <div class="page" id="page-mcx">
-    <div class="sec-head" style="border-top:none;padding-top:12px;display:flex;justify-content:space-between;align-items:center;padding-right:12px">
-      MCX Live Commodities
-      <button class="chip" onclick="fetchMCX()" style="font-size:10px;padding:4px 12px;color:var(--green);border-color:var(--green)">↻ Refresh</button>
+    <!-- MCX Scan Controls -->
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 12px 8px">
+      <div style="flex:1">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em">MCX Commodities</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px" id="mcxLastUpdate">Not loaded yet</div>
+      </div>
+      <button id="mcxScanBtn" class="scan-btn go" onclick="toggleMCXScan()" style="font-size:11px;padding:7px 14px">▶ LIVE</button>
+      <button onclick="fetchMCX()" style="padding:7px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:11px;font-family:var(--font-mono);cursor:pointer">↻</button>
     </div>
-    <div id="mcxBody" style="padding:0 12px 12px">
-      <div class="empty"><div class="empty-icon">🥇</div><div class="empty-title">MCX Prices</div><div class="empty-sub">Connect Angel One and tap Refresh<br>to see live commodity prices</div></div>
+
+    <!-- MCX Index Summary Bar -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 12px 8px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">GOLD</div>
+        <div id="mcx-GOLD-ltp" style="font-size:17px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">–</div>
+        <div id="mcx-GOLD-chg" style="font-size:10px;font-family:var(--font-mono);color:var(--text3)">–</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">CRUDE OIL</div>
+        <div id="mcx-CRUDEOIL-ltp" style="font-size:17px;font-weight:700;font-family:var(--font-mono);color:var(--text)">–</div>
+        <div id="mcx-CRUDEOIL-chg" style="font-size:10px;font-family:var(--font-mono);color:var(--text3)">–</div>
+      </div>
+    </div>
+
+    <!-- Full commodity grid -->
+    <div id="mcxGrid" style="padding:0 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="grid-column:1/-1;text-align:center;padding:30px 20px">
+        <div style="font-size:36px;margin-bottom:10px;opacity:.4">🥇</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px">MCX Dashboard</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.7">Connect Angel One then tap<br><b style="color:var(--green)">▶ LIVE</b> for auto-refresh<br>or <b style="color:var(--text2)">↻</b> for one-time fetch</div>
+      </div>
     </div>
   </div>
 
@@ -555,17 +580,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   </div>
 
   <!-- ══ PAGE: MCX COMMODITIES ══ -->
-  <div class="page" id="page-mcx">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px">
-      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em">MCX Live Commodities</span>
-      <button onclick="fetchMCX()" style="font-size:10px;padding:5px 12px;border-radius:16px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;font-family:var(--font-mono)">↻ Refresh</button>
-    </div>
-    <div id="mcxGrid" style="padding:0 12px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px;font-family:var(--font-mono)">Connect Angel One to see live MCX prices</div>
-    </div>
-  </div>
-
-</div><!-- /pages -->
+  </div><!-- /pages -->
 
 <!-- BOTTOM NAV -->
 <div class="bottomnav">
@@ -840,7 +855,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:80,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY']},
+  config:{capital:30000,profitPct:30,slPct:5,minProb:80,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -1110,72 +1125,113 @@ function updPCR(key, val) {
 // ══════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════
-// MCX LIVE COMMODITY PRICES
+// MCX LIVE COMMODITY PRICES — SEPARATE SCAN
 // ══════════════════════════════════════════════════════════════════
-const MCX_ICONS = { GOLD:'🥇', SILVER:'🥈', CRUDEOIL:'🛢️', NATURALGAS:'🔥', COPPER:'🟤', ZINC:'⚙️', ALUMINIUM:'🔩', LEAD:'🔋', NICKEL:'⚡', GOLDM:'🥇', SILVERM:'🥈' };
+const MCX_ICONS = {
+  GOLD:'🥇', SILVER:'🥈', CRUDEOIL:'🛢️', NATURALGAS:'🔥',
+  COPPER:'🟤', ZINC:'⚙️', ALUMINIUM:'🔩', LEAD:'🔋',
+  NICKEL:'⚡', GOLDM:'🥇', SILVERM:'🥈'
+};
+
+// MCX scan state — completely independent of NSE scanner
+S.mcxScanning = false;
+S.mcxScanInt  = null;
+S.mcxData     = null;
+
+function toggleMCXScan() {
+  const btn = document.getElementById('mcxScanBtn');
+  if (S.mcxScanning) {
+    clearInterval(S.mcxScanInt);
+    S.mcxScanning = false;
+    btn.textContent = '▶ LIVE';
+    btn.className = 'scan-btn go';
+    addLog('MCX live scan stopped', 'warn');
+  } else {
+    if (!S.connected) { toast('warn','⚠ Not Connected','Connect Angel One in Setup tab first'); return; }
+    S.mcxScanning = true;
+    btn.textContent = '⏹ STOP';
+    btn.className = 'scan-btn stop';
+    addLog('MCX live scan started — refreshing every 5s', 'ok');
+    fetchMCX();
+    S.mcxScanInt = setInterval(fetchMCX, 5000);
+  }
+}
 
 async function fetchMCX() {
-  if (!S.connected) { toast('warn','⚠ Not Connected','Connect Angel One first'); return; }
+  if (!S.connected) return;
   const server = getServer();
-  document.getElementById('mcxBody').innerHTML = '<div class="empty"><div class="empty-icon" style="animation:blink 1s infinite">🥇</div><div class="empty-title">Fetching MCX Prices...</div></div>';
   try {
     const r = await fetch(server + '/mcx');
     const d = await r.json();
     if (!d.status || !d.data?.length) {
-      document.getElementById('mcxBody').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">No MCX Data</div><div class="empty-sub">${d.message||'Try again during market hours'}</div></div>`;
+      if (!S.mcxScanning) {
+        document.getElementById('mcxGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--amber);font-size:12px;font-family:var(--font-mono)">${d.message||'No MCX data — market may be closed'}</div>`;
+      }
       return;
     }
-    // Store for signal scanner reference
     S.mcxData = d.data;
     renderMCX(d.data);
-    addLog(`MCX: ${d.data.length} commodities loaded`, 'ok');
+    // Update summary bar
+    const gold  = d.data.find(c => c.name === 'GOLD');
+    const crude = d.data.find(c => c.name === 'CRUDEOIL');
+    if (gold) {
+      const gc = gold.chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('mcx-GOLD-ltp').textContent = '₹' + gold.ltp.toLocaleString('en-IN',{minimumFractionDigits:0});
+      document.getElementById('mcx-GOLD-ltp').style.color = gc;
+      document.getElementById('mcx-GOLD-chg').textContent = (gold.chgPct>=0?'▲':'▼') + Math.abs(gold.chgPct).toFixed(2) + '%';
+      document.getElementById('mcx-GOLD-chg').style.color = gc;
+    }
+    if (crude) {
+      const cc = crude.chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('mcx-CRUDEOIL-ltp').textContent = '₹' + crude.ltp.toLocaleString('en-IN',{minimumFractionDigits:0});
+      document.getElementById('mcx-CRUDEOIL-ltp').style.color = cc;
+      document.getElementById('mcx-CRUDEOIL-chg').textContent = (crude.chgPct>=0?'▲':'▼') + Math.abs(crude.chgPct).toFixed(2) + '%';
+      document.getElementById('mcx-CRUDEOIL-chg').style.color = cc;
+    }
+    const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const el = document.getElementById('mcxLastUpdate');
+    if (el) el.textContent = `Updated ${now} · ${d.data.length} commodities`;
   } catch(e) {
-    document.getElementById('mcxBody').innerHTML = `<div class="empty"><div class="empty-icon">❌</div><div class="empty-title">MCX Fetch Failed</div><div class="empty-sub">${e.message}</div></div>`;
+    addLog('MCX fetch error: ' + e.message, 'warn');
   }
 }
 
 function renderMCX(data) {
-  document.getElementById('mcxBody').innerHTML = data.map(c => {
-    const up = c.chgPct >= 0;
+  const grid = document.getElementById('mcxGrid');
+  if (!grid) return;
+  grid.innerHTML = data.map(c => {
+    const up  = c.chgPct >= 0;
     const col = up ? 'var(--green)' : 'var(--red)';
     const arr = up ? '▲' : '▼';
     return `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:22px">${MCX_ICONS[c.name]||'📦'}</span>
-          <div>
-            <div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text)">${c.name}</div>
-            <div style="font-size:9px;color:var(--text3);font-family:var(--font-mono)">${c.tradingSymbol} · ${c.unit}</div>
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:${col}">₹${c.ltp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:11px;font-family:var(--font-mono);color:${col}">${arr} ${Math.abs(c.chgPct).toFixed(2)}%</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:11px 12px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="font-size:18px">${MCX_ICONS[c.name]||'📦'}</span>
+        <div>
+          <div style="font-size:12px;font-weight:700;font-family:var(--font-mono);color:var(--text)">${c.name}</div>
+          <div style="font-size:9px;color:var(--text3);font-family:var(--font-mono)">${c.unit}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-        <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">OPEN</div>
-          <div style="font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--text2)">₹${c.open.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
+      <div style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${col}">₹${c.ltp.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
+      <div style="font-size:11px;font-family:var(--font-mono);color:${col};margin-bottom:6px">${arr} ${Math.abs(c.chgPct).toFixed(2)}%</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+        <div style="background:var(--bg3);border-radius:5px;padding:4px 5px;text-align:center">
+          <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">OPEN</div>
+          <div style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--text2)">₹${c.open.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
         </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">HIGH</div>
-          <div style="font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--green)">₹${c.high.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
+        <div style="background:var(--bg3);border-radius:5px;padding:4px 5px;text-align:center">
+          <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">HIGH</div>
+          <div style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--green)">₹${c.high.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
         </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:6px 8px;text-align:center">
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">LOW</div>
-          <div style="font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--red)">₹${c.low.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
+        <div style="background:var(--bg3);border-radius:5px;padding:4px 5px;text-align:center">
+          <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">LOW</div>
+          <div style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--red)">₹${c.low.toLocaleString('en-IN',{minimumFractionDigits:0})}</div>
         </div>
       </div>
     </div>`;
   }).join('');
 }
 
-// Auto-refresh MCX every 10 seconds when on MCX page
-setInterval(() => {
-  if (S.connected && document.getElementById('page-mcx').classList.contains('active')) fetchMCX();
-}, 10000);
 
 // ══════════════════════════════════════════════════════════════════
 // NEWS-AWARE SIGNAL SCORING (internal — not shown on screen)
@@ -1830,7 +1886,7 @@ function renderSignals() {
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
-          <div id="sig-pnl-${s.id}" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+':'')+'₹'+Math.abs(pnl).toLocaleString('en-IN')}</div>
+          <div id="sig-pnl-${s.id}" style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
         </div>
       </div>
       <div class="sig-tags">
@@ -1882,8 +1938,8 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Lot Size</span><span class="drawer-row-val">${sig.lot}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Lots Affordable</span><span class="drawer-row-val">${sig.lots}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">₹${((sig.target-sig.premium)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">₹${((sig.premium-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
