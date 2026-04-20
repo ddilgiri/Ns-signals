@@ -514,6 +514,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 
       <button class="big-btn green" onclick="connectAngel()">🔌 Connect Angel One</button>
       <button class="big-btn outline" onclick="reqNotif()">🔔 Enable Signal Notifications</button>
+      <button class="big-btn outline" style="color:var(--red);border-color:var(--red);margin-top:4px" onclick="forgetCreds()">🗑 Forget Saved Login</button>
 
       <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
       <div style="font-size:12px;color:var(--text3);line-height:1.8;padding:10px 0">
@@ -960,6 +961,8 @@ async function connectAngel() {
     if (d.status === true) {
       S.connected = true;
       S.creds = { client, key, pin, totp };
+      // Save credentials so app auto-reconnects next time
+      localStorage.setItem('ao_creds', JSON.stringify({ client, key, pin, totp }));
       setConnected(true, d.client);
       toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
       addLog(`Connected to Angel One — ${d.client}`, 'ok');
@@ -1440,6 +1443,20 @@ document.getElementById('drawerSheet').addEventListener('touchend', e => {
 // ══════════════════════════════════════════════════════════════════
 // NOTIFICATIONS
 // ══════════════════════════════════════════════════════════════════
+function forgetCreds() {
+  localStorage.removeItem('ao_creds');
+  document.getElementById('aClient').value = '';
+  document.getElementById('aKey').value    = '';
+  document.getElementById('aPin').value    = '';
+  document.getElementById('aTotp').value   = '';
+  S.connected = false;
+  S.creds = { client:'', key:'', pin:'', totp:'' };
+  setConnected(false);
+  toast('ok', '🗑 Credentials Cleared', 'Saved login removed from this device');
+  addLog('Saved credentials cleared', 'warn');
+}
+
+
 function reqNotif() {
   if (!('Notification' in window)) { toast('warn','⚠ Not supported','Notifications not supported in this browser'); return; }
   Notification.requestPermission().then(p => {
@@ -1525,10 +1542,60 @@ if ('serviceWorker' in navigator) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// INIT
+// INIT — Load saved credentials and auto-reconnect
 // ══════════════════════════════════════════════════════════════════
 addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
-addLog('Enter server URL in Setup tab (e.g. http://192.168.1.x:3001)', '');
+
+(async function autoLogin() {
+  const saved = localStorage.getItem('ao_creds');
+  if (!saved) {
+    addLog('Enter your Angel One credentials in Setup tab', '');
+    return;
+  }
+  try {
+    const creds = JSON.parse(saved);
+    // Fill the form fields with saved values
+    document.getElementById('aClient').value = creds.client || '';
+    document.getElementById('aKey').value    = creds.key    || '';
+    document.getElementById('aPin').value    = creds.pin    || '';
+    document.getElementById('aTotp').value   = creds.totp   || '';
+
+    addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
+    document.getElementById('apiStat').textContent = 'Auto-connecting...';
+
+    // Small delay so UI renders first
+    await new Promise(r => setTimeout(r, 1200));
+
+    const server = getServer();
+    const resp = await fetch(server + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientCode: creds.client,
+        password:   creds.pin,
+        apiKey:     creds.key,
+        totpSecret: creds.totp,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const d = await resp.json();
+    if (d.status === true) {
+      S.connected = true;
+      S.creds = creds;
+      setConnected(true, d.client);
+      toast('ok', '✅ Auto-connected!', `Welcome back ${d.client} — session restored`);
+      addLog(`Auto-login success — ${d.client}`, 'ok');
+      fetchMarketData();
+      S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
+    } else {
+      addLog(`Auto-login failed: ${d.message} — tap Setup to reconnect`, 'warn');
+      toast('warn', '⚠ Auto-login failed', d.message + '\nGo to Setup tab to reconnect');
+    }
+  } catch(e) {
+    addLog('Auto-login error: ' + e.message, 'warn');
+  }
+})();
+
 </script>
 </body>
 </html>
