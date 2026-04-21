@@ -385,16 +385,16 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Stop Loss: <span id="cfgSLV" style="color:var(--red)">5%</span></label>
+        <label class="field-label">Stop Loss: <span id="cfgSLV" style="color:var(--red)">40%</span></label>
         <div class="slider-wrap">
-          <input type="range" min="5" max="50" value="5" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%'">
+          <input type="range" min="20" max="70" value="40" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%'">
         </div>
       </div>
 
       <div class="field">
-        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">80%</span></label>
+        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">65%</span></label>
         <div class="slider-wrap">
-          <input type="range" min="65" max="92" value="80" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
+          <input type="range" min="55" max="85" value="65" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
         </div>
       </div>
 
@@ -428,8 +428,8 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         <div class="cb-list">
           <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
           <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY"><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP"><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
         </div>
       </div>
 
@@ -531,115 +531,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   </div>
 
   <!-- ══ PAGE: LOG ══ -->
-  <!-- ══ PAGE: MCX COMMODITIES DASHBOARD ══ -->
-  <div class="page" id="page-mcx">
-
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 12px 6px">
-      <div>
-        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em">MCX Commodities</div>
-        <div id="mcxLastUpdate" style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--font-mono)">–</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <div class="dot" id="mcxDot"></div>
-        <span id="mcxStatus" style="font-family:var(--font-mono);font-size:10px;color:var(--text3)">MCX CLOSED</span>
-      </div>
-    </div>
-
-    <!-- 4 Key Commodities — fixed cards, updated in-place (no blink) -->
-    <div style="padding:0 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-
-      <!-- GOLD -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:20px">🥇</span>
-          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase">Gold</div>
-        </div>
-        <div id="mcx-GOLD-ltp" style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">–</div>
-        <div id="mcx-GOLD-chg" style="font-size:11px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">–</div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">HIGH</div>
-            <div id="mcx-GOLD-high" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--green)">–</div>
-          </div>
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">LOW</div>
-            <div id="mcx-GOLD-low" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--red)">–</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- SILVER -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:20px">🥈</span>
-          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase">Silver</div>
-        </div>
-        <div id="mcx-SILVER-ltp" style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:var(--text)">–</div>
-        <div id="mcx-SILVER-chg" style="font-size:11px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">–</div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">HIGH</div>
-            <div id="mcx-SILVER-high" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--green)">–</div>
-          </div>
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">LOW</div>
-            <div id="mcx-SILVER-low" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--red)">–</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- CRUDE OIL -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:20px">🛢️</span>
-          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase">Crude Oil</div>
-        </div>
-        <div id="mcx-CRUDEOIL-ltp" style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:var(--text)">–</div>
-        <div id="mcx-CRUDEOIL-chg" style="font-size:11px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">–</div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">HIGH</div>
-            <div id="mcx-CRUDEOIL-high" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--green)">–</div>
-          </div>
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">LOW</div>
-            <div id="mcx-CRUDEOIL-low" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--red)">–</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- NATURAL GAS -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:20px">🔥</span>
-          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase">Nat. Gas</div>
-        </div>
-        <div id="mcx-NATURALGAS-ltp" style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:var(--text)">–</div>
-        <div id="mcx-NATURALGAS-chg" style="font-size:11px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">–</div>
-        <div style="display:flex;gap:6px;margin-top:8px">
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">HIGH</div>
-            <div id="mcx-NATURALGAS-high" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--green)">–</div>
-          </div>
-          <div style="flex:1;background:var(--bg3);border-radius:5px;padding:4px 6px;text-align:center">
-            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono)">LOW</div>
-            <div id="mcx-NATURALGAS-low" style="font-size:10px;font-weight:600;font-family:var(--font-mono);color:var(--red)">–</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- MCX closed message -->
-    <div id="mcxClosedMsg" style="display:none;text-align:center;padding:20px 12px">
-      <div style="font-size:32px;margin-bottom:8px;opacity:.4">🌙</div>
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text2);text-transform:uppercase;margin-bottom:6px">MCX Market Closed</div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.7">MCX trading hours:<br>Mon–Fri 9:00 AM – 11:30 PM IST<br>Last prices shown above</div>
-    </div>
-
-  </div>
-
   <div class="page" id="page-log">
     <div style="padding:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -652,19 +543,14 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
     </div>
   </div>
 
-  <!-- ══ PAGE: MCX COMMODITIES ══ -->
-  </div><!-- /pages -->
+</div><!-- /pages -->
 
 <!-- BOTTOM NAV -->
 <div class="bottomnav">
-  <button class="nav-item" onclick="goPage('signals',this)">
+  <button class="nav-item active" onclick="goPage('signals',this)">
     <div class="nav-icon">⚡</div>
     <span>Signals</span>
     <div class="nav-badge" id="sigBadge">0</div>
-  </button>
-  <button class="nav-item" onclick="goPage('mcx',this)">
-    <div class="nav-icon">🥇</div>
-    <span>MCX</span>
   </button>
   <button class="nav-item" onclick="goPage('analysis',this)">
     <div class="nav-icon">📊</div>
@@ -673,6 +559,10 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   <button class="nav-item" onclick="goPage('scanner',this)">
     <div class="nav-icon">⚙️</div>
     <span>Scanner</span>
+  </button>
+  <button class="nav-item" onclick="goPage('stocks',this)">
+    <div class="nav-icon">📋</div>
+    <span>Stocks</span>
   </button>
   <button class="nav-item" onclick="goPage('setup',this)">
     <div class="nav-icon">🔌</div>
@@ -928,7 +818,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:80,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:30,slPct:40,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY']},
   livePrice:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -949,16 +839,20 @@ function goPage(id, el) {
     document.getElementById('sigBadge').textContent = '0';
     document.getElementById('sigBadge').classList.remove('show');
   }
-  if (id === 'mcx') fetchMCX();
 }
 
 // ══════════════════════════════════════════════════════════════════
 // MARKET CLOCK
 // ══════════════════════════════════════════════════════════════════
 function tickClock() {
-  const { nseOpen } = getMarketStatus();
-  document.getElementById('mDot').className = 'dot' + (nseOpen ? ' live' : '');
-  document.getElementById('mStat').textContent = nseOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const h = ist.getHours(), m = ist.getMinutes();
+  const open = (h > 9 || (h === 9 && m >= 15)) && (h < 15 || (h === 15 && m <= 30));
+  const dayOk = ist.getDay() > 0 && ist.getDay() < 6;
+  const isOpen = open && dayOk;
+  document.getElementById('mDot').className = 'dot' + (isOpen ? ' live' : '');
+  document.getElementById('mStat').textContent = isOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
 }
 tickClock();
 setInterval(tickClock, 30000);
@@ -1175,252 +1069,16 @@ async function fetchMarketData() {
       if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
     }
   } catch(e) { /* silent */ }
-
-  // Update live prices on all signal cards
-  updateSignalLivePrices();
 }
 
 function updPCR(key, val) {
   const pct = Math.min(95, Math.round(val*60));
   const col = val<0.7?'var(--green)':val>1.0?'var(--red)':'var(--amber)';
-  const bar = document.getElementById(`pcr-${key}-bar`);
-  const num = document.getElementById(`pcr-${key}-val`);
-  if (bar) { bar.style.width = pct+'%'; bar.style.background = col; }
-  if (num) { num.textContent = val.toFixed(2); num.style.color = col; }
+  document.getElementById(`pcr-${key}-bar`).style.width = pct+'%';
+  document.getElementById(`pcr-${key}-bar`).style.background = col;
+  document.getElementById(`pcr-${key}-val`).textContent = val.toFixed(2);
+  document.getElementById(`pcr-${key}-val`).style.color = col;
 }
-
-
-// ══════════════════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════════════════
-// MARKET OPEN HELPER — shared by NSE and MCX scanners
-// NSE: 9:15 AM – 3:30 PM Mon–Fri
-// MCX: 9:00 AM – 11:30 PM Mon–Fri
-// ══════════════════════════════════════════════════════════════════
-function getMarketStatus() {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-  const h = ist.getHours(), m = ist.getMinutes(), day = ist.getDay();
-  const isWeekday = day > 0 && day < 6;
-  const totalMin  = h * 60 + m;
-  const nseOpen   = isWeekday && totalMin >= 9*60+15  && totalMin <= 15*60+30;
-  const mcxOpen   = isWeekday && totalMin >= 9*60      && totalMin <= 23*60+30;
-  return { nseOpen, mcxOpen, ist };
-}
-
-// ══════════════════════════════════════════════════════════════════
-// MCX LIVE COMMODITY PRICES
-// 4 key commodities: GOLD, SILVER, CRUDEOIL, NATURALGAS
-// Updates in-place — NO full re-render, NO blink
-// Auto-refreshes every 5s only during MCX market hours
-// ══════════════════════════════════════════════════════════════════
-S.mcxData    = null;
-S.mcxLoaded  = false;
-
-// MCX market hours dot updater
-function tickMCX() {
-  const { mcxOpen } = getMarketStatus();
-  const dot = document.getElementById('mcxDot');
-  const st  = document.getElementById('mcxStatus');
-  const msg = document.getElementById('mcxClosedMsg');
-  if (dot) dot.className = 'dot' + (mcxOpen ? ' live' : '');
-  if (st)  { st.textContent = mcxOpen ? 'MCX OPEN' : 'MCX CLOSED'; st.style.color = mcxOpen ? 'var(--green)' : 'var(--text3)'; }
-  if (msg) msg.style.display = mcxOpen ? 'none' : (S.mcxLoaded ? 'block' : 'none');
-}
-tickMCX();
-setInterval(tickMCX, 30000);
-
-// Auto-fetch MCX when page becomes active and market is open
-// Polled via the main market data refresh — no separate scan button needed
-setInterval(() => {
-  if (!S.connected) return;
-  const { mcxOpen } = getMarketStatus();
-  if (!mcxOpen) return;
-  if (!document.getElementById('page-mcx')?.classList.contains('active')) return;
-  fetchMCX();
-}, 5000);
-
-// One-time fetch when user navigates to MCX page
-const _origGoPage = typeof goPage === 'function' ? goPage : null;
-
-async function fetchMCX() {
-  if (!S.connected) return;
-  const server = getServer();
-  try {
-    const r = await fetch(server + '/mcx', { signal: AbortSignal.timeout(10000) });
-    const d = await r.json();
-    if (!d.status || !d.data?.length) return;
-    S.mcxData   = d.data;
-    S.mcxLoaded = true;
-    updateMCXCards(d.data);
-    const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const el = document.getElementById('mcxLastUpdate');
-    if (el) el.textContent = 'Updated ' + now;
-    tickMCX();
-  } catch(e) { /* silent — network error, retry next cycle */ }
-}
-
-// KEY CHANGE: Update in-place only (no innerHTML rebuild = no blink)
-const MCX_4 = ['GOLD','SILVER','CRUDEOIL','NATURALGAS'];
-
-function updateMCXCards(data) {
-  MCX_4.forEach(name => {
-    const c = data.find(d => d.name === name);
-    if (!c) return;
-    const up  = c.chgPct >= 0;
-    const col = up ? 'var(--green)' : 'var(--red)';
-    const arr = up ? '▲' : '▼';
-    const fmt = v => v > 0 ? '₹' + v.toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:0}) : '–';
-
-    const ltp  = document.getElementById('mcx-' + name + '-ltp');
-    const chg  = document.getElementById('mcx-' + name + '-chg');
-    const high = document.getElementById('mcx-' + name + '-high');
-    const low  = document.getElementById('mcx-' + name + '-low');
-
-    if (ltp)  { ltp.textContent  = fmt(c.ltp);  ltp.style.color  = col; }
-    if (chg)  { chg.textContent  = arr + ' ' + Math.abs(c.chgPct).toFixed(2) + '%  Open ' + fmt(c.open); chg.style.color = col; }
-    if (high) { high.textContent = fmt(c.high); }
-    if (low)  { low.textContent  = fmt(c.low);  }
-  });
-}
-
-// Fetch MCX once on load if connected
-setTimeout(() => { if (S.connected) fetchMCX(); }, 2000);
-
-
-// ══════════════════════════════════════════════════════════════════
-// NEWS-AWARE SIGNAL SCORING (internal — not shown on screen)
-// Uses geopolitical + macro + sector news context to adjust signal
-// probability score before displaying to user
-// ══════════════════════════════════════════════════════════════════
-const NEWS_CONTEXT = {
-  // Geopolitical risk factors that suppress CE signals and boost PE signals
-  geopolitical: [
-    { keywords:['war','conflict','missile','attack','sanction','tension'],      ceAdj:-8,  peAdj:+8  },
-    { keywords:['ceasefire','peace','deal','agreement','truce'],               ceAdj:+5,  peAdj:-5  },
-    { keywords:['tariff','trade war','import duty','export ban'],              ceAdj:-6,  peAdj:+6  },
-    { keywords:['oil supply','opec','crude ban'],                              ceAdj:-5,  peAdj:+5  },
-  ],
-  // Macro economic signals
-  macro: [
-    { keywords:['rate hike','hawkish','inflation high','rbi hike'],            ceAdj:-7,  peAdj:+7  },
-    { keywords:['rate cut','dovish','inflation eases','rbi cut'],              ceAdj:+8,  peAdj:-8  },
-    { keywords:['gdp miss','recession','slowdown','contraction'],              ceAdj:-9,  peAdj:+9  },
-    { keywords:['gdp beat','growth','expansion','recovery'],                   ceAdj:+7,  peAdj:-7  },
-    { keywords:['rupee fall','usd inr high','currency weakness'],              ceAdj:-4,  peAdj:+4  },
-    { keywords:['fii sell','fii outflow','foreign sell'],                      ceAdj:-6,  peAdj:+6  },
-    { keywords:['fii buy','fii inflow','foreign buying'],                      ceAdj:+6,  peAdj:-6  },
-    { keywords:['budget','fiscal deficit','government spend'],                 ceAdj:+3,  peAdj:-3  },
-  ],
-  // Sector-specific news
-  sector: [
-    { keywords:['bank npa','npa rise','bad loans'],                  sectors:['BANK'],           ceAdj:-8,  peAdj:+8  },
-    { keywords:['bank results','credit growth','loan growth'],       sectors:['BANK'],           ceAdj:+6,  peAdj:-6  },
-    { keywords:['crude rise','oil up','brent high'],                 sectors:['ENERGY','AUTO'],  ceAdj:-5,  peAdj:+5  },
-    { keywords:['drug approval','fda','usfda'],                      sectors:['PHARMA'],         ceAdj:+8,  peAdj:-8  },
-    { keywords:['price erosion','usfda warning','import alert'],     sectors:['PHARMA'],         ceAdj:-7,  peAdj:+7  },
-    { keywords:['it deal','deal win','large deal'],                  sectors:['IT'],             ceAdj:+7,  peAdj:-7  },
-    { keywords:['it layoff','visa issue','h1b'],                     sectors:['IT'],             ceAdj:-5,  peAdj:+5  },
-    { keywords:['real estate','housing demand','property up'],       sectors:['REALTY'],         ceAdj:+6,  peAdj:-6  },
-    { keywords:['auto sales','vehicle sales','ev push'],             sectors:['AUTO'],           ceAdj:+5,  peAdj:-5  },
-    { keywords:['metal price','steel rise','aluminium'],             sectors:['METAL'],          ceAdj:+5,  peAdj:-5  },
-  ],
-  // MCX commodity influence on related stocks
-  mcx: [
-    { commodity:'GOLD',     direction:'up',   sectors:['FINANCE'],    ceAdj:+4,  peAdj:-4 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['ENERGY'],     ceAdj:+6,  peAdj:-6 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['AUTO'],       ceAdj:-4,  peAdj:+4 },
-    { commodity:'CRUDEOIL', direction:'down', sectors:['AUTO'],       ceAdj:+5,  peAdj:-5 },
-    { commodity:'SILVER',   direction:'up',   sectors:['METAL'],      ceAdj:+3,  peAdj:-3 },
-  ],
-};
-
-// Simulated live news headlines (updated each scan cycle with realistic patterns)
-// In production these would come from a news API — here they model real market dynamics
-const NEWS_POOLS = {
-  bullish: [
-    'FII inflows surge ₹4,200cr — markets rally expected',
-    'RBI holds rates, signals dovish stance for Q2',
-    'India GDP beats estimates at 7.8% — strong momentum',
-    'SEBI eases F&O margin norms — positive for retail traders',
-    'US Fed pauses — EM markets including India to benefit',
-    'Crude oil slides 2% — positive for India import bill',
-    'IT sector deal pipeline robust — Nasscom upgrades outlook',
-    'GST collections hit record ₹2.1L cr — fiscal strong',
-  ],
-  bearish: [
-    'Middle East tensions escalate — safe haven demand rises',
-    'Inflation data above estimate — rate cut hopes recede',
-    'FII outflows ₹3,500cr — dollar strengthening',
-    'US recession fears resurface — global risk-off',
-    'Crude oil jumps 3% on OPEC cut — India CAD concern',
-    'Rupee at 84.5 vs USD — RBI may intervene',
-    'China slowdown weighs on metals — India exports at risk',
-    'Corporate earnings miss in BFSI — caution warranted',
-  ],
-  neutral: [
-    'Markets await Fed minutes — consolidation likely',
-    'Q4 results season begins — stock-specific moves expected',
-    'Budget expectations build — infra and defence in focus',
-    'Global cues mixed — Nifty likely range-bound 24000-24500',
-  ],
-};
-
-// Current news sentiment state (refreshed each scan)
-let NEWS_STATE = { sentiment: 'neutral', headlines: [], adjustments: {} };
-
-function refreshNewsSentiment() {
-  // Pick 2-3 random headlines reflecting realistic market state
-  const hour = new Date().getHours();
-  const isMarketOpen = hour >= 9 && hour < 16;
-
-  // Weight towards current MCX data if available
-  let pool;
-  if (S.mcxData) {
-    const crude = S.mcxData.find(c => c.name === 'CRUDEOIL');
-    if (crude && crude.chgPct > 1.5) pool = 'bearish';      // high crude = bearish India
-    else if (crude && crude.chgPct < -1.5) pool = 'bullish'; // low crude = bullish India
-    else pool = Math.random() > 0.5 ? 'bullish' : 'bearish';
-  } else {
-    pool = ['bullish','bearish','neutral'][Math.floor(Math.random()*3)];
-  }
-
-  const headlines = [];
-  const src = NEWS_POOLS[pool];
-  for (let i = 0; i < 2; i++) headlines.push(src[Math.floor(Math.random()*src.length)]);
-  if (Math.random() > 0.6) headlines.push(NEWS_POOLS.neutral[Math.floor(Math.random()*NEWS_POOLS.neutral.length)]);
-
-  NEWS_STATE = { sentiment: pool, headlines, adjustments: {} };
-
-  // Build adjustment map from matching keywords
-  const allFactors = [...NEWS_CONTEXT.geopolitical, ...NEWS_CONTEXT.macro];
-  const combined = headlines.join(' ').toLowerCase();
-  allFactors.forEach(f => {
-    if (f.keywords.some(k => combined.includes(k))) {
-      NEWS_STATE.adjustments['CE'] = (NEWS_STATE.adjustments['CE']||0) + (f.ceAdj||0);
-      NEWS_STATE.adjustments['PE'] = (NEWS_STATE.adjustments['PE']||0) + (f.peAdj||0);
-    }
-  });
-
-  // MCX influence
-  if (S.mcxData) {
-    NEWS_CONTEXT.mcx.forEach(rule => {
-      const comm = S.mcxData.find(c => c.name === rule.commodity);
-      if (!comm) return;
-      const dir = comm.chgPct > 0 ? 'up' : 'down';
-      if (dir === rule.direction) {
-        NEWS_STATE.adjustments['CE'] = (NEWS_STATE.adjustments['CE']||0) + (rule.ceAdj||0);
-        NEWS_STATE.adjustments['PE'] = (NEWS_STATE.adjustments['PE']||0) + (rule.peAdj||0);
-      }
-    });
-  }
-}
-
-function getNewsAdjustedProb(baseProb, type) {
-  const adj = NEWS_STATE.adjustments[type] || 0;
-  return Math.min(92, Math.max(0, baseProb + adj));
-}
-
 
 // ══════════════════════════════════════════════════════════════════
 // OPTION CHAIN CACHE
@@ -1448,94 +1106,8 @@ async function fetchOptionChain(sym, spotPrice) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MCX COMMODITIES
+// SIGNAL ENGINE
 // ══════════════════════════════════════════════════════════════════
-const MCX_META = {
-  GOLD:      { icon:'🥇', unit:'₹/10g',  color:'#FFD700' },
-  SILVER:    { icon:'🥈', unit:'₹/kg',   color:'#C0C0C0' },
-  CRUDEOIL:  { icon:'🛢️', unit:'₹/bbl',  color:'#FF8C00' },
-  NATURALGAS:{ icon:'🔥', unit:'₹/mmBtu',color:'#22d3ee' },
-  COPPER:    { icon:'🔶', unit:'₹/kg',   color:'#b87333' },
-  ALUMINIUM: { icon:'⬡',  unit:'₹/kg',   color:'#848484' },
-  ZINC:      { icon:'⬡',  unit:'₹/kg',   color:'#7393B3' },
-  LEAD:      { icon:'⬡',  unit:'₹/kg',   color:'#999999' },
-  NICKEL:    { icon:'⬡',  unit:'₹/kg',   color:'#89CFF0' },
-};
-
-async function fetchMCX() {
-  if (!S.connected) {
-    document.getElementById('mcxGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px;font-family:var(--font-mono)">Connect Angel One in Setup tab first</div>';
-    return;
-  }
-  document.getElementById('mcxGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px;font-family:var(--font-mono)">Loading MCX data...</div>';
-  try {
-    const r = await fetch(getServer() + '/mcx');
-    const d = await r.json();
-    if (d.status && d.data) {
-      renderMCX(d.data);
-    } else {
-      document.getElementById('mcxGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--red);font-size:11px;font-family:var(--font-mono)">${d.message || 'MCX fetch failed'}</div>`;
-    }
-  } catch(e) {
-    document.getElementById('mcxGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--red);font-size:11px;font-family:var(--font-mono)">Error: ${e.message}</div>`;
-  }
-}
-
-function renderMCX(data) {
-  const html = Object.entries(data).map(([sym, q]) => {
-    const meta = MCX_META[sym] || { icon:'📦', unit:'₹', color:'var(--text2)' };
-    const chg = parseFloat(q.changePct);
-    const chgColor = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--text3)';
-    const arrow = chg > 0 ? '▲' : chg < 0 ? '▼' : '–';
-    return `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:16px">${meta.icon}</span>
-          <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text2)">${sym}</span>
-        </div>
-        <div style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:${meta.color};margin-bottom:2px">
-          ₹${q.ltp > 0 ? q.ltp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}
-        </div>
-        <div style="font-size:10px;font-family:var(--font-mono);color:${chgColor};margin-bottom:4px">
-          ${arrow} ${Math.abs(chg)}% (₹${Math.abs(q.change).toFixed(2)})
-        </div>
-        <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">${meta.unit}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;font-family:var(--font-mono);color:var(--text3)">
-          <span>H ₹${q.high>0?q.high.toLocaleString('en-IN',{maximumFractionDigits:0}):'–'}</span>
-          <span>L ₹${q.low>0?q.low.toLocaleString('en-IN',{maximumFractionDigits:0}):'–'}</span>
-        </div>
-      </div>`;
-  }).join('');
-  document.getElementById('mcxGrid').innerHTML = html || '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:11px">No MCX data available</div>';
-}
-
-// Auto-refresh MCX every 10s when on MCX page
-setInterval(() => {
-  if (document.getElementById('page-mcx').classList.contains('active') && S.connected) fetchMCX();
-}, 10000);
-
-// ══════════════════════════════════════════════════════════════════
-// NEWS SENTIMENT — fetched silently for scanner scoring
-// ══════════════════════════════════════════════════════════════════
-let S_NEWS = { sentiment: 'NEUTRAL', sentimentScore: 50, geoRisk: 0, fetchTime: 0 };
-
-async function fetchNewsSentiment() {
-  if (!S.connected) return;
-  try {
-    const r = await fetch(getServer() + '/news-sentiment');
-    const d = await r.json();
-    if (d.status) {
-      S_NEWS = { ...d, fetchTime: Date.now() };
-      addLog(`News: ${d.sentiment} (${d.sentimentScore}%) · GeoRisk: ${d.geoRisk}`, 'ok');
-    }
-  } catch(e) {}
-}
-
-// Fetch news every 5 minutes silently
-fetchNewsSentiment();
-setInterval(fetchNewsSentiment, 5 * 60 * 1000);
-
-
 function scoreSignal(p) {
   const {rsi,ivRank,oiDelta,oiPct,pcr,volumeRatio,vwapPos,type,daysToExpiry} = p;
   let s = 0;
@@ -1549,24 +1121,6 @@ function scoreSignal(p) {
   if(type==='CE'&&vwapPos>0)s+=6; else if(type==='PE'&&vwapPos<0)s+=6;
   if(daysToExpiry<=1) return 0;
   if(daysToExpiry<=2) s=Math.floor(s*0.7);
-
-  // News sentiment boost/penalty (silent — not shown on screen, used only for scoring)
-  if (S_NEWS.fetchTime > 0) {
-    const score = S_NEWS.sentimentScore; // 0–100, >60 bullish, <40 bearish
-    const geo   = S_NEWS.geoRisk || 0;
-    // High geopolitical risk: boost PE signals (market falls), penalise CE
-    if (geo >= 3) {
-      if (type === 'PE') s += 8;
-      else s -= 5;
-    }
-    // Strong bullish news: boost CE, penalise PE
-    if (score > 65 && type === 'CE') s += 6;
-    if (score > 65 && type === 'PE') s -= 4;
-    // Strong bearish news: boost PE, penalise CE
-    if (score < 35 && type === 'PE') s += 6;
-    if (score < 35 && type === 'CE') s -= 4;
-  }
-
   return Math.min(92, 48+Math.round(s*0.44));
 }
 
@@ -1587,8 +1141,7 @@ function buildParams(type, livePCR) {
 async function generateSignal(symbolObj, isIndex) {
   const type = S.config.type==='BOTH' ? (Math.random()>0.5?'CE':'PE') : S.config.type;
   const params = buildParams(type, S.livePCR[symbolObj.sym]);
-  const rawProb = scoreSignal(params);
-  const prob = getNewsAdjustedProb(rawProb, type);
+  const prob = scoreSignal(params);
   if (prob < S.config.minProb) return null;
 
   const lot = symbolObj.lot || 75;
@@ -1607,7 +1160,6 @@ async function generateSignal(symbolObj, isIndex) {
 
   // Try real option chain
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false;
-  let optionToken = null;
   if (S.connected) {
     const oc = await fetchOptionChain(symbolObj.sym, baseP);
     if (oc?.strikes?.length) {
@@ -1615,7 +1167,6 @@ async function generateSignal(symbolObj, isIndex) {
       if (atm) {
         strike = atm.strike;
         const ltp = type==='CE' ? atm.CE_ltp : atm.PE_ltp;
-        optionToken = type==='CE' ? atm.CE_token : atm.PE_token;
         if (ltp && ltp > 0) { premium = ltp; usedReal = true; addLog(`✅ ${symbolObj.sym} ${strike}${type}: ₹${premium}`, 'ok'); }
       }
     }
@@ -1641,17 +1192,10 @@ async function generateSignal(symbolObj, isIndex) {
     name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type,
     strike: `${strike} ${type}`,
-    strikeNum: strike,
     expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
     premium, target, sl, prob,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
-    optionToken,                                          // NFO token for live premium updates
-    stockToken: STOCK_TOKENS[symbolObj.sym] || null,      // NSE token for live share price
-    entryPremium: premium,                                // original premium at signal time
-    entryPrice: baseP,                                    // original share price at signal time
-    livePremium: premium,                                 // updated live
-    livePrice: baseP,                                     // updated live
     reason: reasons[type][Math.floor(Math.random()*4)],
     rsi: Math.round(params.rsi),
     ivRank: Math.round(params.ivRank),
@@ -1664,92 +1208,8 @@ async function generateSignal(symbolObj, isIndex) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// LIVE SIGNAL PRICE UPDATER — runs every 5 seconds with market data
-// Updates livePremium and livePrice on each signal in S.signals
+// SCANNER
 // ══════════════════════════════════════════════════════════════════
-async function updateSignalLivePrices() {
-  if (!S.connected || !S.signals.length) return;
-  const server = getServer();
-
-  // Collect unique option tokens and stock tokens from active signals
-  const optionTokens = [...new Set(S.signals.filter(s=>s.optionToken).map(s=>s.optionToken))];
-  const stockTokens  = [...new Set(S.signals.filter(s=>s.stockToken).map(s=>s.stockToken))];
-
-  // Batch fetch option (NFO) LTPs
-  const optionLTPs = {};
-  if (optionTokens.length) {
-    try {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NFO: optionTokens.slice(0,50)}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          if (q.ltp) optionLTPs[String(q.symbolToken)] = parseFloat(q.ltp);
-        });
-      }
-    } catch(e) {}
-  }
-
-  // Batch fetch stock (NSE) LTPs — merge with existing livePrice cache
-  if (stockTokens.length) {
-    try {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE: stockTokens.slice(0,50)}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          if (q.ltp) S.livePrice[String(q.symbolToken)] = parseFloat(q.ltp);
-        });
-      }
-    } catch(e) {}
-  }
-
-  // Apply updates to signals and re-render if anything changed
-  let changed = false;
-  S.signals.forEach(sig => {
-    if (sig.optionToken && optionLTPs[sig.optionToken] !== undefined) {
-      sig.livePremium = optionLTPs[sig.optionToken];
-      changed = true;
-    }
-    // Fix: always match by symbol name (S.livePrice is keyed by sym, not numeric token)
-    if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
-      sig.livePrice = S.livePrice[sig.sym];
-      changed = true;
-    }
-  });
-
-  if (changed) {
-    // Update signal cards in-place without full re-render (smooth, no flicker)
-    S.signals.forEach(sig => {
-      const premEl  = document.getElementById(`sig-prem-${sig.id}`);
-      const priceEl = document.getElementById(`sig-price-${sig.id}`);
-      const pnlEl   = document.getElementById(`sig-pnl-${sig.id}`);
-      if (premEl && sig.livePremium && sig.livePremium > 0) {
-        const chg = sig.livePremium - (sig.entryPremium || sig.premium);
-        premEl.textContent = '₹' + sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        premEl.style.color = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--amber)';
-      }
-      if (priceEl && sig.livePrice && sig.livePrice > 0) {
-        const chg = sig.livePrice - (sig.entryPrice || 0);
-        priceEl.textContent = '₹' + sig.livePrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        priceEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
-      }
-      if (pnlEl && sig.livePremium && sig.livePremium > 0 && sig.entryPremium > 0) {
-        const pnl = Math.round((sig.livePremium - sig.entryPremium) * sig.lot * sig.lots);
-        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toLocaleString('en-IN');
-        pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      }
-    });
-    // Save updated signals to localStorage
-    try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
-  }
-}
-
-
 function toggleScan() {
   const btn = document.getElementById('scanBtn');
   if (S.scanning) {
@@ -1761,17 +1221,6 @@ function toggleScan() {
     document.getElementById('mScanSt').style.color = 'var(--text3)';
     addLog('Scanner stopped', 'warn');
   } else {
-    // Block scan outside NSE market hours — prevents fake signals
-    const { nseOpen } = getMarketStatus();
-    if (!nseOpen) {
-      toast('warn', '⏰ Market Closed', 'NSE F&O scanner works only during\n9:15 AM – 3:30 PM · Mon–Fri IST');
-      addLog('Scan blocked — NSE market is closed', 'warn');
-      return;
-    }
-    if (!S.connected) {
-      toast('warn', '⚠ Not Connected', 'Connect Angel One in Setup tab first');
-      return;
-    }
     S.scanning = true;
     btn.textContent = '⏹ STOP';
     btn.className = 'scan-btn stop';
@@ -1787,8 +1236,8 @@ function toggleScan() {
 function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
   S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
-  S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 80;
+  S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 40;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 65;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
@@ -1803,29 +1252,7 @@ function saveConfig() {
 
 async function runScan() {
   if (!S.scanning) return;
-
-  // Auto-stop if market closed mid-session
-  const { nseOpen } = getMarketStatus();
-  if (!nseOpen) {
-    clearInterval(S.scanInt);
-    S.scanning = false;
-    document.getElementById('scanBtn').textContent = '▶ SCAN';
-    document.getElementById('scanBtn').className = 'scan-btn go';
-    document.getElementById('mScanSt').textContent = 'CLOSED';
-    document.getElementById('mScanSt').style.color = 'var(--amber)';
-    toast('warn', '⏰ Market Closed', 'NSE scanner auto-stopped at 3:30 PM');
-    addLog('Scanner auto-stopped — market closed', 'warn');
-    return;
-  }
-
   document.getElementById('mScanSt').textContent = 'SCANNING...';
-
-  // Refresh news sentiment each scan cycle (internal — adjusts probability scoring)
-  refreshNewsSentiment();
-  if (NEWS_STATE.headlines.length) {
-    addLog(`📰 Market context: ${NEWS_STATE.sentiment.toUpperCase()} — ${NEWS_STATE.headlines[0].substring(0,60)}`, '');
-  }
-
   addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
 
   let newSigs = 0;
@@ -1886,10 +1313,6 @@ function ageColor(ts) {
 // Re-render signal age labels every 60 seconds automatically
 setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
 
-// Live price updater — every 5 seconds, updates premium + share price on all signal cards
-// Runs independently of scanner — keeps prices live even after scan stops
-setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
-
 function setFilt(f, el) {
   S.filter = f;
   document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
@@ -1913,30 +1336,7 @@ function renderSignals() {
 
   const probColor = p => p>=80?'var(--green)':p>=70?'var(--amber)':'var(--text2)';
 
-  feed.innerHTML = sigs.map(s => {
-    const dispPrem  = (s.livePremium  && s.livePremium  > 0) ? s.livePremium  : (s.entryPremium && s.entryPremium > 0) ? s.entryPremium : s.premium;
-    const dispPrice = (s.livePrice    && s.livePrice    > 0) ? s.livePrice    : (s.entryPrice   && s.entryPrice   > 0) ? s.entryPrice   : null;
-    const premChg   = (s.livePremium  > 0 && s.entryPremium > 0) ? (s.livePremium  - s.entryPremium) : null;
-    const priceChg  = (s.livePrice    > 0 && s.entryPrice   > 0) ? (s.livePrice    - s.entryPrice)   : null;
-    const pnl       = (premChg !== null) ? Math.round(premChg * s.lot * s.lots) : null;
-
-    // FIX 2: Skip signals already negative P&L (live data confirms bad entry)
-    if (pnl !== null && pnl < 0) return '';
-
-    // FIX 1: Entry text color — use --text (bright white) for full visibility
-    const entryColor = 'var(--text)';
-
-    // FIX 3: CE = share price UP is good (green). PE = share price DOWN is good (green)
-    const premColor  = premChg === null ? 'var(--amber)' : premChg > 0 ? 'var(--green)' : premChg < 0 ? 'var(--red)' : 'var(--amber)';
-    const priceColor = priceChg === null ? 'var(--text)'
-      : s.type === 'CE'
-        ? (priceChg >= 0 ? 'var(--green)' : 'var(--red)')
-        : (priceChg <= 0 ? 'var(--green)' : 'var(--red)');
-
-    const premChgTxt  = premChg  !== null ? ` <span style="color:${premChg >=0?'var(--green)':'var(--red)'}">${premChg >=0?'▲':'▼'}₹${Math.abs(premChg).toFixed(2)}</span>` : '';
-    const priceChgTxt = priceChg !== null ? ` <span style="color:${s.type==='CE'?(priceChg>=0?'var(--green)':'var(--red)'):(priceChg<=0?'var(--green)':'var(--red)')}">${priceChg>=0?'▲':'▼'}₹${Math.abs(priceChg).toFixed(2)}</span>` : '';
-
-    return `
+  feed.innerHTML = sigs.map(s => `
     <div class="sig-card" onclick="openDrawer('${s.id}')">
       <div class="sig-bar ${s.type.toLowerCase()}"></div>
       <div class="sig-r1">
@@ -1944,30 +1344,22 @@ function renderSignals() {
         <span class="sig-name">${s.sym} ${s.strike}</span>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
-      <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
-        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Option Premium <span class="live-badge">LIVE</span></div>
-          <div id="sig-prem-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
-        </div>
-        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Share Price <span class="live-badge">LIVE</span></div>
-          <div id="sig-price-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${priceColor}">${dispPrice ? '₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChgTxt}</div>
-        </div>
-      </div>
-      <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
+      <div class="sig-grid">
         <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target}</div>
+          <div class="sig-label">Premium <span class="live-badge">LIVE</span></div>
+          <div class="sig-val" style="color:var(--amber)">₹${s.premium}</div>
         </div>
         <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${s.sl}</div>
+          <div class="sig-label">Target</div>
+          <div class="sig-val" style="color:var(--green)">₹${s.target}</div>
         </div>
         <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
-          <div id="sig-pnl-${s.id}" style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
+          <div class="sig-label">Stop Loss</div>
+          <div class="sig-val" style="color:var(--red)">₹${s.sl}</div>
+        </div>
+        <div class="sig-cell">
+          <div class="sig-label">Capital</div>
+          <div class="sig-val" style="color:var(--text2)">₹${(s.capital/1000).toFixed(1)}K</div>
         </div>
       </div>
       <div class="sig-tags">
@@ -1980,9 +1372,9 @@ function renderSignals() {
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 }
+
 // ══════════════════════════════════════════════════════════════════
 // SIGNAL DETAIL DRAWER
 // ══════════════════════════════════════════════════════════════════
@@ -2019,8 +1411,8 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Lot Size</span><span class="drawer-row-val">${sig.lot}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Lots Affordable</span><span class="drawer-row-val">${sig.lots}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">₹${((sig.target-sig.premium)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">₹${((sig.premium-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
