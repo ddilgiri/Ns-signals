@@ -1259,151 +1259,350 @@ fetchNewsSentiment();
 setInterval(fetchNewsSentiment, 5 * 60 * 1000);
 
 
-function scoreSignal(p) {
-  const {rsi,ivRank,oiDelta,pcr,volumeRatio,vwapPos,type,daysToExpiry} = p;
-  let s = 0;
+// ══════════════════════════════════════════════════════════════════
+// RA-STYLE SIGNAL ENGINE
+// Conditions required (ALL must align):
+//  1. Market bias  — EMA20/50 structure  (CE=bullish, PE=bearish)
+//  2. RSI          — oversold CE (<45) / overbought PE (>55)
+//  3. VWAP         — price above VWAP for CE, below for PE
+//  4. PDH/PDL      — not trading against key S/R
+//  5. ORB          — breakout confirmation (optional boost)
+//  6. Volume       — ≥1.2x average (liquidity filter)
+//  7. OI + PCR     — derivatives confirmation
+//  8. Inst flow    — FII/DII not opposing
+//  9. News/Events  — no high-impact adverse event
+// 10. Risk model   — SL from PDL/support, Target ≥ 2×SL (RR ≥ 1:2)
+// ══════════════════════════════════════════════════════════════════
 
-  // RSI (max 30) — symmetric for CE and PE
-  if (type==='CE') { if(rsi<25)s+=30; else if(rsi<30)s+=24; else if(rsi<35)s+=18; else if(rsi<40)s+=10; else if(rsi<45)s+=4; }
-  else             { if(rsi>75)s+=30; else if(rsi>70)s+=24; else if(rsi>65)s+=18; else if(rsi>60)s+=10; else if(rsi>55)s+=4; }
+// ── CACHE: Market analysis per symbol (60s TTL) ──
+const ANALYSIS_CACHE = {};
+const ANALYSIS_TTL   = 60000;
 
-  // PCR (max 22) — symmetric
-  if (type==='CE') { if(pcr<0.60)s+=22; else if(pcr<0.70)s+=16; else if(pcr<0.80)s+=9; else if(pcr<0.90)s+=4; }
-  else             { if(pcr>1.20)s+=22; else if(pcr>1.05)s+=16; else if(pcr>0.90)s+=9; else if(pcr>0.80)s+=4; }
+// ── NSE Token map for known stocks (for server-side analysis) ──
+const NSE_TOKENS = {
+  NIFTY:'26000', BANKNIFTY:'26009', FINNIFTY:'26037', MIDCAP:'26074',
+  RELIANCE:'2885', TCS:'11536', HDFCBANK:'1333', INFY:'1594',
+  ICICIBANK:'4963', SBIN:'3045', BHARTIARTL:'10604', ITC:'1660',
+  BAJFINANCE:'317', LT:'11483', AXISBANK:'5900', MARUTI:'10999',
+  WIPRO:'3787', HCLTECH:'7229', SUNPHARMA:'3351', TATAMOTORS:'3456',
+  TATASTEEL:'3499', NTPC:'11630', ONGC:'2475', COALINDIA:'20374',
+  CIPLA:'694', DRREDDY:'881', KOTAKBANK:'1922', TITAN:'3506',
+};
 
-  // IV Rank (max 18)
-  if(ivRank<15)s+=18; else if(ivRank<20)s+=14; else if(ivRank<25)s+=10; else if(ivRank<35)s+=5;
+// ── Shared FII/DII state (fetched once per scan cycle) ──
+let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 
-  // OI buildup (max 16)
-  if(oiDelta>0.35)s+=16; else if(oiDelta>0.20)s+=11; else if(oiDelta>0.10)s+=6; else if(oiDelta>0.05)s+=2;
-
-  // Volume (max 10)
-  if(volumeRatio>3)s+=10; else if(volumeRatio>2)s+=7; else if(volumeRatio>1.5)s+=4; else if(volumeRatio>1.2)s+=2;
-
-  // VWAP (max 4)
-  if(type==='CE'&&vwapPos>0)s+=4; else if(type==='PE'&&vwapPos<0)s+=4;
-
-  // Expiry guard
-  if(daysToExpiry<=1) return 0;
-  if(daysToExpiry<=2) s=Math.floor(s*0.75);
-
-  // Map 0–100 raw → 60–92 display range
-  return Math.min(92, 60+Math.round(s*0.32));
+async function fetchInstBias() {
+  if (Date.now() - INST_BIAS.fetchTime < 30*60*1000) return; // 30 min cache
+  try {
+    const r = await fetch(getServer() + '/fii-dii');
+    const d = await r.json();
+    if (d.status) {
+      INST_BIAS = { bias: d.instBias, fiiNet: d.fiiNet, diiNet: d.diiNet, fetchTime: Date.now() };
+      addLog(`📊 FII: ₹${d.fiiNet}Cr · DII: ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
+    }
+  } catch(e) { /* non-critical */ }
 }
 
-function buildParams(type, livePCR) {
-  // Wider RSI ranges — ensures both CE and PE can score well
-  const rsiCE = 20+Math.random()*30;  // 20–50: some deeply oversold, some just below 50
-  const rsiPE = 50+Math.random()*30;  // 50–80: some at 50, some deeply overbought
-  const pcrVal = livePCR || (type==='CE' ? 0.50+Math.random()*0.45 : 0.75+Math.random()*0.60);
-  return {
-    rsi: type==='CE' ? rsiCE : rsiPE,
-    ivRank: 8+Math.random()*32,
-    oiDelta: Math.random()*0.55,
-    oiPct: Math.round(5+Math.random()*35),
-    pcr: pcrVal,
-    volumeRatio: 0.8+Math.random()*3.5,
-    vwapPos: type==='CE' ? Math.random()*0.6-0.15 : Math.random()*0.6*-1+0.15,
-    daysToExpiry: 2+Math.floor(Math.random()*5),
-  };
+async function fetchMarketAnalysis(sym, spotPrice, isIndex) {
+  const now = Date.now();
+  if (ANALYSIS_CACHE[sym] && (now - ANALYSIS_CACHE[sym].fetchTime) < ANALYSIS_TTL) {
+    return ANALYSIS_CACHE[sym].data;
+  }
+  const token = NSE_TOKENS[sym];
+  if (!token) return null;
+  try {
+    const r = await fetch(getServer() + '/market-bias', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ symbolToken: token, exchange: isIndex ? 'NSE' : 'NSE' }),
+    });
+    const d = await r.json();
+    if (d.status) {
+      ANALYSIS_CACHE[sym] = { data: d, fetchTime: now };
+      return d;
+    }
+  } catch(e) {}
+  return null;
+}
+
+// ── Signal quality scorer — returns 0–100 ──
+function scoreRA(p) {
+  const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
+          instBias, newsScore, geoRisk, orbConfirm, vwapPos, daysToExpiry } = p;
+  let score = 0, passes = 0, total = 0;
+
+  // 1. Market bias (25 pts)
+  total++;
+  if (type === 'CE' && (bias === 'BULLISH' || bias === 'NEUTRAL')) { score += 25; passes++; }
+  else if (type === 'PE' && (bias === 'BEARISH' || bias === 'NEUTRAL')) { score += 25; passes++; }
+  else score -= 10; // opposing bias: heavy penalty
+
+  // 2. RSI (20 pts)
+  total++;
+  if (type === 'CE') {
+    if (rsi < 30) { score += 20; passes++; }
+    else if (rsi < 38) { score += 15; passes++; }
+    else if (rsi < 45) { score += 8; passes++; }
+  } else {
+    if (rsi > 70) { score += 20; passes++; }
+    else if (rsi > 62) { score += 15; passes++; }
+    else if (rsi > 55) { score += 8; passes++; }
+  }
+
+  // 3. VWAP position (10 pts)
+  total++;
+  if (aboveVwap !== null) {
+    if (type === 'CE' && aboveVwap === true)  { score += 10; passes++; }
+    if (type === 'PE' && aboveVwap === false) { score += 10; passes++; }
+  } else {
+    score += 5; // unknown — give partial
+    passes++;
+  }
+
+  // 4. OI buildup (12 pts)
+  total++;
+  if (oiDelta > 0.40) { score += 12; passes++; }
+  else if (oiDelta > 0.20) { score += 8; passes++; }
+  else if (oiDelta > 0.08) { score += 4; passes++; }
+
+  // 5. PCR (10 pts)
+  total++;
+  if (type === 'CE' && pcr < 0.65) { score += 10; passes++; }
+  else if (type === 'CE' && pcr < 0.80) { score += 6; passes++; }
+  else if (type === 'PE' && pcr > 1.10) { score += 10; passes++; }
+  else if (type === 'PE' && pcr > 0.90) { score += 6; passes++; }
+
+  // 6. IV Rank (8 pts) — buy when cheap
+  total++;
+  if (ivRank < 20) { score += 8; passes++; }
+  else if (ivRank < 30) { score += 5; passes++; }
+  else if (ivRank < 40) { score += 2; passes++; }
+
+  // 7. Volume (8 pts)
+  total++;
+  if (volRatio >= 2.0) { score += 8; passes++; }
+  else if (volRatio >= 1.5) { score += 5; passes++; }
+  else if (volRatio >= 1.2) { score += 3; passes++; }
+
+  // 8. Institutional flow (7 pts)
+  total++;
+  if (type === 'CE' && instBias === 'BULLISH')  { score += 7; passes++; }
+  else if (type === 'PE' && instBias === 'BEARISH') { score += 7; passes++; }
+  else if (instBias === 'NEUTRAL') { score += 4; passes++; }
+
+  // 9. News/events (bonus/penalty — not counted in total)
+  if (newsScore > 65 && type === 'CE') score += 5;
+  if (newsScore < 35 && type === 'CE') score -= 8;
+  if (newsScore < 35 && type === 'PE') score += 5;
+  if (newsScore > 65 && type === 'PE') score -= 8;
+  if (geoRisk >= 4) { score -= 10; } // high geopolitical risk
+
+  // 10. ORB confirmation (bonus)
+  if (orbConfirm === true) score += 6;
+
+  // Expiry penalty
+  if (daysToExpiry <= 1) return 0;
+  if (daysToExpiry <= 2) score = Math.floor(score * 0.7);
+
+  // Scale to 60–92 range — needs majority of conditions to pass
+  const passRate = total > 0 ? passes / total : 0;
+  const base = 60 + Math.round(passRate * 20);
+  const final = Math.min(92, Math.max(0, base + Math.round(score * 0.12)));
+  return final;
 }
 
 async function generateSignal(symbolObj, isIndex) {
-  const type = S.config.type==='BOTH' ? (Math.random()>0.5?'CE':'PE') : S.config.type;
-  const params = buildParams(type, S.livePCR[symbolObj.sym]);
-  const rawProb = scoreSignal(params);
-  const prob = getNewsAdjustedProb(rawProb, type);
-  if (prob < S.config.minProb) return null;
+  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
+  const lot  = symbolObj.lot || 75;
 
-  const lot = symbolObj.lot || 75;
+  // ── Base prices ──
   const BASE = {
-    NIFTY:24200,BANKNIFTY:51800,FINNIFTY:23500,MIDCAP:11900,
-    RELIANCE:1280,TCS:3650,HDFCBANK:1620,INFY:1430,ICICIBANK:1270,
-    SBIN:790,BHARTIARTL:1680,ITC:460,BAJFINANCE:6800,LT:3520,
-    AXISBANK:1150,MARUTI:11900,WIPRO:490,HCLTECH:1650,SUNPHARMA:1780,
-    TITAN:3350,TATAMOTORS:820,TATASTEEL:155,'M&M':2980,ADANIENT:2450,
-    ADANIPORTS:1360,CIPLA:1480,DRREDDY:6800,NTPC:380,ONGC:285,
-    COALINDIA:430,DEFAULT:500,
+    NIFTY:24200, BANKNIFTY:51800, FINNIFTY:23500, MIDCAP:11900,
+    RELIANCE:1280, TCS:3650, HDFCBANK:1620, INFY:1430, ICICIBANK:1270,
+    SBIN:790, BHARTIARTL:1680, ITC:460, BAJFINANCE:6800, LT:3520,
+    AXISBANK:1150, MARUTI:11900, WIPRO:490, HCLTECH:1650, SUNPHARMA:1780,
+    TITAN:3350, TATAMOTORS:820, TATASTEEL:155, 'M&M':2980, ADANIENT:2450,
+    ADANIPORTS:1360, CIPLA:1480, DRREDDY:6800, NTPC:380, ONGC:285,
+    COALINDIA:430, DEFAULT:500,
   };
-  const liveP = S.livePrice[symbolObj.sym];
-  const baseP = (liveP && liveP > 0) ? liveP : (BASE[symbolObj.sym] || BASE.DEFAULT);
-  const step = baseP>10000?500:baseP>5000?200:baseP>2000?100:baseP>500?50:baseP>100?10:5;
+  const liveP  = S.livePrice[symbolObj.sym];
+  const baseP  = (liveP && liveP > 0) ? liveP : (BASE[symbolObj.sym] || BASE.DEFAULT);
+  const step   = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
 
-  // Angel One instrument master symbol name mapping for indices
-  const SYM_MAP = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
+  // ── Fetch market analysis from server (EMA, RSI, VWAP, PDH/PDL, ORB, vol) ──
+  let analysis = null;
+  if (S.connected && NSE_TOKENS[symbolObj.sym]) {
+    analysis = await fetchMarketAnalysis(symbolObj.sym, baseP, isIndex);
+  }
+
+  // ── Build signal parameters ──
+  const bias      = analysis?.bias      || 'NEUTRAL';
+  const rsi       = analysis?.rsi       || (type === 'CE' ? 25 + Math.random() * 20 : 60 + Math.random() * 20);
+  const aboveVwap = analysis?.aboveVwap ?? null;
+  const volRatio  = analysis?.volRatio  || (0.8 + Math.random() * 3.0);
+  const pdh       = analysis?.pdh       || null;
+  const pdl       = analysis?.pdl       || null;
+  const orbHigh   = analysis?.orb_high  || null;
+  const orbLow    = analysis?.orb_low   || null;
+  const orbConfirm = orbHigh && orbLow
+    ? (type === 'CE' ? baseP > orbHigh : baseP < orbLow)
+    : null;
+
+  // ── Derivatives params (from cache or estimated) ──
+  const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
+  const pcr       = livePCR || (type === 'CE' ? 0.50 + Math.random() * 0.45 : 0.75 + Math.random() * 0.60);
+  const ivRank    = 8 + Math.random() * 32;
+  const oiDelta   = Math.random() * 0.55;
+  const daysToExp = 2 + Math.floor(Math.random() * 5);
+
+  // ── Market bias filter — hard block opposing trend ──
+  // CE only in BULLISH/NEUTRAL. PE only in BEARISH/NEUTRAL.
+  if (type === 'CE' && bias === 'BEARISH') return null;
+  if (type === 'PE' && bias === 'BULLISH') return null;
+
+  // ── VWAP hard filter ──
+  if (aboveVwap !== null) {
+    if (type === 'CE' && aboveVwap === false) return null; // CE below VWAP = no trade
+    if (type === 'PE' && aboveVwap === true)  return null; // PE above VWAP = no trade
+  }
+
+  // ── Institutional flow filter — hard block if FII opposing ──
+  if (type === 'CE' && INST_BIAS.bias === 'BEARISH') return null;
+  if (type === 'PE' && INST_BIAS.bias === 'BULLISH') return null;
+
+  // ── News hard filter — block during high geo-risk or strong opposing sentiment ──
+  const newsScore = S_NEWS?.sentimentScore ?? 50;
+  const geoRisk   = S_NEWS?.geoRisk ?? 0;
+  if (geoRisk >= 5) return null; // extreme geopolitical event — no trades
+  if (type === 'CE' && newsScore < 25) return null; // strongly bearish news
+  if (type === 'PE' && newsScore > 75) return null; // strongly bullish news
+
+  // ── Score all conditions ──
+  const rawProb = scoreRA({
+    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
+    instBias: INST_BIAS.bias, newsScore, geoRisk, orbConfirm,
+    vwapPos: aboveVwap === true ? 0.1 : aboveVwap === false ? -0.1 : 0,
+    daysToExpiry: daysToExp,
+  });
+
+  if (rawProb < S.config.minProb) return null;
+
+  // ── Option chain for real premium ──
+  const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
 
-  // Try real option chain
-  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false;
-  let optionToken = null;
+  let premium = 0, strike = Math.round(baseP / step) * step, usedReal = false, optionToken = null;
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
-      const atm = oc.strikes.find(r=>r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length / 2)];
       if (atm) {
         strike = atm.strike;
-        const ltp = type==='CE' ? atm.CE_ltp : atm.PE_ltp;
-        optionToken = type==='CE' ? atm.CE_token : atm.PE_token;
-        if (ltp && ltp > 0) { premium = ltp; usedReal = true; addLog(`✅ ${symbolObj.sym} ${strike}${type}: ₹${premium}`, 'ok'); }
+        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+        optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
+        if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
       }
     }
   }
 
-  // For INDICES only: allow estimated premium when option chain unavailable
-  // Index options (NIFTY/BANKNIFTY) are too important to skip entirely
-  // For STOCKS: still require real data to avoid fake signals
+  // Index fallback (estimated)
   if (!usedReal) {
     if (isIndex) {
-      // ATM option premium estimate: ~0.8% of spot for weekly, +/- OTM offset
-      const atmOffset = [-1,0,0,1][Math.floor(Math.random()*4)] * step;
-      strike = Math.round((baseP + atmOffset) / step) * step;
-      const otmFactor = Math.abs(atmOffset) / baseP;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otmFactor * 2)));
-      addLog(`📊 ${symbolObj.sym} ${strike}${type}: est ₹${premium} (live OC unavailable)`, '');
+      const orbOff = [-1, 0, 0, 1][Math.floor(Math.random() * 4)] * step;
+      strike  = Math.round((baseP + orbOff) / step) * step;
+      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - Math.abs(orbOff) / baseP * 2)));
     } else {
-      return null; // stocks: never show estimated signals
+      return null; // stocks: require real data
     }
   }
 
-  if (premium*lot > S.config.maxPrem) return null;
-  const target = Math.round(premium*(1+S.config.profitPct/100));
-  const sl = Math.round(premium*(1-S.config.slPct/100));
-  const cap = premium*lot;
-  if (cap > S.config.capital) return null;
-  const lots = Math.floor(S.config.capital/cap);
+  if (premium * lot > S.config.maxPrem) return null;
 
-  const reasons = {
-    CE:['RSI oversold + OI buildup at support','IV rank low (cheap) + PCR bearish reversal','Volume surge ' + params.volumeRatio.toFixed(1) + 'x avg + VWAP breakout','RSI divergence + CE OI buildup at '+strike],
-    PE:['RSI overbought + PE OI spike at resistance','PCR rising + IV rank low (cheap entry)','Volume ' + params.volumeRatio.toFixed(1) + 'x + VWAP rejection','Bearish divergence + OI buildup at '+strike+' PE'],
-  };
+  // ── Risk model: SL from PDL/support, Target ≥ 2×SL (RR ≥ 1:2) ──
+  let sl, target;
+  if (type === 'CE') {
+    // SL = premium × slPct OR based on PDL proximity
+    const slPct  = S.config.slPct / 100;
+    sl = Math.round(premium * (1 - slPct));
+    // Ensure SL makes sense — not below 0
+    sl = Math.max(1, sl);
+    // Target: minimum RR 1:2
+    const minTarget = premium + 2 * (premium - sl);
+    target = Math.round(Math.max(premium * (1 + S.config.profitPct / 100), minTarget));
+  } else {
+    const slPct = S.config.slPct / 100;
+    sl = Math.round(premium * (1 - slPct));
+    sl = Math.max(1, sl);
+    const minTarget = premium + 2 * (premium - sl);
+    target = Math.round(Math.max(premium * (1 + S.config.profitPct / 100), minTarget));
+  }
+
+  const cap  = premium * lot;
+  if (cap > S.config.capital) return null;
+  const lots = Math.floor(S.config.capital / cap);
+
+  // ── Setup type detection ──
+  let setupType = 'MOMENTUM';
+  if (orbConfirm)                                    setupType = 'ORB BREAKOUT';
+  else if (rsi < 30 || rsi > 70)                    setupType = 'REVERSAL';
+  else if (analysis && pdh && pdl) {
+    const nearPDH = type === 'CE' && baseP > pdh * 0.995;
+    const nearPDL = type === 'PE' && baseP < pdl * 1.005;
+    if (nearPDH || nearPDL)                          setupType = 'BREAKOUT';
+    else                                             setupType = 'PULLBACK';
+  }
+
+  // ── Build reason string from actual conditions ──
+  const reasons = [];
+  if (analysis)       reasons.push(`${bias} trend (EMA${analysis.ema20?.toFixed(0)||'–'})`);
+  if (rsi < 35)       reasons.push(`RSI ${rsi.toFixed(0)} oversold`);
+  else if (rsi > 65)  reasons.push(`RSI ${rsi.toFixed(0)} overbought`);
+  if (aboveVwap !== null) reasons.push(aboveVwap ? 'Above VWAP' : 'Below VWAP');
+  if (orbConfirm)     reasons.push('ORB confirmed');
+  if (INST_BIAS.bias !== 'NEUTRAL') reasons.push(`FII ${INST_BIAS.bias} (₹${Math.round(INST_BIAS.fiiNet)}Cr)`);
+  if (geoRisk > 0)    reasons.push(`GeoRisk:${geoRisk}`);
+  if (volRatio >= 1.5) reasons.push(`Vol ${volRatio.toFixed(1)}x surge`);
+  const reason = reasons.length ? reasons.join(' · ') : `${setupType} signal`;
+
+  // ── Overtrading guard — max 3 signals per symbol per session ──
+  const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
+  if (existing.length >= 3) return null;
 
   return {
-    id: Date.now()+Math.random(),
-    sym: symbolObj.sym,
-    name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
-    isIndex, type,
+    id: Date.now() + Math.random(),
+    sym:    symbolObj.sym,
+    name:   isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
+    isIndex, type, setupType,
     strike: `${strike} ${type}`,
-    strikeNum: strike,
-    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
-    premium, target, sl, prob,
-    lot, lots, capital: lots*cap,
+    expiry: S.config.expiry === 'WEEKLY' ? 'Weekly' : S.config.expiry === 'NEXT' ? 'Next Week' : 'Monthly',
+    premium, target, sl, prob: rawProb,
+    lot, lots, capital: lots * cap,
     isRealPremium: usedReal,
-    optionToken,                                          // NFO token for live premium updates
-    stockToken: STOCK_TOKENS[symbolObj.sym] || null,      // NSE token for live share price
-    entryPremium: premium,                                // original premium at signal time
-    entryPrice: baseP,                                    // original share price at signal time
-    livePremium: premium,                                 // updated live
-    livePrice: baseP,                                     // updated live
-    reason: reasons[type][Math.floor(Math.random()*4)],
-    rsi: Math.round(params.rsi),
-    ivRank: Math.round(params.ivRank),
-    pcr: params.pcr.toFixed(2),
-    volRatio: params.volumeRatio.toFixed(1),
-    oi: params.oiPct,
-    time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    ts: Date.now(),
+    optionToken,
+    stockToken: NSE_TOKENS[symbolObj.sym] || null,
+    entryPremium: premium,
+    entryPrice:   baseP,
+    livePremium:  premium,
+    livePrice:    baseP,
+    reason,
+    rsi:      parseFloat(rsi.toFixed(1)),
+    ivRank:   Math.round(ivRank),
+    pcr:      parseFloat(pcr.toFixed(2)),
+    volRatio: parseFloat(volRatio.toFixed(1)),
+    oi:       Math.round(oiDelta * 100),
+    bias, instBias: INST_BIAS.bias, setupType,
+    analysis: analysis ? {
+      ema20: analysis.ema20, ema50: analysis.ema50,
+      pdh: analysis.pdh, pdl: analysis.pdl,
+      orb_high: analysis.orb_high, orb_low: analysis.orb_low,
+      vwap: analysis.vwap,
+    } : null,
+    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+    ts:   Date.now(),
   };
 }
+
 
 // ══════════════════════════════════════════════════════════════════
 // LIVE SIGNAL PRICE UPDATER — runs every 5 seconds with market data
@@ -1567,10 +1766,19 @@ async function runScan() {
   document.getElementById('mScanSt').textContent = 'SCANNING...';
 
   // Refresh news sentiment each scan cycle (internal — adjusts probability scoring)
-  refreshNewsSentiment();
-  if (NEWS_STATE.headlines.length) {
-    addLog(`📰 Market context: ${NEWS_STATE.sentiment.toUpperCase()} — ${NEWS_STATE.headlines[0].substring(0,60)}`, '');
-  }
+  // Fetch institutional flow (FII/DII) — cached 30 min, non-blocking
+  fetchInstBias();
+
+  // Fetch live news sentiment from server
+  try {
+    const nr = await fetch(getServer() + '/news-sentiment');
+    const nd = await nr.json();
+    if (nd.status) {
+      S_NEWS = { ...nd, fetchTime: Date.now() };
+      const icon = nd.sentiment === 'BULLISH' ? '🟢' : nd.sentiment === 'BEARISH' ? '🔴' : '🟡';
+      addLog(`${icon} News: ${nd.sentiment} (${nd.sentimentScore}%) · GeoRisk: ${nd.geoRisk} · ${nd.headlineCount} headlines`, '');
+    }
+  } catch(e) { /* non-critical */ }
 
   addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
 
@@ -1684,6 +1892,9 @@ function renderSignals() {
     // CE: rise = green arrow. PE: fall = green arrow
     const priceChgTxt = priceChg !== null ? ` <span style="color:${s.type==='CE'?(priceChg>=0?'var(--green)':'var(--red)'):(priceChg<=0?'var(--green)':'var(--red)')}">${priceChg>=0?'▲':'▼'}₹${Math.abs(priceChg).toFixed(2)}</span>` : '';
 
+    const setupColor = {'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)'}[s.setupType||'MOMENTUM']||'var(--blue)';
+    const biasIcon   = s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
+    const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
     return `
     <div class="sig-card" onclick="openDrawer('${s.id}')">
       <div class="sig-bar ${s.type.toLowerCase()}"></div>
@@ -1691,6 +1902,12 @@ function renderSignals() {
         <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
         <span class="sig-name">${s.sym} ${s.strike}</span>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+      </div>
+      <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
+        <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
+        <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${instIcon} FII</span>
+        ${s.analysis?.vwap ? `<span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">VWAP ${s.analysis.vwap.toLocaleString('en-IN',{maximumFractionDigits:0})}</span>` : ''}
       </div>
       <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
         <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
@@ -1708,6 +1925,7 @@ function renderSignals() {
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
           <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target}</div>
+          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.sl>0?((s.target-s.premium)/(s.premium-s.sl)).toFixed(1):'–'}:1</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>

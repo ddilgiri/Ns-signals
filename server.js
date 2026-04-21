@@ -234,6 +234,262 @@ app.post('/candles', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// ROUTE: MARKET BIAS — EMA20/50 + PDH/PDL via candle data
+// Returns: { bias:'BULLISH'|'BEARISH'|'NEUTRAL', ema20, ema50, pdh, pdl, orb_high, orb_low }
+// ─────────────────────────────────────────────────────────────────────
+app.post('/market-bias', async (req, res) => {
+  if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
+
+  const { symbolToken, exchange = 'NSE' } = req.body;
+  if (!symbolToken) return res.status(400).json({ status: false, message: 'symbolToken required' });
+
+  try {
+    const now   = new Date();
+    const ist   = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const today = ist.toISOString().slice(0, 10);
+
+    // Get previous trading day
+    const prev = new Date(ist);
+    prev.setDate(prev.getDate() - (prev.getDay() === 1 ? 3 : prev.getDay() === 0 ? 2 : 1));
+    const prevDay = prev.toISOString().slice(0, 10);
+
+    // Fetch 15m candles for last 10 days (enough for EMA50)
+    const fromDate = new Date(ist);
+    fromDate.setDate(fromDate.getDate() - 14);
+    const from = fromDate.toISOString().slice(0, 10) + ' 09:15';
+    const to   = today + ' 15:30';
+
+    const candleResp = await axios.post(
+      `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
+      { exchange, symboltoken: symbolToken, interval: 'FIFTEEN_MINUTE', fromdate: from, todate: to },
+      { headers: getHeaders(true), timeout: 20000 }
+    );
+
+    const raw = candleResp.data?.data || [];
+    if (raw.length < 10) return res.json({ status: false, message: 'Insufficient candle data' });
+
+    // raw format: [datetime, open, high, low, close, volume]
+    const closes = raw.map(c => parseFloat(c[4]));
+    const highs  = raw.map(c => parseFloat(c[2]));
+    const lows   = raw.map(c => parseFloat(c[3]));
+    const vols   = raw.map(c => parseFloat(c[5]));
+    const dates  = raw.map(c => c[0].slice(0, 10));
+
+    // EMA calculation
+    function ema(data, period) {
+      const k = 2 / (period + 1);
+      let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      for (let i = period; i < data.length; i++) e = data[i] * k + e * (1 - k);
+      return parseFloat(e.toFixed(2));
+    }
+
+    const ema20 = closes.length >= 20 ? ema(closes, 20) : null;
+    const ema50 = closes.length >= 50 ? ema(closes, 50) : null;
+    const ltp   = closes[closes.length - 1];
+
+    // Market bias from EMA structure
+    let bias = 'NEUTRAL';
+    if (ema20 && ema50) {
+      if (ltp > ema20 && ema20 > ema50) bias = 'BULLISH';
+      else if (ltp < ema20 && ema20 < ema50) bias = 'BEARISH';
+    } else if (ema20) {
+      bias = ltp > ema20 ? 'BULLISH' : 'BEARISH';
+    }
+
+    // PDH/PDL (Previous Day High/Low)
+    const prevCandles = raw.filter(c => c[0].slice(0,10) === prevDay);
+    const pdh = prevCandles.length ? Math.max(...prevCandles.map(c => parseFloat(c[2]))) : null;
+    const pdl = prevCandles.length ? Math.min(...prevCandles.map(c => parseFloat(c[3]))) : null;
+
+    // ORB (Opening Range Breakout) — first 30 min of today
+    const todayCandles = raw.filter(c => c[0].slice(0,10) === today);
+    const orbCandles = todayCandles.slice(0, 2); // first 2 x 15m = 30 min
+    const orb_high = orbCandles.length ? Math.max(...orbCandles.map(c => parseFloat(c[2]))) : null;
+    const orb_low  = orbCandles.length ? Math.min(...orbCandles.map(c => parseFloat(c[3]))) : null;
+
+    // Avg volume (last 5 days vs today)
+    const todayVol = todayCandles.reduce((s, c) => s + parseFloat(c[5]), 0);
+    const avgDayVol = vols.reduce((a, b) => a + b, 0) / Math.max(vols.length, 1) * (todayCandles.length || 1);
+    const volRatio  = avgDayVol > 0 ? parseFloat((todayVol / avgDayVol).toFixed(2)) : 1;
+
+    // RSI (14 period on closes)
+    function rsi14(closes) {
+      if (closes.length < 15) return 50;
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= 14; i++) {
+        const d = closes[i] - closes[i - 1];
+        if (d > 0) gains += d; else losses -= d;
+      }
+      let ag = gains / 14, al = losses / 14;
+      for (let i = 15; i < closes.length; i++) {
+        const d = closes[i] - closes[i - 1];
+        ag = (ag * 13 + Math.max(d, 0)) / 14;
+        al = (al * 13 + Math.max(-d, 0)) / 14;
+      }
+      return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2));
+    }
+
+    const rsi = rsi14(closes);
+
+    // VWAP (today)
+    let vwapNum = 0, vwapDen = 0;
+    todayCandles.forEach(c => {
+      const tp  = (parseFloat(c[2]) + parseFloat(c[3]) + parseFloat(c[4])) / 3;
+      const vol = parseFloat(c[5]);
+      vwapNum += tp * vol;
+      vwapDen += vol;
+    });
+    const vwap = vwapDen > 0 ? parseFloat((vwapNum / vwapDen).toFixed(2)) : null;
+    const aboveVwap = vwap ? ltp > vwap : null;
+
+    res.json({
+      status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap,
+      pdh, pdl, orb_high, orb_low, volRatio,
+      candleCount: raw.length
+    });
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    log(`market-bias error: ${msg}`, 'WARN');
+    res.status(500).json({ status: false, message: msg });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: FII/DII DATA — institutional flow from NSE (public API)
+// Returns: { fiiBuy, fiiSell, fiiNet, diiBuy, diiSell, diiNet, date }
+// ─────────────────────────────────────────────────────────────────────
+const FII_DII_CACHE = { data: null, fetchTime: 0 };
+
+app.get('/fii-dii', async (req, res) => {
+  if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
+
+  // Cache 30 minutes
+  if (FII_DII_CACHE.data && (Date.now() - FII_DII_CACHE.fetchTime) < 30 * 60 * 1000) {
+    return res.json(FII_DII_CACHE.data);
+  }
+
+  try {
+    // NSE FII/DII activity — public endpoint
+    const r = await axios.get(
+      'https://www.nseindia.com/api/fiidiiTradeReact',
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.nseindia.com/',
+        },
+        timeout: 10000
+      }
+    );
+
+    const raw  = r.data || [];
+    const today = raw.find(d => d.category === 'FII/FPI *') || raw[0];
+    const dii   = raw.find(d => d.category === 'DII') || raw[1];
+
+    const result = {
+      status: true,
+      date: today?.date || new Date().toLocaleDateString('en-IN'),
+      fiiBuy:  parseFloat(today?.buyValue  || 0),
+      fiiSell: parseFloat(today?.sellValue || 0),
+      fiiNet:  parseFloat(today?.netValue  || 0),
+      diiBuy:  parseFloat(dii?.buyValue    || 0),
+      diiSell: parseFloat(dii?.sellValue   || 0),
+      diiNet:  parseFloat(dii?.netValue    || 0),
+    };
+
+    // Determine institutional bias
+    result.instBias = result.fiiNet > 500 ? 'BULLISH'
+      : result.fiiNet < -500 ? 'BEARISH'
+      : result.diiNet > 500  ? 'BULLISH'
+      : result.diiNet < -500 ? 'BEARISH'
+      : 'NEUTRAL';
+
+    FII_DII_CACHE.data = result;
+    FII_DII_CACHE.fetchTime = Date.now();
+    log(`FII: ₹${result.fiiNet}Cr · DII: ₹${result.diiNet}Cr · ${result.instBias}`, 'INFO');
+    res.json(result);
+  } catch (err) {
+    // FII/DII is non-critical — return neutral if unavailable
+    const fallback = { status: true, fiiNet: 0, diiNet: 0, instBias: 'NEUTRAL', message: 'FII/DII unavailable — using NEUTRAL' };
+    res.json(fallback);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: FULL SIGNAL ANALYSIS — comprehensive RA-style check
+// Body: { symbolToken, sym, exchange, isIndex, spotPrice, type }
+// Returns all signal conditions + final verdict
+// ─────────────────────────────────────────────────────────────────────
+app.post('/signal-analysis', async (req, res) => {
+  if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
+
+  const { symbolToken, sym, exchange = 'NSE', isIndex = false, spotPrice, type } = req.body;
+
+  try {
+    const [biasResp, fiiResp] = await Promise.allSettled([
+      axios.post(`http://localhost:${PORT}/market-bias`, { symbolToken, exchange }, { headers: { 'Content-Type': 'application/json' } }),
+      axios.get(`http://localhost:${PORT}/fii-dii`),
+    ]);
+
+    const bias   = biasResp.status === 'fulfilled'   ? biasResp.value.data   : { status: false };
+    const fii    = fiiResp.status === 'fulfilled'    ? fiiResp.value.data    : { instBias: 'NEUTRAL' };
+
+    const result = {
+      status: true,
+      sym, type,
+      // Market bias
+      bias:        bias.bias        || 'NEUTRAL',
+      ema20:       bias.ema20       || null,
+      ema50:       bias.ema50       || null,
+      rsi:         bias.rsi         || 50,
+      vwap:        bias.vwap        || null,
+      aboveVwap:   bias.aboveVwap   ?? null,
+      pdh:         bias.pdh         || null,
+      pdl:         bias.pdl         || null,
+      orb_high:    bias.orb_high    || null,
+      orb_low:     bias.orb_low     || null,
+      volRatio:    bias.volRatio    || 1,
+      ltp:         bias.ltp         || spotPrice,
+      // Institutional flow
+      instBias:    fii.instBias     || 'NEUTRAL',
+      fiiNet:      fii.fiiNet       || 0,
+      diiNet:      fii.diiNet       || 0,
+    };
+
+    // Signal alignment checks
+    const checks = {};
+    if (type === 'CE') {
+      checks.marketBias   = result.bias === 'BULLISH' || result.bias === 'NEUTRAL';
+      checks.rsiOversold  = result.rsi < 45;
+      checks.aboveVwap    = result.aboveVwap !== false;
+      checks.instFlow     = result.instBias !== 'BEARISH';
+      checks.notAtResist  = result.pdh ? result.ltp < result.pdh * 1.005 : true;
+      checks.orbBreakout  = result.orb_high ? result.ltp > result.orb_high : null;
+    } else {
+      checks.marketBias   = result.bias === 'BEARISH' || result.bias === 'NEUTRAL';
+      checks.rsiOverbought= result.rsi > 55;
+      checks.belowVwap    = result.aboveVwap !== true;
+      checks.instFlow     = result.instBias !== 'BULLISH';
+      checks.notAtSupport = result.pdl ? result.ltp > result.pdl * 0.995 : true;
+      checks.orbBreakdown = result.orb_low ? result.ltp < result.orb_low : null;
+    }
+    checks.volumeConfirm = result.volRatio >= 1.2;
+
+    result.checks = checks;
+    result.passCount = Object.values(checks).filter(v => v === true).length;
+    result.totalChecks = Object.values(checks).filter(v => v !== null).length;
+    result.alignmentScore = result.totalChecks > 0
+      ? Math.round(result.passCount / result.totalChecks * 100) : 50;
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: false, message: err.message });
+  }
+});
+
+
+// ─────────────────────────────────────────────────────────────────────
 // ROUTE: OI GAINERS (top F&O by OI change)
 // ─────────────────────────────────────────────────────────────────────
 app.get('/gainers', async (req, res) => {
