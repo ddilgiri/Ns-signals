@@ -1069,6 +1069,9 @@ async function fetchMarketData() {
       if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
     }
   } catch(e) { /* silent */ }
+
+  // Update live prices on all signal cards
+  updateSignalLivePrices();
 }
 
 function updPCR(key, val) {
@@ -1160,6 +1163,7 @@ async function generateSignal(symbolObj, isIndex) {
 
   // Try real option chain
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false;
+  let optionToken = null;
   if (S.connected) {
     const oc = await fetchOptionChain(symbolObj.sym, baseP);
     if (oc?.strikes?.length) {
@@ -1167,6 +1171,7 @@ async function generateSignal(symbolObj, isIndex) {
       if (atm) {
         strike = atm.strike;
         const ltp = type==='CE' ? atm.CE_ltp : atm.PE_ltp;
+        optionToken = type==='CE' ? atm.CE_token : atm.PE_token;
         if (ltp && ltp > 0) { premium = ltp; usedReal = true; addLog(`✅ ${symbolObj.sym} ${strike}${type}: ₹${premium}`, 'ok'); }
       }
     }
@@ -1192,10 +1197,17 @@ async function generateSignal(symbolObj, isIndex) {
     name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type,
     strike: `${strike} ${type}`,
+    strikeNum: strike,
     expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
     premium, target, sl, prob,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
+    optionToken,                                          // NFO token for live premium updates
+    stockToken: STOCK_TOKENS[symbolObj.sym] || null,      // NSE token for live share price
+    entryPremium: premium,                                // original premium at signal time
+    entryPrice: baseP,                                    // original share price at signal time
+    livePremium: premium,                                 // updated live
+    livePrice: baseP,                                     // updated live
     reason: reasons[type][Math.floor(Math.random()*4)],
     rsi: Math.round(params.rsi),
     ivRank: Math.round(params.ivRank),
@@ -1208,8 +1220,95 @@ async function generateSignal(symbolObj, isIndex) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SCANNER
+// LIVE SIGNAL PRICE UPDATER — runs every 5 seconds with market data
+// Updates livePremium and livePrice on each signal in S.signals
 // ══════════════════════════════════════════════════════════════════
+async function updateSignalLivePrices() {
+  if (!S.connected || !S.signals.length) return;
+  const server = getServer();
+
+  // Collect unique option tokens and stock tokens from active signals
+  const optionTokens = [...new Set(S.signals.filter(s=>s.optionToken).map(s=>s.optionToken))];
+  const stockTokens  = [...new Set(S.signals.filter(s=>s.stockToken).map(s=>s.stockToken))];
+
+  // Batch fetch option (NFO) LTPs
+  const optionLTPs = {};
+  if (optionTokens.length) {
+    try {
+      const r = await fetch(server + '/quote', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({mode:'LTP', exchangeTokens:{NFO: optionTokens.slice(0,50)}}),
+      });
+      const d = await r.json();
+      if (d.status && d.data?.fetched) {
+        d.data.fetched.forEach(q => {
+          if (q.ltp) optionLTPs[String(q.symbolToken)] = parseFloat(q.ltp);
+        });
+      }
+    } catch(e) {}
+  }
+
+  // Batch fetch stock (NSE) LTPs — merge with existing livePrice cache
+  if (stockTokens.length) {
+    try {
+      const r = await fetch(server + '/quote', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE: stockTokens.slice(0,50)}}),
+      });
+      const d = await r.json();
+      if (d.status && d.data?.fetched) {
+        d.data.fetched.forEach(q => {
+          if (q.ltp) S.livePrice[String(q.symbolToken)] = parseFloat(q.ltp);
+        });
+      }
+    } catch(e) {}
+  }
+
+  // Apply updates to signals and re-render if anything changed
+  let changed = false;
+  S.signals.forEach(sig => {
+    if (sig.optionToken && optionLTPs[sig.optionToken] !== undefined) {
+      sig.livePremium = optionLTPs[sig.optionToken];
+      changed = true;
+    }
+    if (sig.stockToken && S.livePrice[sig.stockToken] !== undefined) {
+      sig.livePrice = S.livePrice[sig.stockToken];
+      changed = true;
+    } else if (S.livePrice[sig.sym]) {
+      sig.livePrice = S.livePrice[sig.sym];
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    // Update signal cards in-place without full re-render (smooth, no flicker)
+    S.signals.forEach(sig => {
+      const premEl   = document.getElementById(`sig-prem-${sig.id}`);
+      const priceEl  = document.getElementById(`sig-price-${sig.id}`);
+      const pnlEl    = document.getElementById(`sig-pnl-${sig.id}`);
+      if (premEl && sig.livePremium) {
+        premEl.textContent = '₹' + sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+        // Color vs entry: green if premium up (good for buyer), red if down
+        const chg = sig.livePremium - sig.entryPremium;
+        premEl.style.color = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--amber)';
+      }
+      if (priceEl && sig.livePrice) {
+        priceEl.textContent = '₹' + sig.livePrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+        const chg = sig.livePrice - sig.entryPrice;
+        priceEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
+      }
+      if (pnlEl && sig.livePremium) {
+        const pnl = (sig.livePremium - sig.entryPremium) * sig.lot * sig.lots;
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.round(pnl).toLocaleString('en-IN');
+        pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      }
+    });
+    // Save updated signals to localStorage
+    try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
+  }
+}
+
+
 function toggleScan() {
   const btn = document.getElementById('scanBtn');
   if (S.scanning) {
@@ -1313,6 +1412,10 @@ function ageColor(ts) {
 // Re-render signal age labels every 60 seconds automatically
 setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
 
+// Live price updater — every 5 seconds, updates premium + share price on all signal cards
+// Runs independently of scanner — keeps prices live even after scan stops
+setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
+
 function setFilt(f, el) {
   S.filter = f;
   document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
@@ -1344,11 +1447,19 @@ function renderSignals() {
         <span class="sig-name">${s.sym} ${s.strike}</span>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
-      <div class="sig-grid">
-        <div class="sig-cell">
-          <div class="sig-label">Premium <span class="live-badge">LIVE</span></div>
-          <div class="sig-val" style="color:var(--amber)">₹${s.premium}</div>
+      <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
+        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+          <div class="sig-label" style="font-size:8px;color:var(--text3);margin-bottom:3px">OPTION PREMIUM <span class="live-badge">LIVE</span></div>
+          <div id="sig-prem-${s.id}" class="sig-val" style="color:var(--amber);font-size:15px">₹${(s.livePremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry: ₹${s.entryPremium||s.premium}</div>
         </div>
+        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+          <div class="sig-label" style="font-size:8px;color:var(--text3);margin-bottom:3px">SHARE PRICE <span class="live-badge">LIVE</span></div>
+          <div id="sig-price-${s.id}" class="sig-val" style="color:var(--text);font-size:15px">₹${(s.livePrice||s.entryPrice||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:2px">Entry: ₹${(s.entryPrice||0).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+        </div>
+      </div>
+      <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
         <div class="sig-cell">
           <div class="sig-label">Target</div>
           <div class="sig-val" style="color:var(--green)">₹${s.target}</div>
@@ -1358,8 +1469,8 @@ function renderSignals() {
           <div class="sig-val" style="color:var(--red)">₹${s.sl}</div>
         </div>
         <div class="sig-cell">
-          <div class="sig-label">Capital</div>
-          <div class="sig-val" style="color:var(--text2)">₹${(s.capital/1000).toFixed(1)}K</div>
+          <div class="sig-label">Live P&L</div>
+          <div id="sig-pnl-${s.id}" class="sig-val" style="color:var(--text2);font-size:12px">${s.livePremium ? ((s.livePremium-s.entryPremium)>=0?'+':'')+'₹'+Math.round((s.livePremium-(s.entryPremium||s.premium))*s.lot*s.lots).toLocaleString('en-IN') : '–'}</div>
         </div>
       </div>
       <div class="sig-tags">
