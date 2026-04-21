@@ -652,7 +652,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
     </div>
   </div>
 
-  <!-- ══ PAGE: MCX COMMODITIES ══ -->
   </div><!-- /pages -->
 
 <!-- BOTTOM NAV -->
@@ -1210,14 +1209,14 @@ function getMarketStatus() {
 
 // ══════════════════════════════════════════════════════════════════
 // MCX LIVE COMMODITY PRICES
-// 4 key commodities: GOLD, SILVER, CRUDEOIL, NATURALGAS
-// Updates in-place — NO full re-render, NO blink
-// Auto-refreshes every 5s only during MCX market hours
+// 4 commodities: GOLD, SILVER, CRUDEOIL, NATURALGAS
+// Auto-refreshes every 5s only when MCX market is open
+// In-place DOM update — ZERO blink, ZERO innerHTML rebuild
 // ══════════════════════════════════════════════════════════════════
 S.mcxData    = null;
 S.mcxLoaded  = false;
+const MCX_4  = ['GOLD','SILVER','CRUDEOIL','NATURALGAS'];
 
-// MCX market hours dot updater
 function tickMCX() {
   const { mcxOpen } = getMarketStatus();
   const dot = document.getElementById('mcxDot');
@@ -1225,23 +1224,11 @@ function tickMCX() {
   const msg = document.getElementById('mcxClosedMsg');
   if (dot) dot.className = 'dot' + (mcxOpen ? ' live' : '');
   if (st)  { st.textContent = mcxOpen ? 'MCX OPEN' : 'MCX CLOSED'; st.style.color = mcxOpen ? 'var(--green)' : 'var(--text3)'; }
-  if (msg) msg.style.display = mcxOpen ? 'none' : (S.mcxLoaded ? 'block' : 'none');
+  // Show closed msg only after first data load
+  if (msg) msg.style.display = (!mcxOpen && S.mcxLoaded) ? 'block' : 'none';
 }
 tickMCX();
-setInterval(tickMCX, 30000);
-
-// Auto-fetch MCX when page becomes active and market is open
-// Polled via the main market data refresh — no separate scan button needed
-setInterval(() => {
-  if (!S.connected) return;
-  const { mcxOpen } = getMarketStatus();
-  if (!mcxOpen) return;
-  if (!document.getElementById('page-mcx')?.classList.contains('active')) return;
-  fetchMCX();
-}, 5000);
-
-// One-time fetch when user navigates to MCX page
-const _origGoPage = typeof goPage === 'function' ? goPage : null;
+setInterval(tickMCX, 30000); // single tick interval
 
 async function fetchMCX() {
   if (!S.connected) return;
@@ -1252,39 +1239,48 @@ async function fetchMCX() {
     if (!d.status || !d.data?.length) return;
     S.mcxData   = d.data;
     S.mcxLoaded = true;
-    updateMCXCards(d.data);
+    updateMCXCards(d.data);  // in-place update only — no blink
     const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const el = document.getElementById('mcxLastUpdate');
     if (el) el.textContent = 'Updated ' + now;
     tickMCX();
-  } catch(e) { /* silent — network error, retry next cycle */ }
+  } catch(e) { /* silent — retry next cycle */ }
 }
 
-// KEY CHANGE: Update in-place only (no innerHTML rebuild = no blink)
-const MCX_4 = ['GOLD','SILVER','CRUDEOIL','NATURALGAS'];
-
+// In-place update — only changes text/color of existing DOM nodes, NEVER rebuilds innerHTML
 function updateMCXCards(data) {
+  const fmt = v => v > 0 ? '₹' + v.toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:0}) : '–';
   MCX_4.forEach(name => {
     const c = data.find(d => d.name === name);
     if (!c) return;
     const up  = c.chgPct >= 0;
     const col = up ? 'var(--green)' : 'var(--red)';
     const arr = up ? '▲' : '▼';
-    const fmt = v => v > 0 ? '₹' + v.toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:0}) : '–';
 
     const ltp  = document.getElementById('mcx-' + name + '-ltp');
     const chg  = document.getElementById('mcx-' + name + '-chg');
     const high = document.getElementById('mcx-' + name + '-high');
     const low  = document.getElementById('mcx-' + name + '-low');
 
-    if (ltp)  { ltp.textContent  = fmt(c.ltp);  ltp.style.color  = col; }
+    if (ltp)  { ltp.textContent  = fmt(c.ltp);  ltp.style.color = col; }
     if (chg)  { chg.textContent  = arr + ' ' + Math.abs(c.chgPct).toFixed(2) + '%  Open ' + fmt(c.open); chg.style.color = col; }
     if (high) { high.textContent = fmt(c.high); }
     if (low)  { low.textContent  = fmt(c.low);  }
   });
 }
 
-// Fetch MCX once on load if connected
+// Auto-refresh MCX every 5s — ONLY when MCX page is visible AND market is open
+// Single interval, no duplicates, no LIVE button needed
+setInterval(() => {
+  if (!S.connected) return;
+  const { mcxOpen } = getMarketStatus();
+  if (!mcxOpen) return;
+  if (!document.getElementById('page-mcx')?.classList.contains('active')) return;
+  fetchMCX();
+}, 5000);
+
+// Fetch once on page navigate (handled in goPage override below)
+// Also fetch once 2s after login in case MCX page is already open
 setTimeout(() => { if (S.connected) fetchMCX(); }, 2000);
 
 
@@ -1446,73 +1442,6 @@ async function fetchOptionChain(sym, spotPrice) {
   } catch(e) {}
   return null;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// MCX COMMODITIES
-// ══════════════════════════════════════════════════════════════════
-const MCX_META = {
-  GOLD:      { icon:'🥇', unit:'₹/10g',  color:'#FFD700' },
-  SILVER:    { icon:'🥈', unit:'₹/kg',   color:'#C0C0C0' },
-  CRUDEOIL:  { icon:'🛢️', unit:'₹/bbl',  color:'#FF8C00' },
-  NATURALGAS:{ icon:'🔥', unit:'₹/mmBtu',color:'#22d3ee' },
-  COPPER:    { icon:'🔶', unit:'₹/kg',   color:'#b87333' },
-  ALUMINIUM: { icon:'⬡',  unit:'₹/kg',   color:'#848484' },
-  ZINC:      { icon:'⬡',  unit:'₹/kg',   color:'#7393B3' },
-  LEAD:      { icon:'⬡',  unit:'₹/kg',   color:'#999999' },
-  NICKEL:    { icon:'⬡',  unit:'₹/kg',   color:'#89CFF0' },
-};
-
-async function fetchMCX() {
-  if (!S.connected) {
-    document.getElementById('mcxGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px;font-family:var(--font-mono)">Connect Angel One in Setup tab first</div>';
-    return;
-  }
-  document.getElementById('mcxGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px;font-family:var(--font-mono)">Loading MCX data...</div>';
-  try {
-    const r = await fetch(getServer() + '/mcx');
-    const d = await r.json();
-    if (d.status && d.data) {
-      renderMCX(d.data);
-    } else {
-      document.getElementById('mcxGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--red);font-size:11px;font-family:var(--font-mono)">${d.message || 'MCX fetch failed'}</div>`;
-    }
-  } catch(e) {
-    document.getElementById('mcxGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--red);font-size:11px;font-family:var(--font-mono)">Error: ${e.message}</div>`;
-  }
-}
-
-function renderMCX(data) {
-  const html = Object.entries(data).map(([sym, q]) => {
-    const meta = MCX_META[sym] || { icon:'📦', unit:'₹', color:'var(--text2)' };
-    const chg = parseFloat(q.changePct);
-    const chgColor = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--text3)';
-    const arrow = chg > 0 ? '▲' : chg < 0 ? '▼' : '–';
-    return `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-          <span style="font-size:16px">${meta.icon}</span>
-          <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text2)">${sym}</span>
-        </div>
-        <div style="font-size:20px;font-weight:700;font-family:var(--font-mono);color:${meta.color};margin-bottom:2px">
-          ₹${q.ltp > 0 ? q.ltp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}
-        </div>
-        <div style="font-size:10px;font-family:var(--font-mono);color:${chgColor};margin-bottom:4px">
-          ${arrow} ${Math.abs(chg)}% (₹${Math.abs(q.change).toFixed(2)})
-        </div>
-        <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">${meta.unit}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;font-family:var(--font-mono);color:var(--text3)">
-          <span>H ₹${q.high>0?q.high.toLocaleString('en-IN',{maximumFractionDigits:0}):'–'}</span>
-          <span>L ₹${q.low>0?q.low.toLocaleString('en-IN',{maximumFractionDigits:0}):'–'}</span>
-        </div>
-      </div>`;
-  }).join('');
-  document.getElementById('mcxGrid').innerHTML = html || '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:11px">No MCX data available</div>';
-}
-
-// Auto-refresh MCX every 10s when on MCX page
-setInterval(() => {
-  if (document.getElementById('page-mcx').classList.contains('active') && S.connected) fetchMCX();
-}, 10000);
 
 // ══════════════════════════════════════════════════════════════════
 // NEWS SENTIMENT — fetched silently for scanner scoring
@@ -1761,15 +1690,14 @@ function toggleScan() {
     document.getElementById('mScanSt').style.color = 'var(--text3)';
     addLog('Scanner stopped', 'warn');
   } else {
-    // Block scan outside NSE market hours — prevents fake signals
-    const { nseOpen } = getMarketStatus();
-    if (!nseOpen) {
-      toast('warn', '⏰ Market Closed', 'NSE F&O scanner works only during\n9:15 AM – 3:30 PM · Mon–Fri IST');
-      addLog('Scan blocked — NSE market is closed', 'warn');
-      return;
-    }
     if (!S.connected) {
       toast('warn', '⚠ Not Connected', 'Connect Angel One in Setup tab first');
+      return;
+    }
+    const { nseOpen } = getMarketStatus();
+    if (!nseOpen) {
+      toast('warn', '⏰ NSE Market Closed', 'Scanner works only during\n9:15 AM – 3:30 PM · Mon–Fri IST');
+      addLog('Scan blocked — NSE market is closed', 'warn');
       return;
     }
     S.scanning = true;
