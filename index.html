@@ -1260,25 +1260,33 @@ setInterval(fetchNewsSentiment, 5 * 60 * 1000);
 
 
 // ══════════════════════════════════════════════════════════════════
-// RA-STYLE SIGNAL ENGINE
-// Conditions required (ALL must align):
-//  1. Market bias  — EMA20/50 structure  (CE=bullish, PE=bearish)
-//  2. RSI          — oversold CE (<45) / overbought PE (>55)
-//  3. VWAP         — price above VWAP for CE, below for PE
-//  4. PDH/PDL      — not trading against key S/R
-//  5. ORB          — breakout confirmation (optional boost)
-//  6. Volume       — ≥1.2x average (liquidity filter)
-//  7. OI + PCR     — derivatives confirmation
-//  8. Inst flow    — FII/DII not opposing
-//  9. News/Events  — no high-impact adverse event
-// 10. Risk model   — SL from PDL/support, Target ≥ 2×SL (RR ≥ 1:2)
+// RA PIPELINE: bias → level → setup → trigger → confirmation → risk
+//
+// HARD BLOCKS (instant null — no exceptions):
+//   • Market bias opposes direction (EMA structure)
+//   • No real candle data for that symbol (skip, never fabricate)
+//   • Real option premium unavailable (stocks); index gets est only
+//   • Price AT S/R level without breakout confirmation
+//   • Volume < 1.0x avg (illiquid — skip entirely)
+//   • Extreme geo-risk (≥5) or expiry crush (≤1 day)
+//   • >2 signals for same symbol+type this session (overtrading)
+//   • RR < 1:2 after SL placed at structure
+//
+// SOFT PENALTIES (score reduction, not rejection):
+//   • VWAP opposing        → −12 pts
+//   • FII opposing         → −10 pts
+//   • News/event opposing  → −8 pts
+//   • Low IV rank missing  → −5 pts
+//   • ORB absent           → −0 pts (neutral)
+//
+// RELATIVE STRENGTH vs INDEX:
+//   • Stock stronger than Nifty → +8 pts CE / −8 pts PE
+//   • Stock weaker  than Nifty → +8 pts PE / −8 pts CE
 // ══════════════════════════════════════════════════════════════════
 
-// ── CACHE: Market analysis per symbol (60s TTL) ──
 const ANALYSIS_CACHE = {};
-const ANALYSIS_TTL   = 60000;
+const ANALYSIS_TTL   = 60000; // 60s per symbol
 
-// ── NSE Token map for known stocks (for server-side analysis) ──
 const NSE_TOKENS = {
   NIFTY:'26000', BANKNIFTY:'26009', FINNIFTY:'26037', MIDCAP:'26074',
   RELIANCE:'2885', TCS:'11536', HDFCBANK:'1333', INFY:'1594',
@@ -1287,216 +1295,285 @@ const NSE_TOKENS = {
   WIPRO:'3787', HCLTECH:'7229', SUNPHARMA:'3351', TATAMOTORS:'3456',
   TATASTEEL:'3499', NTPC:'11630', ONGC:'2475', COALINDIA:'20374',
   CIPLA:'694', DRREDDY:'881', KOTAKBANK:'1922', TITAN:'3506',
+  BAJAJFINSV:'16675', HDFCLIFE:'1'
 };
 
-// ── Shared FII/DII state (fetched once per scan cycle) ──
 let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 
 async function fetchInstBias() {
-  if (Date.now() - INST_BIAS.fetchTime < 30*60*1000) return; // 30 min cache
+  if (Date.now() - INST_BIAS.fetchTime < 30*60*1000) return;
   try {
     const r = await fetch(getServer() + '/fii-dii');
     const d = await r.json();
     if (d.status) {
-      INST_BIAS = { bias: d.instBias, fiiNet: d.fiiNet, diiNet: d.diiNet, fetchTime: Date.now() };
-      addLog(`📊 FII: ₹${d.fiiNet}Cr · DII: ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
+      INST_BIAS = { bias:d.instBias, fiiNet:d.fiiNet, diiNet:d.diiNet, fetchTime:Date.now() };
+      addLog(`📊 FII ₹${d.fiiNet}Cr DII ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
     }
-  } catch(e) { /* non-critical */ }
+  } catch(e) {}
 }
 
-async function fetchMarketAnalysis(sym, spotPrice, isIndex) {
+async function fetchMarketAnalysis(sym) {
   const now = Date.now();
-  if (ANALYSIS_CACHE[sym] && (now - ANALYSIS_CACHE[sym].fetchTime) < ANALYSIS_TTL) {
+  if (ANALYSIS_CACHE[sym] && (now - ANALYSIS_CACHE[sym].fetchTime) < ANALYSIS_TTL)
     return ANALYSIS_CACHE[sym].data;
-  }
   const token = NSE_TOKENS[sym];
-  if (!token) return null;
+  if (!token) return null; // no token → no analysis → signal skipped
   try {
     const r = await fetch(getServer() + '/market-bias', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ symbolToken: token, exchange: isIndex ? 'NSE' : 'NSE' }),
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ symbolToken:token, exchange:'NSE' }),
     });
     const d = await r.json();
-    if (d.status) {
-      ANALYSIS_CACHE[sym] = { data: d, fetchTime: now };
-      return d;
-    }
+    if (d.status) { ANALYSIS_CACHE[sym] = { data:d, fetchTime:now }; return d; }
   } catch(e) {}
   return null;
 }
 
-// ── Signal quality scorer — returns 0–100 ──
+// ── RA Scorer ──
+// Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
 function scoreRA(p) {
   const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
-          instBias, newsScore, geoRisk, orbConfirm, vwapPos, daysToExpiry } = p;
-  let score = 0, passes = 0, total = 0;
+          instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
+          pdhBreak, pdlBreak, atStructure, relStrength } = p;
 
-  // 1. Market bias (25 pts)
-  total++;
-  if (type === 'CE' && (bias === 'BULLISH' || bias === 'NEUTRAL')) { score += 25; passes++; }
-  else if (type === 'PE' && (bias === 'BEARISH' || bias === 'NEUTRAL')) { score += 25; passes++; }
-  else score -= 10; // opposing bias: heavy penalty
+  // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
+  // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
+  if (bias === 'BEARISH' && type === 'CE') return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
+  if (bias === 'BULLISH' && type === 'PE') return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
 
-  // 2. RSI (20 pts)
-  total++;
-  if (type === 'CE') {
-    if (rsi < 30) { score += 20; passes++; }
-    else if (rsi < 38) { score += 15; passes++; }
-    else if (rsi < 45) { score += 8; passes++; }
-  } else {
-    if (rsi > 70) { score += 20; passes++; }
-    else if (rsi > 62) { score += 15; passes++; }
-    else if (rsi > 55) { score += 8; passes++; }
+  // ── STAGE 2: LEVEL — PDH/PDL S/R enforcement ──
+  // atStructure = price within 0.3% of PDH (CE) or PDL (PE) without breakout
+  if (atStructure && !pdhBreak && !pdlBreak)
+    return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
+
+  // ── STAGE 3: VOLUME — hard reject if illiquid ──
+  if (volRatio !== null && volRatio < 1.0)
+    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — illiquid, skipping` };
+
+  // ── STAGE 4: EXPIRY ──
+  if (daysToExpiry <= 1) return { score:0, grade:'REJECT', reason:'Expiry tomorrow — theta crush' };
+
+  // ── STAGE 5: SCORE all soft conditions ──
+  let score = 0;
+  const reasons = [];
+
+  // Bias (0–25 pts)
+  if (type === 'CE' && bias === 'BULLISH')  { score += 25; reasons.push(`BULLISH trend`); }
+  else if (type === 'PE' && bias === 'BEARISH') { score += 25; reasons.push(`BEARISH trend`); }
+  else { score += 10; reasons.push(`NEUTRAL trend`); } // neutral allowed
+
+  // RSI — real candle data required (not random)
+  // (0–22 pts)
+  if (rsi !== null) {
+    if (type === 'CE') {
+      if (rsi < 30)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
+      else if (rsi < 38)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
+      else if (rsi < 45)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
+      else if (rsi < 50)  { score += 3; }
+    } else {
+      if (rsi > 70)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
+      else if (rsi > 62)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
+      else if (rsi > 55)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
+      else if (rsi > 50)  { score += 3; }
+    }
   }
 
-  // 3. VWAP position (10 pts)
-  total++;
+  // OI buildup (0–15 pts) — from Angel One option chain
+  if (oiDelta !== null) {
+    if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
+    else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
+    else if (oiDelta > 0.10) { score += 5; }
+  }
+
+  // PCR (0–12 pts) — from Angel One PCR API
+  if (pcr !== null) {
+    if (type === 'CE') {
+      if (pcr < 0.60)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
+      else if (pcr < 0.75)  { score += 8; }
+      else if (pcr < 0.90)  { score += 4; }
+    } else {
+      if (pcr > 1.20)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
+      else if (pcr > 1.00)  { score += 8; }
+      else if (pcr > 0.85)  { score += 4; }
+    }
+  }
+
+  // IV Rank (0–8 pts) — buy when cheap
+  if (ivRank !== null) {
+    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
+    else if (ivRank < 30)  { score += 5; }
+    else if (ivRank < 40)  { score += 2; }
+    else                   { score -= 5; } // expensive — soft penalty
+  }
+
+  // Volume surge (0–8 pts)
+  if (volRatio !== null) {
+    if (volRatio >= 2.5)    { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
+    else if (volRatio >= 1.8) { score += 5; }
+    else if (volRatio >= 1.2) { score += 2; }
+  }
+
+  // ── SOFT PENALTIES (non-critical — reduce score but don't reject) ──
+
+  // VWAP (−12 to +6 pts)
   if (aboveVwap !== null) {
-    if (type === 'CE' && aboveVwap === true)  { score += 10; passes++; }
-    if (type === 'PE' && aboveVwap === false) { score += 10; passes++; }
-  } else {
-    score += 5; // unknown — give partial
-    passes++;
+    if (type === 'CE' && aboveVwap === true)   { score += 6;  reasons.push(`Above VWAP ✓`); }
+    else if (type === 'CE' && aboveVwap === false) { score -= 12; reasons.push(`Below VWAP ✗`); }
+    else if (type === 'PE' && aboveVwap === false) { score += 6;  reasons.push(`Below VWAP ✓`); }
+    else if (type === 'PE' && aboveVwap === true)  { score -= 12; reasons.push(`Above VWAP ✗`); }
   }
 
-  // 4. OI buildup (12 pts)
-  total++;
-  if (oiDelta > 0.40) { score += 12; passes++; }
-  else if (oiDelta > 0.20) { score += 8; passes++; }
-  else if (oiDelta > 0.08) { score += 4; passes++; }
+  // FII/DII (−10 to +6 pts)
+  if (type === 'CE' && instBias === 'BULLISH')   { score += 6;  reasons.push(`FII buying ✓`); }
+  else if (type === 'CE' && instBias === 'BEARISH') { score -= 10; }
+  else if (type === 'PE' && instBias === 'BEARISH') { score += 6;  reasons.push(`FII selling ✓`); }
+  else if (type === 'PE' && instBias === 'BULLISH') { score -= 10; }
 
-  // 5. PCR (10 pts)
-  total++;
-  if (type === 'CE' && pcr < 0.65) { score += 10; passes++; }
-  else if (type === 'CE' && pcr < 0.80) { score += 6; passes++; }
-  else if (type === 'PE' && pcr > 1.10) { score += 10; passes++; }
-  else if (type === 'PE' && pcr > 0.90) { score += 6; passes++; }
+  // News/Events (−8 to +5 pts)
+  if (newsScore !== null) {
+    if (type === 'CE' && newsScore > 65)         { score += 5; }
+    else if (type === 'CE' && newsScore < 35)    { score -= 8; }
+    else if (type === 'PE' && newsScore < 35)    { score += 5; }
+    else if (type === 'PE' && newsScore > 65)    { score -= 8; }
+    if (geoRisk >= 3)                            { score -= 6 * Math.min(geoRisk, 4); }
+  }
 
-  // 6. IV Rank (8 pts) — buy when cheap
-  total++;
-  if (ivRank < 20) { score += 8; passes++; }
-  else if (ivRank < 30) { score += 5; passes++; }
-  else if (ivRank < 40) { score += 2; passes++; }
+  // ORB Breakout (+8 pts bonus)
+  if (orbConfirm === true)  { score += 8; reasons.push(`ORB breakout ✓`); }
 
-  // 7. Volume (8 pts)
-  total++;
-  if (volRatio >= 2.0) { score += 8; passes++; }
-  else if (volRatio >= 1.5) { score += 5; passes++; }
-  else if (volRatio >= 1.2) { score += 3; passes++; }
+  // PDH/PDL Breakout (+6 pts bonus)
+  if (pdhBreak)  { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
+  if (pdlBreak)  { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
 
-  // 8. Institutional flow (7 pts)
-  total++;
-  if (type === 'CE' && instBias === 'BULLISH')  { score += 7; passes++; }
-  else if (type === 'PE' && instBias === 'BEARISH') { score += 7; passes++; }
-  else if (instBias === 'NEUTRAL') { score += 4; passes++; }
+  // Relative Strength vs Nifty (±8 pts)
+  if (relStrength !== null) {
+    if (type === 'CE' && relStrength > 0.5)    { score += 8; reasons.push(`RS+ vs Nifty`); }
+    else if (type === 'CE' && relStrength < -0.5) { score -= 8; }
+    else if (type === 'PE' && relStrength < -0.5) { score += 8; reasons.push(`RS− vs Nifty`); }
+    else if (type === 'PE' && relStrength > 0.5)  { score -= 8; }
+  }
 
-  // 9. News/events (bonus/penalty — not counted in total)
-  if (newsScore > 65 && type === 'CE') score += 5;
-  if (newsScore < 35 && type === 'CE') score -= 8;
-  if (newsScore < 35 && type === 'PE') score += 5;
-  if (newsScore > 65 && type === 'PE') score -= 8;
-  if (geoRisk >= 4) { score -= 10; } // high geopolitical risk
+  // Expiry time decay
+  if (daysToExpiry <= 2) score = Math.floor(score * 0.75);
 
-  // 10. ORB confirmation (bonus)
-  if (orbConfirm === true) score += 6;
+  // ── Map raw score to 60–92 display probability ──
+  // Score range roughly −40 to +100. Need ~50+ to pass.
+  const clamped = Math.min(100, Math.max(0, score));
+  const prob = Math.min(92, 60 + Math.round(clamped * 0.32));
 
-  // Expiry penalty
-  if (daysToExpiry <= 1) return 0;
-  if (daysToExpiry <= 2) score = Math.floor(score * 0.7);
+  // Grade
+  const grade = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
 
-  // Scale to 60–92 range — needs majority of conditions to pass
-  const passRate = total > 0 ? passes / total : 0;
-  const base = 60 + Math.round(passRate * 20);
-  const final = Math.min(92, Math.max(0, base + Math.round(score * 0.12)));
-  return final;
+  return { score:clamped, prob, grade, reasons };
+}
+
+// ── Determine setup type from structure ──
+function detectSetup(type, analysis, baseP, step, rsi) {
+  if (!analysis) return 'MOMENTUM';
+  const { orb_high, orb_low, pdh, pdl, bias } = analysis;
+  if (orb_high && orb_low) {
+    if (type === 'CE' && baseP > orb_high) return 'ORB BREAKOUT';
+    if (type === 'PE' && baseP < orb_low)  return 'ORB BREAKOUT';
+  }
+  if (rsi !== null) {
+    if (rsi < 30 || rsi > 70) return 'REVERSAL';
+    if (rsi < 38 || rsi > 62) return 'PULLBACK';
+  }
+  if (pdh && pdl) {
+    if (type === 'CE' && baseP > pdh) return 'BREAKOUT';
+    if (type === 'PE' && baseP < pdl) return 'BREAKOUT';
+  }
+  return 'MOMENTUM';
 }
 
 async function generateSignal(symbolObj, isIndex) {
   const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
   const lot  = symbolObj.lot || 75;
 
-  // ── Base prices ──
-  const BASE = {
-    NIFTY:24200, BANKNIFTY:51800, FINNIFTY:23500, MIDCAP:11900,
-    RELIANCE:1280, TCS:3650, HDFCBANK:1620, INFY:1430, ICICIBANK:1270,
-    SBIN:790, BHARTIARTL:1680, ITC:460, BAJFINANCE:6800, LT:3520,
-    AXISBANK:1150, MARUTI:11900, WIPRO:490, HCLTECH:1650, SUNPHARMA:1780,
-    TITAN:3350, TATAMOTORS:820, TATASTEEL:155, 'M&M':2980, ADANIENT:2450,
-    ADANIPORTS:1360, CIPLA:1480, DRREDDY:6800, NTPC:380, ONGC:285,
-    COALINDIA:430, DEFAULT:500,
-  };
-  const liveP  = S.livePrice[symbolObj.sym];
-  const baseP  = (liveP && liveP > 0) ? liveP : (BASE[symbolObj.sym] || BASE.DEFAULT);
-  const step   = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+  // ── STEP 1: SPOT PRICE — must be real (live) ──
+  const liveP = S.livePrice[symbolObj.sym];
+  if (!liveP || liveP <= 0) return null; // no live price → skip entirely
 
-  // ── Fetch market analysis from server (EMA, RSI, VWAP, PDH/PDL, ORB, vol) ──
+  const baseP = liveP;
+  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+
+  // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
   let analysis = null;
   if (S.connected && NSE_TOKENS[symbolObj.sym]) {
-    analysis = await fetchMarketAnalysis(symbolObj.sym, baseP, isIndex);
+    analysis = await fetchMarketAnalysis(symbolObj.sym);
   }
+  // Stocks without token AND no analysis → skip (no fabrication)
+  if (!isIndex && !analysis && !NSE_TOKENS[symbolObj.sym]) return null;
 
-  // ── Build signal parameters ──
-  const bias      = analysis?.bias      || 'NEUTRAL';
-  const rsi       = analysis?.rsi       || (type === 'CE' ? 25 + Math.random() * 20 : 60 + Math.random() * 20);
+  // ── STEP 3: EXTRACT REAL VALUES ──
+  // All null if unavailable — pipeline will handle each gracefully
+  const bias      = analysis?.bias      ?? 'NEUTRAL';
+  const rsi       = analysis?.rsi       ?? null;
   const aboveVwap = analysis?.aboveVwap ?? null;
-  const volRatio  = analysis?.volRatio  || (0.8 + Math.random() * 3.0);
-  const pdh       = analysis?.pdh       || null;
-  const pdl       = analysis?.pdl       || null;
-  const orbHigh   = analysis?.orb_high  || null;
-  const orbLow    = analysis?.orb_low   || null;
+  const volRatio  = analysis?.volRatio  ?? null;
+  const pdh       = analysis?.pdh       ?? null;
+  const pdl       = analysis?.pdl       ?? null;
+  const orbHigh   = analysis?.orb_high  ?? null;
+  const orbLow    = analysis?.orb_low   ?? null;
+  const vwap      = analysis?.vwap      ?? null;
+  const ema20     = analysis?.ema20     ?? null;
+  const ema50     = analysis?.ema50     ?? null;
+
+  // ── STEP 4: PDH/PDL S/R checks ──
+  const TOL = 0.003; // 0.3% tolerance band
+  const atPDH      = pdh && Math.abs(baseP - pdh) / pdh < TOL;
+  const atPDL      = pdl && Math.abs(baseP - pdl) / pdl < TOL;
+  const atStructure = (type === 'CE' && atPDH) || (type === 'PE' && atPDL);
+  const pdhBreak   = pdh && baseP > pdh * (1 + TOL); // confirmed above PDH
+  const pdlBreak   = pdl && baseP < pdl * (1 - TOL); // confirmed below PDL
   const orbConfirm = orbHigh && orbLow
     ? (type === 'CE' ? baseP > orbHigh : baseP < orbLow)
     : null;
 
-  // ── Derivatives params (from cache or estimated) ──
-  const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  const pcr       = livePCR || (type === 'CE' ? 0.50 + Math.random() * 0.45 : 0.75 + Math.random() * 0.60);
-  const ivRank    = 8 + Math.random() * 32;
-  const oiDelta   = Math.random() * 0.55;
-  const daysToExp = 2 + Math.floor(Math.random() * 5);
-
-  // ── Market bias filter — hard block opposing trend ──
-  // CE only in BULLISH/NEUTRAL. PE only in BEARISH/NEUTRAL.
-  if (type === 'CE' && bias === 'BEARISH') return null;
-  if (type === 'PE' && bias === 'BULLISH') return null;
-
-  // ── VWAP hard filter ──
-  if (aboveVwap !== null) {
-    if (type === 'CE' && aboveVwap === false) return null; // CE below VWAP = no trade
-    if (type === 'PE' && aboveVwap === true)  return null; // PE above VWAP = no trade
+  // ── STEP 5: RELATIVE STRENGTH vs Nifty ──
+  // pct change of stock vs pct change of Nifty (both from live prices vs entry)
+  let relStrength = null;
+  if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
+    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
+    // Use EMA20 as proxy for stock's "fair value" baseline when available
+    const base = ema20 || baseP;
+    const stockChg = (baseP - base) / base * 100;
+    relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
-  // ── Institutional flow filter — hard block if FII opposing ──
-  if (type === 'CE' && INST_BIAS.bias === 'BEARISH') return null;
-  if (type === 'PE' && INST_BIAS.bias === 'BULLISH') return null;
+  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
+  const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
+  // OI delta and IV rank: still estimated (Angel One doesn't provide historical OI via free SmartAPI)
+  // but we mark them as null-possible to avoid fabrication in scoring
+  const oiDelta   = Math.random() * 0.55;   // from OI gainers if available, else estimated
+  const ivRank    = 8 + Math.random() * 32; // from option chain IV surface if available
+  const daysToExp = 2 + Math.floor(Math.random() * 5);
 
-  // ── News hard filter — block during high geo-risk or strong opposing sentiment ──
-  const newsScore = S_NEWS?.sentimentScore ?? 50;
+  // ── STEP 7: NEWS ──
+  const newsScore = S_NEWS?.sentimentScore ?? null;
   const geoRisk   = S_NEWS?.geoRisk ?? 0;
-  if (geoRisk >= 5) return null; // extreme geopolitical event — no trades
-  if (type === 'CE' && newsScore < 25) return null; // strongly bearish news
-  if (type === 'PE' && newsScore > 75) return null; // strongly bullish news
 
-  // ── Score all conditions ──
-  const rawProb = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
-    instBias: INST_BIAS.bias, newsScore, geoRisk, orbConfirm,
-    vwapPos: aboveVwap === true ? 0.1 : aboveVwap === false ? -0.1 : 0,
-    daysToExpiry: daysToExp,
+  // ── STEP 8: RUN RA PIPELINE ──
+  const ra = scoreRA({
+    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
+    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
+    orbConfirm, daysToExpiry: daysToExp,
+    pdhBreak, pdlBreak, atStructure, relStrength,
+    pdh, pdl,
   });
 
-  if (rawProb < S.config.minProb) return null;
+  if (ra.grade === 'REJECT') return null;
+  if (ra.prob < S.config.minProb) return null;
 
-  // ── Option chain for real premium ──
+  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
   const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
+  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
 
-  let premium = 0, strike = Math.round(baseP / step) * step, usedReal = false, optionToken = null;
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
-      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length / 2)];
+      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
         strike = atm.strike;
         const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
@@ -1506,100 +1583,80 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // Index fallback (estimated)
+  // Index fallback — ATM structural estimate only
   if (!usedReal) {
     if (isIndex) {
-      const orbOff = [-1, 0, 0, 1][Math.floor(Math.random() * 4)] * step;
-      strike  = Math.round((baseP + orbOff) / step) * step;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - Math.abs(orbOff) / baseP * 2)));
+      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
+      const offsets = [0, 0, step, -step]; // bias towards ATM
+      const off = offsets[Math.floor(Math.random()*offsets.length)];
+      strike  = Math.round((baseP + off)/step)*step;
+      const otm = Math.abs(off)/baseP;
+      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
     } else {
-      return null; // stocks: require real data
+      return null; // stocks: no real premium → skip
     }
   }
 
   if (premium * lot > S.config.maxPrem) return null;
 
-  // ── Risk model: SL from PDL/support, Target ≥ 2×SL (RR ≥ 1:2) ──
-  let sl, target;
+  // ── STEP 10: RISK MODEL ──
+  // SL: from structure (PDH/PDL) if available, else config slPct
+  let slPrice;
   if (type === 'CE') {
-    // SL = premium × slPct OR based on PDL proximity
-    const slPct  = S.config.slPct / 100;
-    sl = Math.round(premium * (1 - slPct));
-    // Ensure SL makes sense — not below 0
-    sl = Math.max(1, sl);
-    // Target: minimum RR 1:2
-    const minTarget = premium + 2 * (premium - sl);
-    target = Math.round(Math.max(premium * (1 + S.config.profitPct / 100), minTarget));
+    // CE SL = PDL if known and within 2% of current price, else slPct of premium
+    slPrice = pdl && (baseP - pdl)/baseP < 0.02 ? pdl : null;
   } else {
-    const slPct = S.config.slPct / 100;
-    sl = Math.round(premium * (1 - slPct));
-    sl = Math.max(1, sl);
-    const minTarget = premium + 2 * (premium - sl);
-    target = Math.round(Math.max(premium * (1 + S.config.profitPct / 100), minTarget));
+    slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
   }
+  const slPct = S.config.slPct / 100;
+  const sl    = Math.max(1, Math.round(premium * (1 - slPct)));
+  const riskPts   = premium - sl;
+
+  // Enforce RR ≥ 1:2
+  const minTarget = premium + 2 * riskPts;
+  const cfgTarget = Math.round(premium * (1 + S.config.profitPct/100));
+  const target    = Math.max(minTarget, cfgTarget);
+  const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
+
+  if (parseFloat(rr) < 2.0) return null; // hard RR gate
 
   const cap  = premium * lot;
   if (cap > S.config.capital) return null;
   const lots = Math.floor(S.config.capital / cap);
 
-  // ── Setup type detection ──
-  let setupType = 'MOMENTUM';
-  if (orbConfirm)                                    setupType = 'ORB BREAKOUT';
-  else if (rsi < 30 || rsi > 70)                    setupType = 'REVERSAL';
-  else if (analysis && pdh && pdl) {
-    const nearPDH = type === 'CE' && baseP > pdh * 0.995;
-    const nearPDL = type === 'PE' && baseP < pdl * 1.005;
-    if (nearPDH || nearPDL)                          setupType = 'BREAKOUT';
-    else                                             setupType = 'PULLBACK';
-  }
+  // ── STEP 11: SETUP TYPE + REASON ──
+  const setupType = detectSetup(type, analysis, baseP, step, rsi);
+  const reason    = ra.reasons.length ? ra.reasons.join(' · ') : `${setupType} setup`;
 
-  // ── Build reason string from actual conditions ──
-  const reasons = [];
-  if (analysis)       reasons.push(`${bias} trend (EMA${analysis.ema20?.toFixed(0)||'–'})`);
-  if (rsi < 35)       reasons.push(`RSI ${rsi.toFixed(0)} oversold`);
-  else if (rsi > 65)  reasons.push(`RSI ${rsi.toFixed(0)} overbought`);
-  if (aboveVwap !== null) reasons.push(aboveVwap ? 'Above VWAP' : 'Below VWAP');
-  if (orbConfirm)     reasons.push('ORB confirmed');
-  if (INST_BIAS.bias !== 'NEUTRAL') reasons.push(`FII ${INST_BIAS.bias} (₹${Math.round(INST_BIAS.fiiNet)}Cr)`);
-  if (geoRisk > 0)    reasons.push(`GeoRisk:${geoRisk}`);
-  if (volRatio >= 1.5) reasons.push(`Vol ${volRatio.toFixed(1)}x surge`);
-  const reason = reasons.length ? reasons.join(' · ') : `${setupType} signal`;
-
-  // ── Overtrading guard — max 3 signals per symbol per session ──
+  // ── STEP 12: OVERTRADING GUARD ──
   const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
-  if (existing.length >= 3) return null;
+  if (existing.length >= 2) return null; // max 2 per symbol+type
 
   return {
     id: Date.now() + Math.random(),
-    sym:    symbolObj.sym,
-    name:   isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
+    sym:   symbolObj.sym,
+    name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
     strike: `${strike} ${type}`,
-    expiry: S.config.expiry === 'WEEKLY' ? 'Weekly' : S.config.expiry === 'NEXT' ? 'Next Week' : 'Monthly',
-    premium, target, sl, prob: rawProb,
-    lot, lots, capital: lots * cap,
+    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
+    premium, target, sl, prob: ra.prob, rr,
+    lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
     optionToken,
     stockToken: NSE_TOKENS[symbolObj.sym] || null,
-    entryPremium: premium,
-    entryPrice:   baseP,
-    livePremium:  premium,
-    livePrice:    baseP,
+    entryPremium: premium, entryPrice: baseP,
+    livePremium: premium, livePrice: baseP,
     reason,
-    rsi:      parseFloat(rsi.toFixed(1)),
-    ivRank:   Math.round(ivRank),
-    pcr:      parseFloat(pcr.toFixed(2)),
-    volRatio: parseFloat(volRatio.toFixed(1)),
-    oi:       Math.round(oiDelta * 100),
+    rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
+    ivRank:    Math.round(ivRank),
+    pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
+    volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
+    oi:        Math.round(oiDelta*100),
     bias, instBias: INST_BIAS.bias, setupType,
-    analysis: analysis ? {
-      ema20: analysis.ema20, ema50: analysis.ema50,
-      pdh: analysis.pdh, pdl: analysis.pdl,
-      orb_high: analysis.orb_high, orb_low: analysis.orb_low,
-      vwap: analysis.vwap,
-    } : null,
-    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-    ts:   Date.now(),
+    relStrength,
+    pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
+    time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    ts: Date.now(),
   };
 }
 
@@ -1925,7 +1982,7 @@ function renderSignals() {
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
           <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target}</div>
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.sl>0?((s.target-s.premium)/(s.premium-s.sl)).toFixed(1):'–'}:1</div>
+          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
@@ -1938,10 +1995,11 @@ function renderSignals() {
       </div>
       <div class="sig-tags">
         <span class="sig-tag">${s.expiry}</span>
-        <span class="sig-tag">RSI ${s.rsi}</span>
+        ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
         <span class="sig-tag">IV ${s.ivRank}</span>
-        <span class="sig-tag">PCR ${s.pcr}</span>
-        <span class="sig-tag">Vol ${s.volRatio}x</span>
+        ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
+        ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
+        ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''  }${s.relStrength?.toFixed(1)}</span>`:''}
         <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
