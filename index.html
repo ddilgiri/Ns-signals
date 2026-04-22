@@ -288,17 +288,25 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 
   <!-- ══ PAGE: SIGNALS ══ -->
   <div class="page active" id="page-signals">
-    <!-- Index quick view -->
-    <div class="index-bar">
-      <div class="idx-card">
-        <div class="idx-name">NIFTY 50</div>
-        <div class="idx-val" id="mNifty">–</div>
-        <div class="idx-chg" id="mNiftyC" style="color:var(--text3)">–</div>
-      </div>
-      <div class="idx-card">
-        <div class="idx-name">BANKNIFTY</div>
-        <div class="idx-val" id="mBank">–</div>
-        <div class="idx-chg" id="mBankC" style="color:var(--text3)">–</div>
+    <!-- Configurable Watchlist (up to 4 items) -->
+    <div style="padding:8px 12px 4px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Watchlist</span>
+      <button onclick="openWatchlistEdit()" style="font-size:10px;padding:3px 10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font-mono)">✎ Edit</button>
+    </div>
+    <div id="watchlistBar" class="index-bar" style="padding:4px 12px 8px"></div>
+
+    <!-- Watchlist Edit Modal -->
+    <div id="watchlistModal" style="display:none;position:fixed;inset:0;z-index:400;background:#000a">
+      <div style="position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:16px;max-height:80vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Edit Watchlist</span>
+          <button onclick="closeWatchlistEdit()" style="font-size:18px;background:transparent;border:none;color:var(--text3);cursor:pointer">×</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Pick up to 4 symbols. Tap to toggle.</div>
+        <input id="wlSearch" type="search" placeholder="Search index or stock..." oninput="renderWLPicker()"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;-webkit-appearance:none;margin-bottom:10px">
+        <div id="wlPicker" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:50vh;overflow-y:auto"></div>
+        <button onclick="closeWatchlistEdit()" style="width:100%;margin-top:12px;padding:13px;border-radius:10px;border:none;background:var(--green);color:#000;font-size:14px;font-weight:700;cursor:pointer">Done</button>
       </div>
     </div>
     <!-- Metrics -->
@@ -819,7 +827,7 @@ const S = {
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
   config:{capital:30000,profitPct:30,slPct:5,minProb:80,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
-  livePrice:{}, livePCR:{},
+  livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
 
@@ -839,6 +847,108 @@ function goPage(id, el) {
     document.getElementById('sigBadge').textContent = '0';
     document.getElementById('sigBadge').classList.remove('show');
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WATCHLIST — up to 4 user-configurable symbols
+// ══════════════════════════════════════════════════════════════════
+const WL_ALL = [
+  { sym:'NIFTY',      name:'NIFTY 50',      token:'26000', exchange:'NSE', isIdx:true  },
+  { sym:'FINNIFTY',   name:'FINNIFTY',       token:'26037', exchange:'NSE', isIdx:true  },
+  { sym:'MIDCAP',     name:'MIDCAP NIFTY',   token:'26074', exchange:'NSE', isIdx:true  },
+  { sym:'RELIANCE',   name:'Reliance',        token:'2885',  exchange:'NSE', isIdx:false },
+  { sym:'TCS',        name:'TCS',             token:'11536', exchange:'NSE', isIdx:false },
+  { sym:'HDFCBANK',   name:'HDFC Bank',       token:'1333',  exchange:'NSE', isIdx:false },
+  { sym:'INFY',       name:'Infosys',         token:'1594',  exchange:'NSE', isIdx:false },
+  { sym:'ICICIBANK',  name:'ICICI Bank',      token:'4963',  exchange:'NSE', isIdx:false },
+  { sym:'SBIN',       name:'SBI',             token:'3045',  exchange:'NSE', isIdx:false },
+  { sym:'BAJFINANCE', name:'Bajaj Finance',   token:'317',   exchange:'NSE', isIdx:false },
+  { sym:'KOTAKBANK',  name:'Kotak Bank',      token:'1922',  exchange:'NSE', isIdx:false },
+  { sym:'AXISBANK',   name:'Axis Bank',       token:'5900',  exchange:'NSE', isIdx:false },
+  { sym:'MARUTI',     name:'Maruti',          token:'10999', exchange:'NSE', isIdx:false },
+  { sym:'WIPRO',      name:'Wipro',           token:'3787',  exchange:'NSE', isIdx:false },
+  { sym:'TATAMOTORS', name:'Tata Motors',     token:'3456',  exchange:'NSE', isIdx:false },
+  { sym:'SUNPHARMA',  name:'Sun Pharma',      token:'3351',  exchange:'NSE', isIdx:false },
+  { sym:'TITAN',      name:'Titan',           token:'3506',  exchange:'NSE', isIdx:false },
+  { sym:'CIPLA',      name:'Cipla',           token:'694',   exchange:'NSE', isIdx:false },
+  { sym:'LT',         name:'L&T',             token:'11483', exchange:'NSE', isIdx:false },
+  { sym:'ONGC',       name:'ONGC',            token:'2475',  exchange:'NSE', isIdx:false },
+];
+
+// Default watchlist: NIFTY, FINNIFTY, RELIANCE (no BANKNIFTY)
+const WL_DEFAULT = ['NIFTY','FINNIFTY','RELIANCE'];
+let S_WATCHLIST = JSON.parse(localStorage.getItem('watchlist') || 'null') || [...WL_DEFAULT];
+
+function saveWatchlist() { localStorage.setItem('watchlist', JSON.stringify(S_WATCHLIST)); }
+
+function renderWatchlistBar() {
+  const bar = document.getElementById('watchlistBar');
+  if (!bar) return;
+  if (!S_WATCHLIST.length) {
+    bar.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);font-size:11px;padding:10px">Tap ✎ Edit to add symbols</div>';
+    return;
+  }
+  bar.style.gridTemplateColumns = `repeat(${Math.min(S_WATCHLIST.length,4)},1fr)`;
+  bar.innerHTML = S_WATCHLIST.slice(0,4).map(sym => {
+    const meta  = WL_ALL.find(w => w.sym === sym);
+    const ltp   = S.livePrice[sym];
+    const prev  = S.livePrev[sym] || ltp || 0;
+    const chg   = ltp && prev ? ((ltp-prev)/prev*100) : null;
+    const col   = chg === null ? 'var(--text3)' : chg >= 0 ? 'var(--green)' : 'var(--red)';
+    const arr   = chg === null ? '' : chg >= 0 ? '▲' : '▼';
+    const label = meta?.name || sym;
+    return `
+    <div class="idx-card">
+      <div class="idx-name" style="font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+      <div class="idx-val" id="wl-${sym}-ltp" style="font-size:16px">${ltp ? '₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0}) : '–'}</div>
+      <div id="wl-${sym}-chg" style="font-size:10px;font-family:var(--font-mono);color:${col}">${chg!==null?arr+' '+Math.abs(chg).toFixed(2)+'%':'–'}</div>
+    </div>`;
+  }).join('');
+}
+
+// Update watchlist cards in-place (no rebuild)
+function updateWatchlistBar() {
+  S_WATCHLIST.slice(0,4).forEach(sym => {
+    const ltp  = S.livePrice[sym];
+    const prev = S.livePrev[sym] || ltp || 0;
+    if (!ltp) return;
+    const chg  = prev ? ((ltp-prev)/prev*100) : null;
+    const col  = chg === null ? 'var(--text3)' : chg >= 0 ? 'var(--green)' : 'var(--red)';
+    const arr  = chg === null ? '' : chg >= 0 ? '▲' : '▼';
+    const ltpEl = document.getElementById(`wl-${sym}-ltp`);
+    const chgEl = document.getElementById(`wl-${sym}-chg`);
+    if (ltpEl) { ltpEl.textContent = '₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0}); ltpEl.style.color = col; }
+    if (chgEl) { chgEl.textContent = chg!==null?arr+' '+Math.abs(chg).toFixed(2)+'%':'–'; chgEl.style.color = col; }
+  });
+}
+
+function openWatchlistEdit() {
+  document.getElementById('watchlistModal').style.display = 'block';
+  document.getElementById('wlSearch').value = '';
+  renderWLPicker();
+}
+function closeWatchlistEdit() {
+  document.getElementById('watchlistModal').style.display = 'none';
+  saveWatchlist();
+  renderWatchlistBar();
+}
+function renderWLPicker() {
+  const q = document.getElementById('wlSearch').value.toLowerCase();
+  const filtered = WL_ALL.filter(w => !q || w.sym.toLowerCase().includes(q) || w.name.toLowerCase().includes(q));
+  document.getElementById('wlPicker').innerHTML = filtered.map(w => {
+    const sel = S_WATCHLIST.includes(w.sym);
+    const disabled = !sel && S_WATCHLIST.length >= 4;
+    return `<button onclick="toggleWL('${w.sym}')" style="padding:10px 8px;border-radius:8px;border:1px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-bg)':'var(--bg3)'};color:${sel?'var(--green)':'var(--text2)'};text-align:left;cursor:${disabled?'not-allowed':'pointer'};opacity:${disabled?'0.4':'1'}">
+      <div style="font-size:11px;font-weight:700;font-family:var(--font-mono)">${w.sym}</div>
+      <div style="font-size:10px;color:var(--text3)">${w.name}</div>
+    </button>`;
+  }).join('');
+}
+function toggleWL(sym) {
+  const idx = S_WATCHLIST.indexOf(sym);
+  if (idx >= 0) { S_WATCHLIST.splice(idx,1); }
+  else if (S_WATCHLIST.length < 4) { S_WATCHLIST.push(sym); }
+  renderWLPicker();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -998,42 +1108,43 @@ const STOCK_TOKENS = {
 
 async function fetchMarketData() {
   const server = getServer();
+
+  // ── Build token list: all 4 indices + watchlist stocks ──
+  const INDEX_TOKENS = ['26000','26009','26037','26074'];
+  const watchTokens  = S_WATCHLIST
+    .map(sym => WL_ALL.find(w => w.sym===sym)?.token)
+    .filter(t => t && !INDEX_TOKENS.includes(t));
+  const allTokens = [...new Set([...INDEX_TOKENS, ...watchTokens])];
+
   try {
     const r = await fetch(server + '/quote', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:['26000','26009','26037','26074']}}),
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({mode:'FULL', exchangeTokens:{NSE: allTokens}}),
     });
     const d = await r.json();
     if (d.status && d.data?.fetched) {
-      const f = d.data.fetched;
-      const niftyQ  = f.find(q => String(q.symbolToken)==='26000' || (q.tradingSymbol||'').toUpperCase().includes('NIFTY 50'));
-      const bankQ   = f.find(q => String(q.symbolToken)==='26009' || (q.tradingSymbol||'').toUpperCase().includes('BANKNIFTY'));
-      const finQ    = f.find(q => String(q.symbolToken)==='26037');
-      const midQ    = f.find(q => String(q.symbolToken)==='26074');
-
-      function updIdx(q, sym, elId, elChgId) {
-        if (!q) return;
-        const ltp = parseFloat(q.ltp || q.close || 0);
+      d.data.fetched.forEach(q => {
+        const ltp  = parseFloat(q.ltp  || q.close || 0);
         const prev = parseFloat(q.close || q.previousClose || ltp);
-        const chg = prev ? ((ltp-prev)/prev*100).toFixed(2) : '0.00';
-        document.getElementById(elId).textContent = ltp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        document.getElementById(elChgId).textContent = (chg>0?'+':'')+chg+'%';
-        document.getElementById(elChgId).style.color = chg>=0?'var(--green)':'var(--red)';
+        if (!ltp) return;
+        const tok  = String(q.symbolToken);
+        const sym  = tok==='26000'?'NIFTY':tok==='26009'?'BANKNIFTY':tok==='26037'?'FINNIFTY':tok==='26074'?'MIDCAP'
+          : Object.keys(STOCK_TOKENS).find(s => String(STOCK_TOKENS[s])===tok)
+          || WL_ALL.find(w => w.token===tok)?.sym;
+        if (!sym) return;
+        // Store prev before updating (for % change calc)
+        if (S.livePrice[sym] && S.livePrice[sym] > 0) S.livePrev[sym] = prev;
         S.livePrice[sym] = ltp;
-      }
-      updIdx(niftyQ,'NIFTY','mNifty','mNiftyC');
-      updIdx(bankQ,'BANKNIFTY','mBank','mBankC');
-      if(finQ)  S.livePrice['FINNIFTY'] = parseFloat(finQ.ltp||0);
-      if(midQ)  S.livePrice['MIDCAP']   = parseFloat(midQ.ltp||0);
+      });
+      // Update watchlist bar in-place
+      updateWatchlistBar();
     }
   } catch(e) { /* silent */ }
 
-  // Stock LTPs
+  // Stock LTPs (selected stocks not already in watchlist)
   try {
-    const server = getServer();
-    const selArr = [...S.selectedStocks].filter(s => STOCK_TOKENS[s]);
-    const batch = selArr.slice(0,25).map(s => STOCK_TOKENS[s]);
+    const selArr = [...S.selectedStocks].filter(s => STOCK_TOKENS[s] && !S_WATCHLIST.includes(s));
+    const batch  = selArr.slice(0,20).map(s => STOCK_TOKENS[s]);
     if (batch.length) {
       const r = await fetch(server + '/quote', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1063,13 +1174,14 @@ async function fetchMarketData() {
       if (bankP)  { const v=parseFloat(bankP.putCallRatio||bankP.pcr||0);   updPCR('bank',v);  S.livePCR['BANKNIFTY']=v; }
       if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
     }
-  } catch(e) { /* silent */ }
+  } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
 
   // Update live prices on all signal cards
   updateSignalLivePrices();
 }
 
 function updPCR(key, val) {
+  if (!val || val <= 0) return; // skip zero/null — keep previous value
   const pct = Math.min(95, Math.round(val*60));
   const col = val<0.7?'var(--green)':val>1.0?'var(--red)':'var(--amber)';
   const bar = document.getElementById(`pcr-${key}-bar`);
@@ -1844,7 +1956,11 @@ async function runScan() {
   for (const idx of IDX) {
     if (!S.config.indices.includes(idx.sym)) continue;
     const sig = await generateSignal(idx, true);
-    if (sig) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+    if (sig) {
+      // Dedup: skip if same sym+strike+type already in last 20 signals
+      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
+      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+    }
   }
 
   const stockArr = [...S.selectedStocks];
@@ -1853,7 +1969,10 @@ async function runScan() {
     const obj = FNO_STOCKS.find(s=>s.sym===sym);
     if (!obj) continue;
     const sig = await generateSignal(obj, false);
-    if (sig) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+    if (sig) {
+      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
+      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+    }
   }
 
   S.signals = S.signals.slice(0, 100);
@@ -1931,8 +2050,7 @@ function renderSignals() {
     const priceChg  = (s.livePrice    > 0 && s.entryPrice   > 0) ? (s.livePrice    - s.entryPrice)   : null;
     const pnl       = (premChg !== null) ? Math.round(premChg * s.lot * s.lots) : null;
 
-    // FIX 2: Skip signals already negative P&L (live data confirms bad entry)
-    if (pnl !== null && pnl < 0) return '';
+    // P&L shown in red if negative — signal stays visible (user decides to exit)
 
     // FIX 1: Entry text color — use --text (bright white) for full visibility
     const entryColor = 'var(--text)';
@@ -1981,12 +2099,12 @@ function renderSignals() {
       <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${Math.round(s.target)}</div>
           <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${s.sl}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Math.round(s.sl)}</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
@@ -2032,11 +2150,11 @@ function openDrawer(idStr) {
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--green)">₹${sig.target}</div>
+        <div class="drawer-cell-val" style="color:var(--green)">₹${Math.round(sig.target)}</div>
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--red)">₹${sig.sl}</div>
+        <div class="drawer-cell-val" style="color:var(--red)">₹${Math.round(sig.sl)}</div>
       </div>
     </div>
 
@@ -2177,6 +2295,7 @@ if ('serviceWorker' in navigator) {
 // INIT — Load saved credentials and auto-reconnect
 // ══════════════════════════════════════════════════════════════════
 addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
+renderWatchlistBar();
 
 // Restore signals from last session
 try {
