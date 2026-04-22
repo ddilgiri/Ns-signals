@@ -400,9 +400,9 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">80%</span></label>
+        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">70%</span></label>
         <div class="slider-wrap">
-          <input type="range" min="65" max="92" value="80" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
+          <input type="range" min="60" max="90" value="70" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
         </div>
       </div>
 
@@ -826,7 +826,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:80,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -853,28 +853,139 @@ function goPage(id, el) {
 // WATCHLIST — up to 4 user-configurable symbols
 // ══════════════════════════════════════════════════════════════════
 const WL_ALL = [
-  { sym:'NIFTY',      name:'NIFTY 50',      token:'26000', exchange:'NSE', isIdx:true  },
-  { sym:'FINNIFTY',   name:'FINNIFTY',       token:'26037', exchange:'NSE', isIdx:true  },
-  { sym:'MIDCAP',     name:'MIDCAP NIFTY',   token:'26074', exchange:'NSE', isIdx:true  },
-  { sym:'RELIANCE',   name:'Reliance',        token:'2885',  exchange:'NSE', isIdx:false },
-  { sym:'TCS',        name:'TCS',             token:'11536', exchange:'NSE', isIdx:false },
-  { sym:'HDFCBANK',   name:'HDFC Bank',       token:'1333',  exchange:'NSE', isIdx:false },
-  { sym:'INFY',       name:'Infosys',         token:'1594',  exchange:'NSE', isIdx:false },
-  { sym:'ICICIBANK',  name:'ICICI Bank',      token:'4963',  exchange:'NSE', isIdx:false },
-  { sym:'SBIN',       name:'SBI',             token:'3045',  exchange:'NSE', isIdx:false },
-  { sym:'BAJFINANCE', name:'Bajaj Finance',   token:'317',   exchange:'NSE', isIdx:false },
-  { sym:'KOTAKBANK',  name:'Kotak Bank',      token:'1922',  exchange:'NSE', isIdx:false },
-  { sym:'AXISBANK',   name:'Axis Bank',       token:'5900',  exchange:'NSE', isIdx:false },
-  { sym:'MARUTI',     name:'Maruti',          token:'10999', exchange:'NSE', isIdx:false },
-  { sym:'WIPRO',      name:'Wipro',           token:'3787',  exchange:'NSE', isIdx:false },
-  { sym:'TATAMOTORS', name:'Tata Motors',     token:'3456',  exchange:'NSE', isIdx:false },
-  { sym:'SUNPHARMA',  name:'Sun Pharma',      token:'3351',  exchange:'NSE', isIdx:false },
-  { sym:'TITAN',      name:'Titan',           token:'3506',  exchange:'NSE', isIdx:false },
-  { sym:'CIPLA',      name:'Cipla',           token:'694',   exchange:'NSE', isIdx:false },
-  { sym:'LT',         name:'L&T',             token:'11483', exchange:'NSE', isIdx:false },
-  { sym:'ONGC',       name:'ONGC',            token:'2475',  exchange:'NSE', isIdx:false },
+  // ── Indices ──
+  { sym:'NIFTY',      name:'NIFTY 50',         token:'26000', isIdx:true  },
+  { sym:'FINNIFTY',   name:'FINNIFTY',          token:'26037', isIdx:true  },
+  { sym:'MIDCAP',     name:'MIDCAP NIFTY',      token:'26074', isIdx:true  },
+  { sym:'BANKNIFTY',  name:'BANKNIFTY',         token:'26009', isIdx:true  },
+  // ── NIFTY 50 Stocks ──
+  { sym:'RELIANCE',   name:'Reliance Industries',token:'2885',  isIdx:false },
+  { sym:'TCS',        name:'TCS',               token:'11536', isIdx:false },
+  { sym:'HDFCBANK',   name:'HDFC Bank',         token:'1333',  isIdx:false },
+  { sym:'INFY',       name:'Infosys',           token:'1594',  isIdx:false },
+  { sym:'ICICIBANK',  name:'ICICI Bank',        token:'4963',  isIdx:false },
+  { sym:'HINDUNILVR', name:'Hindustan Unilever',token:'1394',  isIdx:false },
+  { sym:'KOTAKBANK',  name:'Kotak Bank',        token:'1922',  isIdx:false },
+  { sym:'SBIN',       name:'SBI',               token:'3045',  isIdx:false },
+  { sym:'BHARTIARTL', name:'Bharti Airtel',     token:'10604', isIdx:false },
+  { sym:'ITC',        name:'ITC Ltd',           token:'1660',  isIdx:false },
+  { sym:'BAJFINANCE', name:'Bajaj Finance',     token:'317',   isIdx:false },
+  { sym:'LT',         name:'L&T',               token:'11483', isIdx:false },
+  { sym:'ASIANPAINT', name:'Asian Paints',      token:'236',   isIdx:false },
+  { sym:'AXISBANK',   name:'Axis Bank',         token:'5900',  isIdx:false },
+  { sym:'MARUTI',     name:'Maruti Suzuki',     token:'10999', isIdx:false },
+  { sym:'WIPRO',      name:'Wipro',             token:'3787',  isIdx:false },
+  { sym:'HCLTECH',    name:'HCL Technologies',  token:'7229',  isIdx:false },
+  { sym:'SUNPHARMA',  name:'Sun Pharma',        token:'3351',  isIdx:false },
+  { sym:'TITAN',      name:'Titan Company',     token:'3506',  isIdx:false },
+  { sym:'ULTRACEMCO', name:'UltraTech Cement',  token:'11532', isIdx:false },
+  { sym:'NESTLEIND',  name:'Nestle India',      token:'17963', isIdx:false },
+  { sym:'POWERGRID',  name:'Power Grid',        token:'14977', isIdx:false },
+  { sym:'NTPC',       name:'NTPC',              token:'11630', isIdx:false },
+  { sym:'TECHM',      name:'Tech Mahindra',     token:'13538', isIdx:false },
+  { sym:'ONGC',       name:'ONGC',              token:'2475',  isIdx:false },
+  { sym:'TATASTEEL',  name:'Tata Steel',        token:'3499',  isIdx:false },
+  { sym:'TATAMOTORS', name:'Tata Motors',       token:'3456',  isIdx:false },
+  { sym:'JSWSTEEL',   name:'JSW Steel',         token:'11723', isIdx:false },
+  { sym:'M&M',        name:'M&M',               token:'2031',  isIdx:false },
+  { sym:'ADANIENT',   name:'Adani Enterprises', token:'25',    isIdx:false },
+  { sym:'ADANIPORTS', name:'Adani Ports',       token:'15083', isIdx:false },
+  { sym:'COALINDIA',  name:'Coal India',        token:'20374', isIdx:false },
+  { sym:'BAJAJFINSV', name:'Bajaj Finserv',     token:'16675', isIdx:false },
+  { sym:'HDFCLIFE',   name:'HDFC Life',         token:'467',   isIdx:false },
+  { sym:'SBILIFE',    name:'SBI Life',          token:'21808', isIdx:false },
+  { sym:'CIPLA',      name:'Cipla',             token:'694',   isIdx:false },
+  { sym:'DRREDDY',    name:'Dr Reddys',         token:'881',   isIdx:false },
+  { sym:'DIVISLAB',   name:'Divis Labs',        token:'10940', isIdx:false },
+  { sym:'EICHERMOT',  name:'Eicher Motors',     token:'910',   isIdx:false },
+  { sym:'HEROMOTOCO', name:'Hero MotoCorp',     token:'1348',  isIdx:false },
+  { sym:'APOLLOHOSP', name:'Apollo Hospitals',  token:'157',   isIdx:false },
+  { sym:'BPCL',       name:'BPCL',              token:'526',   isIdx:false },
+  { sym:'TATACONSUM', name:'Tata Consumer',     token:'3432',  isIdx:false },
+  { sym:'BRITANNIA',  name:'Britannia',         token:'547',   isIdx:false },
+  { sym:'GRASIM',     name:'Grasim',            token:'1232',  isIdx:false },
+  { sym:'SHRIRAMFIN', name:'Shriram Finance',   token:'4306',  isIdx:false },
+  { sym:'INDUSINDBK', name:'IndusInd Bank',     token:'5258',  isIdx:false },
+  // ── Banks ──
+  { sym:'BANDHANBNK',  name:'Bandhan Bank',     token:'2263',  isIdx:false },
+  { sym:'IDFCFIRSTB',  name:'IDFC First Bank',  token:'11783', isIdx:false },
+  { sym:'RBLBANK',     name:'RBL Bank',         token:'4708',  isIdx:false },
+  { sym:'PNB',         name:'PNB',              token:'2730',  isIdx:false },
+  { sym:'BANKBARODA',  name:'Bank of Baroda',   token:'4668',  isIdx:false },
+  { sym:'FEDERALBNK',  name:'Federal Bank',     token:'1023',  isIdx:false },
+  { sym:'CANBK',       name:'Canara Bank',      token:'10794', isIdx:false },
+  // ── IT ──
+  { sym:'MPHASIS',    name:'Mphasis',           token:'4503',  isIdx:false },
+  { sym:'COFORGE',    name:'Coforge',           token:'11543', isIdx:false },
+  { sym:'LTIM',       name:'LTIMindtree',       token:'17818', isIdx:false },
+  { sym:'PERSISTENT', name:'Persistent Systems',token:'4825',  isIdx:false },
+  { sym:'KPITTECH',   name:'KPIT Technologies', token:'11223', isIdx:false },
+  // ── Auto ──
+  { sym:'BAJAJ-AUTO', name:'Bajaj Auto',        token:'16669', isIdx:false },
+  { sym:'TVSMOTORS',  name:'TVS Motor',         token:'3753',  isIdx:false },
+  { sym:'ASHOKLEY',   name:'Ashok Leyland',     token:'212',   isIdx:false },
+  { sym:'MOTHERSON',  name:'Samvardhana Motherson',token:'4204',isIdx:false },
+  { sym:'BOSCHLTD',   name:'Bosch',             token:'533',   isIdx:false },
+  // ── Pharma ──
+  { sym:'LUPIN',      name:'Lupin',             token:'10440', isIdx:false },
+  { sym:'AUROPHARMA', name:'Aurobindo Pharma',  token:'275',   isIdx:false },
+  { sym:'BIOCON',     name:'Biocon',            token:'2911',  isIdx:false },
+  { sym:'TORNTPHARM', name:'Torrent Pharma',    token:'3518',  isIdx:false },
+  // ── Energy ──
+  { sym:'ADANIGREEN', name:'Adani Green',       token:'236921',isIdx:false },
+  { sym:'IOC',        name:'Indian Oil',        token:'1624',  isIdx:false },
+  { sym:'HPCL',       name:'HPCL',              token:'1406',  isIdx:false },
+  { sym:'GAIL',       name:'GAIL',              token:'1207',  isIdx:false },
+  { sym:'TATAPOWER',  name:'Tata Power',        token:'3426',  isIdx:false },
+  // ── Metal ──
+  { sym:'HINDALCO',   name:'Hindalco',          token:'1363',  isIdx:false },
+  { sym:'VEDL',       name:'Vedanta',           token:'3063',  isIdx:false },
+  { sym:'NMDC',       name:'NMDC',              token:'15332', isIdx:false },
+  // ── Realty ──
+  { sym:'DLF',        name:'DLF',               token:'14732', isIdx:false },
+  { sym:'GODREJPROP', name:'Godrej Properties', token:'17875', isIdx:false },
+  { sym:'PRESTIGE',   name:'Prestige Estates',  token:'8982',  isIdx:false },
+  // ── FMCG ──
+  { sym:'GODREJCP',   name:'Godrej Consumer',   token:'10099', isIdx:false },
+  { sym:'DABUR',      name:'Dabur',             token:'772',   isIdx:false },
+  { sym:'COLPAL',     name:'Colgate',           token:'2955',  isIdx:false },
+  { sym:'MARICO',     name:'Marico',            token:'4067',  isIdx:false },
+  { sym:'VBL',        name:'Varun Beverages',   token:'15459', isIdx:false },
+  // ── NBFC ──
+  { sym:'CHOLAFIN',   name:'Chola Finance',     token:'685',   isIdx:false },
+  { sym:'BAJAJFINSV', name:'Bajaj Finserv',     token:'16675', isIdx:false },
+  { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
+  // ── Cement ──
+  { sym:'ACC',        name:'ACC',               token:'3',     isIdx:false },
+  { sym:'AMBUJACEM',  name:'Ambuja Cement',     token:'1270',  isIdx:false },
+  { sym:'SHREECEM',   name:'Shree Cement',      token:'3103',  isIdx:false },
+  // ── Defence ──
+  { sym:'HAL',        name:'HAL',               token:'2303',  isIdx:false },
+  { sym:'BEL',        name:'Bharat Electronics',token:'383',   isIdx:false },
+  { sym:'BHEL',       name:'BHEL',              token:'438',   isIdx:false },
+  // ── New Age ──
+  { sym:'ZOMATO',     name:'Zomato',            token:'5097',  isIdx:false },
+  { sym:'PAYTM',      name:'Paytm',             token:'10820', isIdx:false },
+  { sym:'NYKAA',      name:'Nykaa',             token:'11287', isIdx:false },
+  { sym:'DELHIVERY',  name:'Delhivery',         token:'17014', isIdx:false },
+  // ── Finance ──
+  { sym:'CDSL',       name:'CDSL',              token:'10604', isIdx:false },
+  { sym:'BSE',        name:'BSE',               token:'543154',isIdx:false },
+  { sym:'MCX',        name:'MCX',               token:'5120',  isIdx:false },
+  { sym:'ANGELONE',   name:'Angel One',         token:'3045',  isIdx:false },
+  // ── Retail ──
+  { sym:'DMART',      name:'DMart',             token:'11543', isIdx:false },
+  { sym:'TRENT',      name:'Trent',             token:'1964',  isIdx:false },
+  // ── Infra ──
+  { sym:'IRB',        name:'IRB Infrastructure',token:'19504', isIdx:false },
+  { sym:'GMRINFRA',   name:'GMR Airports',      token:'13528', isIdx:false },
+  { sym:'CONCOR',     name:'CONCOR',            token:'4344',  isIdx:false },
+  // ── Others ──
+  { sym:'INDIGO',     name:'IndiGo',            token:'11195', isIdx:false },
+  { sym:'IRCTC',      name:'IRCTC',             token:'13611', isIdx:false },
+  { sym:'DIXON',      name:'Dixon Technologies',token:'15157', isIdx:false },
+  { sym:'KAYNES',     name:'Kaynes Technology', token:'17503', isIdx:false },
 ];
-
 // Default watchlist: NIFTY, FINNIFTY, RELIANCE (no BANKNIFTY)
 const WL_DEFAULT = ['NIFTY','FINNIFTY','RELIANCE'];
 let S_WATCHLIST = JSON.parse(localStorage.getItem('watchlist') || 'null') || [...WL_DEFAULT];
@@ -1397,19 +1508,37 @@ setInterval(fetchNewsSentiment, 5 * 60 * 1000);
 // ══════════════════════════════════════════════════════════════════
 
 const ANALYSIS_CACHE = {};
-const ANALYSIS_TTL   = 60000; // 60s per symbol
+const ANALYSIS_TTL   = 30000; // 30s per symbol
 
 const NSE_TOKENS = {
   NIFTY:'26000', BANKNIFTY:'26009', FINNIFTY:'26037', MIDCAP:'26074',
-  RELIANCE:'2885', TCS:'11536', HDFCBANK:'1333', INFY:'1594',
-  ICICIBANK:'4963', SBIN:'3045', BHARTIARTL:'10604', ITC:'1660',
-  BAJFINANCE:'317', LT:'11483', AXISBANK:'5900', MARUTI:'10999',
-  WIPRO:'3787', HCLTECH:'7229', SUNPHARMA:'3351', TATAMOTORS:'3456',
-  TATASTEEL:'3499', NTPC:'11630', ONGC:'2475', COALINDIA:'20374',
-  CIPLA:'694', DRREDDY:'881', KOTAKBANK:'1922', TITAN:'3506',
-  BAJAJFINSV:'16675', HDFCLIFE:'1'
+  RELIANCE:'2885',  TCS:'11536',    HDFCBANK:'1333',  INFY:'1594',
+  ICICIBANK:'4963', HINDUNILVR:'1394', KOTAKBANK:'1922', SBIN:'3045',
+  BHARTIARTL:'10604', ITC:'1660',   BAJFINANCE:'317', LT:'11483',
+  ASIANPAINT:'236', AXISBANK:'5900', MARUTI:'10999',  WIPRO:'3787',
+  HCLTECH:'7229',   SUNPHARMA:'3351', TITAN:'3506',   ULTRACEMCO:'11532',
+  NESTLEIND:'17963', POWERGRID:'14977', NTPC:'11630', TECHM:'13538',
+  ONGC:'2475',      TATASTEEL:'3499', TATAMOTORS:'3456', JSWSTEEL:'11723',
+  'M&M':'2031',     ADANIENT:'25',   ADANIPORTS:'15083', COALINDIA:'20374',
+  BAJAJFINSV:'16675', HDFCLIFE:'467', SBILIFE:'21808', CIPLA:'694',
+  DRREDDY:'881',    DIVISLAB:'10940', EICHERMOT:'910', HEROMOTOCO:'1348',
+  APOLLOHOSP:'157', BPCL:'526',      TATACONSUM:'3432', BRITANNIA:'547',
+  GRASIM:'1232',    INDUSINDBK:'5258', SHRIRAMFIN:'4306',
+  BANDHANBNK:'2263', IDFCFIRSTB:'11783', RBLBANK:'4708',
+  PNB:'2730',       BANKBARODA:'4668', FEDERALBNK:'1023', CANBK:'10794',
+  MPHASIS:'4503',   COFORGE:'11543', LTIM:'17818',    PERSISTENT:'4825',
+  KPITTECH:'11223', 'BAJAJ-AUTO':'16669', TVSMOTORS:'3753', ASHOKLEY:'212',
+  MOTHERSON:'4204', LUPIN:'10440',   AUROPHARMA:'275', BIOCON:'2911',
+  IOC:'1624',       HPCL:'1406',     GAIL:'1207',     TATAPOWER:'3426',
+  HINDALCO:'1363',  VEDL:'3063',     NMDC:'15332',
+  DLF:'14732',      GODREJPROP:'17875', GODREJCP:'10099', DABUR:'772',
+  COLPAL:'2955',    MARICO:'4067',   VBL:'15459',
+  CHOLAFIN:'685',   MUTHOOTFIN:'3596',
+  ACC:'3',          AMBUJACEM:'1270', SHREECEM:'3103',
+  HAL:'2303',       BEL:'383',       BHEL:'438',
+  ZOMATO:'5097',    INDIGO:'11195',  IRCTC:'13611',
+  CONCOR:'4344',    IRB:'19504',     PRESTIGE:'8982',
 };
-
 let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 
 async function fetchInstBias() {
@@ -1964,7 +2093,7 @@ async function runScan() {
   }
 
   const stockArr = [...S.selectedStocks];
-  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 40));
+  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 60));
   for (const sym of batch) {
     const obj = FNO_STOCKS.find(s=>s.sym===sym);
     if (!obj) continue;
