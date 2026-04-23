@@ -457,28 +457,28 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
     <div style="padding:12px 12px 6px;display:flex;gap:6px;flex-wrap:wrap">
       <button class="chip" style="border-color:var(--green);color:var(--green)" onclick="selectAll(true)">All</button>
       <button class="chip" onclick="selectAll(false)">None</button>
-      <button class="chip" onclick="selectGroup('NIFTY50')">NIFTY50</button>
-      <button class="chip" onclick="selectGroup('BANK')">Banks</button>
-      <button class="chip" onclick="selectGroup('IT')">IT</button>
-      <button class="chip" onclick="selectGroup('PHARMA')">Pharma</button>
-      <button class="chip" onclick="selectGroup('AUTO')">Auto</button>
-      <button class="chip" onclick="selectGroup('FMCG')">FMCG</button>
-      <button class="chip" onclick="selectGroup('ENERGY')">Energy</button>
-      <button class="chip" onclick="selectGroup('METAL')">Metal</button>
-      <button class="chip" onclick="selectGroup('REALTY')">Realty</button>
-      <button class="chip" onclick="selectGroup('CEMENT')">Cement</button>
-      <button class="chip" onclick="selectGroup('NBFC')">NBFC</button>
-      <button class="chip" onclick="selectGroup('INSURANCE')">Insurance</button>
-      <button class="chip" onclick="selectGroup('CHEMICALS')">Chemicals</button>
-      <button class="chip" onclick="selectGroup('CAPGOODS')">Cap Goods</button>
-      <button class="chip" onclick="selectGroup('DEFENCE')">Defence</button>
-      <button class="chip" onclick="selectGroup('NEWAGE')">New Age</button>
-      <button class="chip" onclick="selectGroup('INFRA')">Infra</button>
-      <button class="chip" onclick="selectGroup('FINANCE')">Exchanges</button>
-      <button class="chip" onclick="selectGroup('RETAIL')">Retail</button>
-      <button class="chip" onclick="selectGroup('AGRI')">Agri</button>
-      <button class="chip" onclick="selectGroup('TEXTILE')">Textiles</button>
-      <button class="chip" onclick="selectGroup('TRAVEL')">Travel</button>
+      <button class="chip sect-chip" onclick="selectGroup('NIFTY50',this)">NIFTY50</button>
+      <button class="chip sect-chip" onclick="selectGroup('BANK',this)">Banks</button>
+      <button class="chip sect-chip" onclick="selectGroup('IT',this)">IT</button>
+      <button class="chip sect-chip" onclick="selectGroup('PHARMA',this)">Pharma</button>
+      <button class="chip sect-chip" onclick="selectGroup('AUTO',this)">Auto</button>
+      <button class="chip sect-chip" onclick="selectGroup('FMCG',this)">FMCG</button>
+      <button class="chip sect-chip" onclick="selectGroup('ENERGY',this)">Energy</button>
+      <button class="chip sect-chip" onclick="selectGroup('METAL',this)">Metal</button>
+      <button class="chip sect-chip" onclick="selectGroup('REALTY',this)">Realty</button>
+      <button class="chip sect-chip" onclick="selectGroup('CEMENT',this)">Cement</button>
+      <button class="chip sect-chip" onclick="selectGroup('NBFC',this)">NBFC</button>
+      <button class="chip sect-chip" onclick="selectGroup('INSURANCE',this)">Insurance</button>
+      <button class="chip sect-chip" onclick="selectGroup('CHEMICALS',this)">Chemicals</button>
+      <button class="chip sect-chip" onclick="selectGroup('CAPGOODS',this)">Cap Goods</button>
+      <button class="chip sect-chip" onclick="selectGroup('DEFENCE',this)">Defence</button>
+      <button class="chip sect-chip" onclick="selectGroup('NEWAGE',this)">New Age</button>
+      <button class="chip sect-chip" onclick="selectGroup('INFRA',this)">Infra</button>
+      <button class="chip sect-chip" onclick="selectGroup('FINANCE',this)">Exchanges</button>
+      <button class="chip sect-chip" onclick="selectGroup('RETAIL',this)">Retail</button>
+      <button class="chip sect-chip" onclick="selectGroup('AGRI',this)">Agri</button>
+      <button class="chip sect-chip" onclick="selectGroup('TEXTILE',this)">Textiles</button>
+      <button class="chip sect-chip" onclick="selectGroup('TRAVEL',this)">Travel</button>
     </div>
     <input class="field-input" type="search" id="stockSearch" placeholder="🔍 Search stocks..." oninput="filterStockList()" style="width:calc(100% - 24px);margin:0 12px 4px;display:block">
     <div style="font-size:10px;color:var(--text3);padding:4px 12px 6px;font-family:var(--font-mono)" id="stockCount">0 selected</div>
@@ -1091,8 +1091,28 @@ function toggleStock(sym, el) {
 }
 
 function filterStockList() { renderStockList(); }
-function selectAll(v) { FNO_STOCKS.forEach(s => { v ? S.selectedStocks.add(s.sym) : S.selectedStocks.delete(s.sym); }); renderStockList(); }
-function selectGroup(g) { FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.add(s.sym); }); renderStockList(); }
+function selectAll(v) { 
+  FNO_STOCKS.forEach(s => { v ? S.selectedStocks.add(s.sym) : S.selectedStocks.delete(s.sym); }); 
+  // Clear all sector chip highlights
+  document.querySelectorAll('.sect-chip').forEach(c => c.classList.remove('on'));
+  renderStockList(); 
+}
+
+function selectGroup(g, btn) { 
+  // Toggle: if this chip is already ON, deselect all stocks in group and turn off
+  const isOn = btn && btn.classList.contains('on');
+  // Clear all other sector chips first
+  document.querySelectorAll('.sect-chip').forEach(c => c.classList.remove('on'));
+  if (isOn) {
+    // Second click → deselect this group
+    FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.delete(s.sym); });
+  } else {
+    // First click → select all stocks in this group + highlight chip
+    FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.add(s.sym); });
+    if (btn) btn.classList.add('on');
+  }
+  renderStockList(); 
+}
 
 renderStockList();
 
@@ -2182,9 +2202,8 @@ function renderSignals() {
     const setupColor = {'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)'}[s.setupType||'MOMENTUM']||'var(--blue)';
     const biasIcon   = s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
     const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
-    // Stock name lookup
-    const stockObj = FNO_STOCKS.find(f => f.sym === s.sym);
-    const stockName = s.isIndex ? '' : (stockObj ? stockObj.name : s.sym);
+    // Stock name — already stored in signal object when generated
+    const stockName = s.isIndex ? '' : (s.name && s.name !== s.sym ? s.name : (FNO_STOCKS.find(f => f.sym === s.sym)?.name || ''));
     const slHitBanner = slHit ? `<div class="sig-closed-banner">🔴 STOP LOSS HIT — Premium ≤ 90% of SL (₹${s.sl.toFixed(2)})</div>` : '';
     return `
     <div class="sig-card${slHit?' sl-hit':''}" onclick="openDrawer('${s.id}')">
@@ -2193,8 +2212,8 @@ function renderSignals() {
       <div class="sig-r1">
         <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
         <div style="flex:1;min-width:0">
-          <div class="sig-name">${s.sym} ${s.strike}</div>
-          ${stockName?`<div style="font-size:9px;color:var(--text3);font-family:var(--font-sans);margin-top:-3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${stockName}</div>`:''}
+          <div class="sig-name" style="line-height:1.2">${s.sym} <span style="color:var(--text2);font-weight:600">${s.strike}</span></div>
+          ${stockName?`<div style="font-size:9px;color:var(--cyan);font-family:var(--font-sans);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">${stockName}</div>`:''}
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
