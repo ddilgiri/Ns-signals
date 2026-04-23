@@ -1850,13 +1850,13 @@ async function generateSignal(symbolObj, isIndex) {
     slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
   }
   const slPct = S.config.slPct / 100;
-  const sl    = Math.max(1, Math.round(premium * (1 - slPct)));
+  const sl    = Math.max(1, parseFloat((premium * (1 - slPct)).toFixed(2)));
   const riskPts   = premium - sl;
 
   // Enforce RR ≥ 1:2
-  const minTarget = premium + 2 * riskPts;
-  const cfgTarget = Math.round(premium * (1 + S.config.profitPct/100));
-  const target    = Math.max(minTarget, cfgTarget);
+  const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
+  const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
+  const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
 
   if (parseFloat(rr) < 2.0) return null; // hard RR gate
@@ -2228,12 +2228,12 @@ function renderSignals() {
       <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${Math.round(s.target)}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target.toFixed(2)}</div>
           <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Math.round(s.sl)}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${s.sl.toFixed(2)}</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
@@ -2279,11 +2279,11 @@ function openDrawer(idStr) {
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--green)">₹${Math.round(sig.target)}</div>
+        <div class="drawer-cell-val" style="color:var(--green)">₹${sig.target.toFixed(2)}</div>
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--red)">₹${Math.round(sig.sl)}</div>
+        <div class="drawer-cell-val" style="color:var(--red)">₹${sig.sl.toFixed(2)}</div>
       </div>
     </div>
 
@@ -2348,7 +2348,7 @@ function reqNotif() {
 function fireNotif(sig) {
   if (S.notif && Notification.permission === 'granted') {
     new Notification(`⚡ ${sig.sym} ${sig.strike}`, {
-      body: `Buy ₹${sig.premium} → Target ₹${sig.target} · SL ₹${sig.sl} · ${sig.prob}%\n${sig.reason.substring(0,60)}`,
+      body: `Buy ₹${sig.premium} → Target ₹${sig.target.toFixed(2)} · SL ₹${sig.sl.toFixed(2)} · ${sig.prob}%\n${sig.reason.substring(0,60)}`,
       icon: 'icon-192.png',
       badge: 'icon-192.png',
       tag: 'fno-' + sig.sym,
@@ -2356,7 +2356,7 @@ function fireNotif(sig) {
     });
   }
   // In-app toast for signal
-  toast('sig', `⚡ ${sig.sym} ${sig.strike}`, `${sig.type} · ₹${sig.premium} → ₹${sig.target} · SL ₹${sig.sl} · ${sig.prob}%`);
+  toast('sig', `⚡ ${sig.sym} ${sig.strike}`, `${sig.type} · ₹${sig.premium} → ₹${sig.target.toFixed(2)} · SL ₹${sig.sl.toFixed(2)} · ${sig.prob}%`);
 }
 
 // ══════════════════════════════════════════════════════════════════
