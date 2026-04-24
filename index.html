@@ -101,11 +101,18 @@ body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:
 .sig-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin:8px 12px 0;padding:13px 14px;position:relative;overflow:hidden;cursor:pointer;transition:all .15s;active:background:var(--bg4)}
 .sig-card:active{background:var(--bg4)}
 .sig-card.sl-hit{background:#1a0a0f;border-color:#ff3d5a40;opacity:.85}
-.sig-group-head{display:flex;align-items:center;gap:8px;padding:10px 12px 2px;margin-top:4px}
-.sig-group-label{font-size:9px;font-family:var(--font-mono);font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:3px 10px;border-radius:20px}
-.sig-group-label.open{background:var(--green-bg);color:var(--green);border:1px solid #00f5a030}
-.sig-group-label.closed{background:#ff3d5a15;color:var(--red);border:1px solid #ff3d5a30}
-.sig-group-count{font-size:9px;font-family:var(--font-mono);color:var(--text3)}
+/* Open/Closed tab bar */
+.sig-tab-bar{display:flex;gap:8px;padding:10px 12px 0;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.sig-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 10px;border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom:none;background:var(--bg3);font-size:11px;font-family:var(--font-mono);font-weight:700;cursor:pointer;transition:all .15s;color:var(--text3)}
+.sig-tab.active-open{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.sig-tab.active-closed{background:#ff3d5a12;border-color:var(--red);color:var(--red)}
+.sig-tab-badge{font-size:9px;font-weight:800;padding:1px 6px;border-radius:10px;min-width:16px;text-align:center}
+.sig-tab.active-open .sig-tab-badge{background:var(--green);color:#000}
+.sig-tab.active-closed .sig-tab-badge{background:var(--red);color:#fff}
+.sig-tab:not(.active-open):not(.active-closed) .sig-tab-badge{background:var(--bg4);color:var(--text3)}
+/* Stock logo on card */
+.stock-logo{width:32px;height:32px;border-radius:8px;object-fit:contain;background:var(--bg4);border:1px solid var(--border);flex-shrink:0}
+.stock-logo-fallback{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--bg4),var(--bg5));border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:var(--font-mono);font-weight:800;color:var(--cyan);flex-shrink:0;letter-spacing:-.5px}
 .sig-closed-banner{display:flex;align-items:center;gap:6px;background:#ff3d5a12;border:1px solid #ff3d5a30;border-radius:6px;padding:5px 9px;margin-bottom:8px;font-size:10px;font-family:var(--font-mono);color:var(--red)}
 .sig-bar{position:absolute;left:0;top:0;bottom:0;width:3px}
 .sig-bar.ce{background:var(--green)}.sig-bar.pe{background:var(--red)}
@@ -333,6 +340,15 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
       </div>
       <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;white-space:nowrap">🗑 CLEAR</button>
+    </div>
+    <!-- OPEN / CLOSED tab bar -->
+    <div class="sig-tab-bar" id="sigTabBar">
+      <button class="sig-tab active-open" id="tabOpen" onclick="setSigTab('OPEN')">
+        ⚡ OPEN <span class="sig-tab-badge" id="tabOpenCount">0</span>
+      </button>
+      <button class="sig-tab" id="tabClosed" onclick="setSigTab('CLOSED')">
+        🔴 CLOSED <span class="sig-tab-badge" id="tabClosedCount">0</span>
+      </button>
     </div>
     <!-- Signal feed -->
     <div id="sigFeed">
@@ -793,7 +809,7 @@ const FNO_STOCKS = [
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const S = {
-  scanning:false, scanInt:null, signals:[], filter:'ALL',
+  scanning:false, scanInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
   notif:false, connected:false,
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
@@ -2161,6 +2177,98 @@ function setFilt(f, el) {
   renderSignals();
 }
 
+function setSigTab(tab) {
+  S.sigTab = tab;
+  const tabOpen   = document.getElementById('tabOpen');
+  const tabClosed = document.getElementById('tabClosed');
+  tabOpen.className   = 'sig-tab' + (tab === 'OPEN'   ? ' active-open'   : '');
+  tabClosed.className = 'sig-tab' + (tab === 'CLOSED' ? ' active-closed' : '');
+  renderSignals();
+}
+
+function updateSigTabCounts() {
+  let sigs = [...S.signals];
+  if (S.filter === 'INDEX') sigs = sigs.filter(s => s.isIndex);
+  else if (S.filter === 'STOCK') sigs = sigs.filter(s => !s.isIndex);
+  else if (S.filter === 'CE') sigs = sigs.filter(s => s.type === 'CE');
+  else if (S.filter === 'PE') sigs = sigs.filter(s => s.type === 'PE');
+  else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
+  const openCount   = sigs.filter(s => !isSLHit(s)).length;
+  const closedCount = sigs.filter(s =>  isSLHit(s)).length;
+  const oc = document.getElementById('tabOpenCount');
+  const cc = document.getElementById('tabClosedCount');
+  if (oc) oc.textContent = openCount;
+  if (cc) cc.textContent = closedCount;
+}
+
+// Get logo URL for a stock symbol
+function getLogoUrl(sym) {
+  // Map NSE symbols → known brand domains
+  const domainMap = {
+    'RELIANCE':'relianceindustries.com','TCS':'tcs.com','HDFCBANK':'hdfcbank.com',
+    'INFY':'infosys.com','ICICIBANK':'icicibank.com','HINDUNILVR':'hul.co.in',
+    'KOTAKBANK':'kotak.com','SBIN':'sbi.co.in','BHARTIARTL':'airtel.in',
+    'ITC':'itcportal.com','BAJFINANCE':'bajajfinserv.in','LT':'larsentoubro.com',
+    'ASIANPAINT':'asianpaints.com','AXISBANK':'axisbank.com','MARUTI':'marutisuzuki.com',
+    'WIPRO':'wipro.com','HCLTECH':'hcltech.com','SUNPHARMA':'sunpharma.com',
+    'TITAN':'titancompany.in','ULTRACEMCO':'ultratechcement.com','NESTLEIND':'nestle.in',
+    'POWERGRID':'powergridindia.com','NTPC':'ntpc.co.in','TECHM':'techmahindra.com',
+    'ONGC':'ongcindia.com','TATASTEEL':'tatasteel.com','TATAMOTORS':'tatamotors.com',
+    'JSWSTEEL':'jsw.in','M&M':'mahindra.com','ADANIENT':'adani.com',
+    'ADANIPORTS':'adaniports.com','COALINDIA':'coalindia.in','BAJAJFINSV':'bajajfinserv.in',
+    'HDFCLIFE':'hdfclife.com','SBILIFE':'sbilife.co.in','CIPLA':'cipla.com',
+    'DRREDDY':'drreddys.com','DIVISLAB':'divislab.com','EICHERMOT':'eichermotors.com',
+    'HEROMOTOCO':'heromotocorp.com','APOLLOHOSP':'apollohospitals.com','BPCL':'bharatpetroleum.com',
+    'TATACONSUM':'tataconsumer.com','BRITANNIA':'britannia.co.in','GRASIM':'grasim.com',
+    'SHRIRAMFIN':'shriramfinance.in','INDUSINDBK':'indusind.com','BANDHANBNK':'bandhanbank.com',
+    'IDFCFIRSTB':'idfcfirstbank.com','PNB':'pnbindia.in','BANKBARODA':'bankofbaroda.in',
+    'FEDERALBNK':'federalbank.co.in','CANBK':'canarabank.in','UNIONBANK':'unionbankofindia.co.in',
+    'MPHASIS':'mphasis.com','COFORGE':'coforge.com','BAJAJ-AUTO':'bajajauto.com',
+    'TVSMOTORS':'tvsmotor.com','ASHOKLEY':'ashokleyland.com','BOSCHLTD':'bosch.in',
+    'LUPIN':'lupin.com','AUROPHARMA':'aurobindo.com','BIOCON':'biocon.com',
+    'GLENMARK':'glenmarkpharma.com','MAXHEALTH':'maxhealthcare.in','FORTIS':'fortishealthcare.com',
+    'ADANIGREEN':'adanigreenenergy.com','IOC':'iocl.com','HINDPETRO':'hindustanpetroleum.com',
+    'GAIL':'gailonline.com','TATAPOWER':'tatapower.com','SUZLON':'suzlon.com',
+    'HINDALCO':'hindalco.com','VEDL':'vedantalimited.com','NMDC':'nmdc.co.in',
+    'SAIL':'sail.co.in','GODREJCP':'godrejcp.com','DABUR':'dabur.com',
+    'COLPAL':'colgatepalmolive.co.in','MARICO':'marico.com','VBL':'varunbev.com',
+    'JUBLFOOD':'jubilantfoodworks.com','AMBUJACEM':'ambujacement.com',
+    'IDEA':'myvi.in','ZEEL':'zeemedia.in','PVRINOX':'pvrinox.com',
+    'DLF':'dlf.in','GODREJPROP':'godrejproperties.com','OBEROIRLTY':'oberoirealty.com',
+    'CHOLAFIN':'cholamandalam.com','LICHSGFIN':'lichousing.com','MUTHOOTFIN':'muthootfin.com',
+    'ICICIGI':'icicilombard.com','ICICIPRULI':'iciciprulife.com','HDFCAMC':'hdfcfund.com',
+    'LICI':'licindia.in','ABB':'abb.com','HAVELLS':'havells.com',
+    'BEL':'bel-india.in','HAL':'hal-india.in','BHEL':'bhel.com',
+    'ETERNAL':'zomato.com','NYKAA':'nykaa.com','POLICYBZR':'policybazaar.com',
+    'DELHIVERY':'delhivery.com','ANGELONE':'angelbroking.com','MCX':'mcxindia.com',
+    'DMART':'dmartindia.com','TRENT':'trent.in','INDIGO':'goindigo.in',
+    'IRCTC':'irctc.co.in','INDHOTEL':'tajhotels.com','UPL':'upl-ltd.com',
+    'PIDILITIND':'pidilite.com','SRF':'srf.com','IRFC':'irfc.nic.in',
+    'DIXON':'dixoninfo.com','KALYANKJIL':'kalyanjewellers.com','IEX':'iexindia.com',
+    'BDL':'bdl-india.in','HDFCBANK':'hdfcbank.com','JIOFIN':'jio.com',
+    'AUBANK':'aubank.in','LTM':'ltimindtree.com','KPITTECH':'kpit.com',
+    'OFSS':'oracle.com','MOTHERSON':'motherson.com','BHARATFORG':'bharatforge.com',
+    'HYUNDAI':'hyundai.com','ALKEM':'alkemlab.com','MANKIND':'mankindpharma.com',
+    'LAURUSLABS':'lauruslabs.com','ADANIENSOL':'adaniports.com','ADANIPOWER':'adanipower.com',
+    'NHPC':'nhpcindia.com','IREDA':'iredaltd.com','JSWENERGY':'jsw.in',
+    'HINDZINC':'hzlindia.com','JINDALSTEL':'jspl.com','NATIONALUM':'nalcoindia.co.in',
+    'INDUSTOWER':'industowers.com','GMRAIRPORT':'gmrairports.com','CONCOR':'concorindia.com',
+    'LODHA':'lodhagroup.com','NAUKRI':'infoedge.in','BSE':'bseindia.com',
+    'CDSL':'cdslindia.com','MOTILALOFS':'motilaloswal.com','LTF':'ltfs.com',
+    'MFSL':'maxlifeinsurance.com','CGPOWER':'cgpower.com','AMBER':'ambergroup.in',
+    'KAYNES':'kaynes.in','KEI':'kei-ind.com','BLUESTARCO':'bluestarindia.com',
+    'CROMPTON':'crompton.co.in','NUVAMA':'nuvama.com','360ONE':'360.one',
+    'KFINTECH':'kfintech.com','CAMS':'camsonline.com','HUDCO':'hudco.org',
+    'NBCC':'nbccindia.com','COROMANDEL':'coromandel.net','EXIDEIND':'exideindustries.com',
+    'BANKINDIA':'bankofindia.co.in','INDIANB':'indianbank.in','INOXWIND':'inoxwind.com',
+    'ASTRAL':'astralpipes.com','BAJAJHLDNG':'bajaj.com','HINDPETRO':'hindustanpetroleum.com',
+    'NAM-INDIA':'nipponindiaim.com','BAJAJ-AUTO':'bajajauto.com','FORCEMOT':'forcemotors.com',
+  };
+  const domain = domainMap[sym];
+  if (!domain) return null;
+  return 'https://logo.clearbit.com/' + domain;
+}
+
 // Helper: check if signal is SL-hit (livePremium ≤ sl × 0.90)
 function isSLHit(sig) {
   const livePrem = (sig.livePremium && sig.livePremium > 0) ? sig.livePremium : 0;
@@ -2177,8 +2285,19 @@ function renderSignals() {
   else if (S.filter === 'PE') sigs = sigs.filter(s => s.type === 'PE');
   else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
 
+  // Update tab counts first
+  updateSigTabCounts();
+
+  // Filter by active tab (OPEN / CLOSED)
+  const openSigsAll   = sigs.filter(s => !isSLHit(s));
+  const closedSigsAll = sigs.filter(s =>  isSLHit(s));
+  sigs = S.sigTab === 'CLOSED' ? closedSigsAll : openSigsAll;
+
   if (!sigs.length) {
-    feed.innerHTML = `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning for LIVE signals...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Only real Angel One NFO prices shown<br>Signals appear during market hours<br><b style="color:var(--amber)">9:15 AM – 3:30 PM · Mon–Fri</b>':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
+    const emptyMsg = S.sigTab === 'CLOSED'
+      ? '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No Closed Signals</div><div class="empty-sub">No signals have hit stop loss yet.<br>All active signals are in the OPEN tab.</div></div>'
+      : `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning for LIVE signals...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Only real Angel One NFO prices shown<br>Signals appear during market hours<br><b style="color:var(--amber)">9:15 AM – 3:30 PM · Mon–Fri</b>':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
+    feed.innerHTML = emptyMsg;
     return;
   }
 
@@ -2204,6 +2323,17 @@ function renderSignals() {
     const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
     // Stock name — already stored in signal object when generated
     const stockName = s.isIndex ? '' : (s.name && s.name !== s.sym ? s.name : (FNO_STOCKS.find(f => f.sym === s.sym)?.name || ''));
+    // Stock logo
+    const logoUrl = s.isIndex ? null : getLogoUrl(s.sym);
+    const initials = s.sym.replace(/[^A-Z]/g,'').substring(0,3);
+    const logoHtml = logoUrl
+      ? `<img class="stock-logo" src="${logoUrl}" alt="${s.sym}"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+           onload="this.style.display='block'"
+         /><div class="stock-logo-fallback" style="display:none">${initials}</div>`
+      : s.isIndex
+        ? `<div class="stock-logo-fallback" style="background:linear-gradient(135deg,#0d2240,#1a3a5c);color:var(--blue)">${initials}</div>`
+        : `<div class="stock-logo-fallback">${initials}</div>`;
     const slHitBanner = slHit ? `<div class="sig-closed-banner">🔴 STOP LOSS HIT — Premium ≤ 90% of SL (₹${s.sl.toFixed(2)})</div>` : '';
     return `
     <div class="sig-card${slHit?' sl-hit':''}" onclick="openDrawer('${s.id}')">
@@ -2211,7 +2341,8 @@ function renderSignals() {
       ${slHitBanner}
       <div class="sig-r1">
         <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
-        <div style="flex:1;min-width:0">
+        ${logoHtml}
+        <div style="flex:1;min-width:0;overflow:hidden">
           <div class="sig-name" style="line-height:1.2">${s.sym} <span style="color:var(--text2);font-weight:600">${s.strike}</span></div>
           ${stockName?`<div style="font-size:9px;color:var(--cyan);font-family:var(--font-sans);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">${stockName}</div>`:''}
         </div>
@@ -2265,29 +2396,8 @@ function renderSignals() {
     </div>`;
   };
 
-  // Split into OPEN (not SL-hit) and CLOSED (SL-hit)
-  const openSigs   = sigs.filter(s => !isSLHit(s));
-  const closedSigs = sigs.filter(s => isSLHit(s));
-
-  let html = '';
-
-  if (openSigs.length) {
-    html += `<div class="sig-group-head">
-      <span class="sig-group-label open">⚡ OPEN</span>
-      <span class="sig-group-count">${openSigs.length} signal${openSigs.length!==1?'s':''} running</span>
-    </div>`;
-    html += openSigs.map(renderCard).join('');
-  }
-
-  if (closedSigs.length) {
-    html += `<div class="sig-group-head" style="margin-top:${openSigs.length?'16px':'4px'}">
-      <span class="sig-group-label closed">🔴 CLOSED</span>
-      <span class="sig-group-count">${closedSigs.length} SL hit · 10% below stop loss</span>
-    </div>`;
-    html += closedSigs.map(renderCard).join('');
-  }
-
-  feed.innerHTML = html;
+  // Render only the signals for the active tab (already filtered above)
+  feed.innerHTML = sigs.map(renderCard).join('');
 }
 // ══════════════════════════════════════════════════════════════════
 // SIGNAL DETAIL DRAWER
@@ -2392,6 +2502,8 @@ function fireNotif(sig) {
   }
   // In-app toast for signal
   toast('sig', `⚡ ${sig.sym} ${sig.strike}`, `${sig.type} · ₹${sig.premium} → ₹${sig.target.toFixed(2)} · SL ₹${sig.sl.toFixed(2)} · ${sig.prob}%`);
+  // Auto-switch to OPEN tab when new signal fires
+  if (S.sigTab !== 'OPEN') setSigTab('OPEN');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2476,6 +2588,8 @@ function clearSignals() {
   S.signals = [];
   localStorage.removeItem('fno_signals');
   document.getElementById('mSigs').textContent = '0';
+  S.sigTab = 'OPEN';
+  setSigTab('OPEN');
   renderSignals();
   S.newSigCount = 0;
   document.getElementById('sigBadge').classList.remove('show');
