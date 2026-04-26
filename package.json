@@ -1,17 +1,12 @@
 {
   "name": "nse-fno-signal-engine",
-  "version": "5.0.0",
-  "description": "NSE F&O Signal Engine v5 \u2014 MACD \u00b7 Supertrend \u00b7 ATR \u00b7 Real IV \u00b7 Trailing SL \u00b7 Journal",
+  "version": "2.0.0",
+  "description": "NSE F&O Signal Engine - Angel One SmartAPI Proxy",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [
-    "nse",
-    "options",
-    "signals",
-    "angel-one"
-  ],
+  "keywords": ["nse", "options", "signals", "angel-one"],
   "author": "",
   "license": "ISC",
   "dependencies": {
