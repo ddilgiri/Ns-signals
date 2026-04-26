@@ -252,51 +252,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 .server-row{display:flex;gap:8px;margin-bottom:14px}
 .server-row .field-input{flex:1;margin-bottom:0}
 .server-test{padding:12px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap}
-</style>
-</head>
-<body>
-
-<!-- TOASTS -->
-<div id="toasts"></div>
-
-<!-- INSTALL BANNER -->
-<div id="installBanner">
-  <div class="ib-icon">⚡</div>
-  <div class="ib-text" style="flex:1">
-    <h3>Install as App</h3>
-    <p>Add to home screen for full-screen experience</p>
-  </div>
-  <div class="ib-btns">
-    <button class="ib-btn yes" id="installBtn">Install</button>
-    <button class="ib-btn no" onclick="document.getElementById('installBanner').classList.remove('show')">×</button>
-  </div>
-</div>
-
-<!-- SIGNAL DETAIL DRAWER -->
-<div id="drawer">
-  <div class="drawer-overlay" onclick="closeDrawer()"></div>
-  <div class="drawer-sheet" id="drawerSheet">
-    <div class="drawer-handle"></div>
-    <div id="drawerContent"></div>
-  </div>
-</div>
-
-<!-- TOP BAR -->
-<div class="topbar">
-  <div class="topbar-logo">⚡</div>
-  <div class="topbar-title">
-    <h1>NSE F&O SIGNALS</h1>
-    <p id="topStatus">ANGEL ONE · DISCONNECTED</p>
-  </div>
-  <div class="topbar-right">
-    <div class="status-pill">
-      <div class="dot" id="mDot"></div>
-      <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
-    </div>
-    <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
-  </div>
-</div>
-
 
 /* ── v5: TRAILING SL INDICATOR ── */
 .trail-badge{font-size:8px;background:var(--cyan);color:#000;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:4px}
