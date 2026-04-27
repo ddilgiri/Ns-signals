@@ -377,7 +377,7 @@ input:checked+.toggle-slider:before{transform:translateX(20px);background:#000}
   <div id="watchlistModal" style="display:none;position:fixed;inset:0;z-index:400;background:#000a">
     <div style="position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:16px;max-height:80vh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Edit Watchlist (up to 8)</span>
+        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Edit Watchlist (up to 4)</span>
         <button onclick="closeWatchlistEdit()" style="font-size:18px;background:transparent;border:none;color:var(--text3);cursor:pointer">×</button>
       </div>
       <input id="wlSearch" type="search" placeholder="Search symbol..." oninput="renderWLPicker()"
@@ -1015,7 +1015,7 @@ function renderWLPicker(){
   const filtered=WL_ALL.filter(w=>!q||w.sym.toLowerCase().includes(q)||w.name.toLowerCase().includes(q));
   document.getElementById('wlPicker').innerHTML=filtered.map(w=>{
     const sel=S_WATCHLIST.includes(w.sym);
-    const disabled=!sel&&S_WATCHLIST.length>=8;
+    const disabled=!sel&&S_WATCHLIST.length>=4;
     return `<button onclick="toggleWL('${w.sym}')" style="padding:10px 12px;border-radius:8px;border:1px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-bg)':'var(--bg3)'};color:${sel?'var(--green)':disabled?'var(--text3)':'var(--text2)'};text-align:left;cursor:${disabled?'not-allowed':'pointer'};font-family:var(--font-mono)">
       <div style="font-size:12px;font-weight:700">${w.sym}</div>
       <div style="font-size:9px;opacity:.7">${w.name.length>16?w.name.slice(0,16)+'…':w.name}</div>
@@ -1025,7 +1025,7 @@ function renderWLPicker(){
 function toggleWL(sym){
   const i=S_WATCHLIST.indexOf(sym);
   if(i>=0) S_WATCHLIST.splice(i,1);
-  else if(S_WATCHLIST.length<8) S_WATCHLIST.push(sym);
+  else if(S_WATCHLIST.length<4) S_WATCHLIST.push(sym);
   renderWLPicker();
 }
 
@@ -1136,13 +1136,11 @@ function toggleSector(key){
   if(allSel)ss.forEach(s=>S.selectedStocks.delete(s.sym));
   else ss.forEach(s=>S.selectedStocks.add(s.sym));
   renderStockList();
-  try{localStorage.setItem('selectedStocks',JSON.stringify([...S.selectedStocks]));}catch(e){}
 }
 function toggleStock(sym){
   if(S.selectedStocks.has(sym))S.selectedStocks.delete(sym);
   else S.selectedStocks.add(sym);
   document.getElementById('stockCount').textContent=S.selectedStocks.size+' of '+FNO_STOCKS.length+' selected';
-  try{localStorage.setItem('selectedStocks',JSON.stringify([...S.selectedStocks]));}catch(e){}
 }
 function filterStockList(){renderStockList();}
 function selectAll(v){
@@ -1150,7 +1148,6 @@ function selectAll(v){
   else S.selectedStocks.clear();
   document.querySelectorAll('.sect-chip').forEach(c=>c.classList.remove('on'));
   renderStockList();
-  try{localStorage.setItem('selectedStocks',JSON.stringify([...S.selectedStocks]));}catch(e){}
 }
 function selectGroup(g,btn){
   const isOn=btn?.classList.contains('on');
@@ -1158,7 +1155,6 @@ function selectGroup(g,btn){
   if(isOn){btn?.classList.remove('on');FNO_STOCKS.filter(s=>s.grp?.includes(g)).forEach(s=>S.selectedStocks.delete(s.sym));}
   else{btn?.classList.add('on');FNO_STOCKS.filter(s=>s.grp?.includes(g)).forEach(s=>S.selectedStocks.add(s.sym));}
   renderStockList();
-  try{localStorage.setItem('selectedStocks',JSON.stringify([...S.selectedStocks]));}catch(e){}
 }
 
 
@@ -1905,23 +1901,8 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
 addLog('NSE F&O Signal Engine v5 — MACD · Supertrend · ATR · Trailing SL · Journal','ok');
 // v5: Default-select ALL stocks — runs after full parse
 function initStockSelection(){
-  const saved=localStorage.getItem('selectedStocks');
-  if(!saved){
-    // First time: select everything
-    FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
-    try{localStorage.setItem('selectedStocks',JSON.stringify(FNO_STOCKS.map(s=>s.sym)));}catch(e){}
-  } else {
-    try{
-      const ss=JSON.parse(saved);
-      if(!Array.isArray(ss)||ss.length===0){
-        // Saved but empty — reset to all selected
-        FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
-        try{localStorage.setItem('selectedStocks',JSON.stringify(FNO_STOCKS.map(s=>s.sym)));}catch(e){}
-      } else {
-        ss.forEach(s=>S.selectedStocks.add(s));
-      }
-    }catch(e){FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));}
-  }
+  // Always select all stocks on load — no user action required
+  FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
 }
 initStockSelection();
 renderWatchlistBar();
