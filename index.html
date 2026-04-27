@@ -1541,6 +1541,31 @@ function showSessionSummary(){
   document.getElementById('sessionSummary').style.display='block';
 }
 
+function updateParamGrid(){
+  const pg=document.getElementById('paramGrid');
+  if(!pg)return;
+  const c=S.config;
+  const typeLabel={'BOTH':'CE + PE','CE':'Calls Only','PE':'Puts Only'}[c.type]||c.type;
+  const expiryLabel={'WEEKLY':'Current Weekly','NEXT':'Next Weekly','MONTHLY':'Monthly'}[c.expiry]||c.expiry;
+  const rows=[
+    {label:'Capital',      val:'₹'+c.capital.toLocaleString('en-IN'),          color:'var(--cyan)'},
+    {label:'Max Premium',  val:'₹'+c.maxPrem.toLocaleString('en-IN'),           color:'var(--text)'},
+    {label:'Profit Target',val:c.profitPct+'%',                                  color:'var(--green)'},
+    {label:'Stop Loss',    val:c.slPct+'%',                                       color:'var(--red)'},
+    {label:'Min Prob',     val:c.minProb+'%',                                     color:'var(--amber)'},
+    {label:'Scan Interval',val:c.intervalSec+'s',                                 color:'var(--text2)'},
+    {label:'Signal Type',  val:typeLabel,                                          color:'var(--blue)'},
+    {label:'Expiry',       val:expiryLabel,                                        color:'var(--purple)'},
+    {label:'Indices',      val:c.indices.join(', ')||'None',                       color:'var(--cyan)'},
+    {label:'Stocks Active',val:S.selectedStocks.size+' stocks',                   color:'var(--green)'},
+  ];
+  pg.innerHTML=rows.map(r=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--text3)">${r.label}</span>
+      <span style="font-size:12px;font-family:var(--font-mono);font-weight:700;color:${r.color}">${r.val}</span>
+    </div>`).join('');
+}
+
 function saveConfig(){
   S.config.capital=parseInt(document.getElementById('cfgCap').value)||30000;
   S.config.profitPct=parseInt(document.getElementById('cfgProfit').value)||30;
@@ -1553,6 +1578,7 @@ function saveConfig(){
   S.config.indices=['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i)=>document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked);
   const cap=S.config.capital;
   document.getElementById('mCap').textContent='₹'+(cap>=100000?(cap/100000).toFixed(1)+'L':(cap/1000).toFixed(0)+'K');
+  updateParamGrid();
   toast('ok','✅ Config Saved',`Capital: ₹${cap.toLocaleString('en-IN')}`);
 }
 
@@ -1907,6 +1933,7 @@ function initStockSelection(){
 initStockSelection();
 renderWatchlistBar();
 renderStockList();
+updateParamGrid();
 try{const saved=localStorage.getItem('fno_signals');if(saved){S.signals=JSON.parse(saved);document.getElementById('mSigs').textContent=S.signals.length;renderSignals();addLog(`Restored ${S.signals.length} signals`,'ok');}}catch(e){}
 try{const js=localStorage.getItem('fno_journal');if(js){S.journal=JSON.parse(js);addLog(`Journal: ${S.journal.length} entries`,'');}}catch(e){}
 
