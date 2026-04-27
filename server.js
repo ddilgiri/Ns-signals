@@ -703,9 +703,11 @@ app.post('/option-ltp', async (req, res) => {
     const INDEX_SYMS_LTP = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
     const isIndexSym = INDEX_SYMS_LTP.includes(sym);
 
-    const futureAll = sortedMatches.filter(i => new Date(i.expiry) >= now);
+    // Date-only comparison to keep expiry-day contracts (Angel stores expiry as midnight UTC)
+    const todayOnly = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const futureAll = sortedMatches.filter(i => new Date(i.expiry) >= todayOnly);
 
-    // Group by month, pick last of each (= monthly expiry)
+    // Group by calendar month, keep last expiry of each month (= true monthly contract)
     const getMonthlyList = (list) => {
       const byMonth = {};
       list.forEach(i => {
@@ -713,30 +715,34 @@ app.post('/option-ltp', async (req, res) => {
         const key = d.getFullYear() + '-' + String(d.getMonth()).padStart(2,'0');
         if (!byMonth[key] || d > new Date(byMonth[key].expiry)) byMonth[key] = i;
       });
-      return Object.values(byMonth).sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
+      return Object.values(byMonth).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
     };
 
     let chosen;
     if (!isIndexSym) {
-      // STOCKS: monthly contracts only — CURRENT or NEXT month
+      // STOCKS: only monthly contracts on NSE
       const monthlyList = getMonthlyList(futureAll);
-      chosen = expiry === 'NEXT'
-        ? (monthlyList[1] || monthlyList[0] || sortedMatches[0])
-        : (monthlyList[0] || sortedMatches[0]);
+      if (expiry === 'NEXT') {
+        // Skip current month, return next month's expiry
+        chosen = monthlyList[1] || monthlyList[0] || sortedMatches[0];
+      } else {
+        // CURRENT: nearest upcoming monthly expiry
+        chosen = monthlyList[0] || sortedMatches[0];
+      }
     } else if (expiry === 'MONTHLY') {
       const monthlyList = getMonthlyList(futureAll);
       chosen = monthlyList[0] || sortedMatches[0];
     } else {
-      // W1 W2 W3 W4 — Nth weekly contract for index
-      const wkIdx = { W1:0, W2:1, W3:2, W4:3 }[expiry] ?? 0;
-      chosen = futureAll[wkIdx] || futureAll[futureAll.length-1] || sortedMatches[0];
+      // W1/W2/W3/W4 — Nth weekly contract for index
+      const wkIdx = { W1: 0, W2: 1, W3: 2, W4: 3 }[expiry] ?? 0;
+      chosen = futureAll[wkIdx] || futureAll[futureAll.length - 1] || sortedMatches[0];
     }
 
     if (!chosen) {
       return res.json({ status: false, message: `No valid expiry found for ${sym} ${strike} ${optType}` });
     }
 
-    log(`Option token: ${chosen.symbol} (token ${chosen.token})`, 'INFO');
+    log(`Option token: ${chosen.symbol} expiry=${chosen.expiry} (requested=${expiry}, isIndex=${isIndexSym})`, 'INFO');
 
     // ── Step 3: Fetch live LTP for this option token via NFO quote ──
     const quoteResp = await axios.post(
@@ -800,8 +806,11 @@ app.post('/option-chain', async (req, res) => {
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
-    // Compute ATM strike
-    const step = spot > 10000 ? 500 : spot > 5000 ? 200 : spot > 2000 ? 100 : spot > 500 ? 50 : 10;
+    // Compute ATM strike — use correct NSE strike intervals per underlying
+    const STRIKE_STEP = {
+      NIFTY: 50, BANKNIFTY: 100, FINNIFTY: 50, MIDCPNIFTY: 25, SENSEX: 100,
+    };
+    const step = STRIKE_STEP[sym] || (spot > 50000 ? 100 : spot > 20000 ? 50 : spot > 5000 ? 50 : spot > 2000 ? 50 : spot > 500 ? 10 : 5);
     const atmStrike = Math.round(spot / step) * step;
 
     // Build list of strikes to query (ATM ± depth)
@@ -823,39 +832,49 @@ app.post('/option-chain', async (req, res) => {
     const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
     const isIndex = INDEX_SYMS.includes(sym);
 
-    // Group sorted future expiries by calendar month, pick last of each month
+    // BUG FIX: Compare date-only (strip time) so expiry-day contracts aren't filtered out.
+    // Angel stores expiry as 'YYYY-MM-DD' which parses as midnight UTC.
+    // At IST market open (03:45 UTC) midnight UTC < now → wrongly excluded.
+    const todayDateOnly = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+
+    // Group a sorted list by calendar month-year, keeping the LAST expiry of each month.
+    // That last expiry = the true monthly settlement date (last Thu of month).
     const getMonthlyExpiries = (sorted) => {
       const byMonth = {};
       sorted.forEach(i => {
         const key = i._exp.getFullYear() + '-' + String(i._exp.getMonth()).padStart(2,'0');
         if (!byMonth[key] || i._exp > byMonth[key]._exp) byMonth[key] = i;
       });
-      return Object.values(byMonth).sort((a,b) => a._exp - b._exp);
+      return Object.values(byMonth).sort((a, b) => a._exp - b._exp);
     };
 
-    // Pick best expiry based on symbol type + requested expiry config
-    // expiry values: W1 W2 W3 W4 MONTHLY (indices) | CURRENT NEXT (stocks)
+    // Pick best expiry based on symbol type + requested expiry config.
+    // expiry values for indices : W1 | W2 | W3 | W4 | MONTHLY
+    // expiry values for stocks  : CURRENT | NEXT
     const pickExpiry = (optList) => {
       const sorted = optList
         .map(i => ({ ...i, _exp: new Date(i.expiry) }))
-        .filter(i => i._exp >= now)
+        .filter(i => i._exp >= todayDateOnly)   // date-only comparison — keeps expiry-day contracts
         .sort((a, b) => a._exp - b._exp);
       if (!sorted.length) return null;
 
       if (!isIndex) {
-        // STOCKS — monthly contracts only (CURRENT or NEXT month)
+        // STOCKS — only monthly contracts exist on NSE
         const monthlyList = getMonthlyExpiries(sorted);
-        if (expiry === 'NEXT') return monthlyList[1] || monthlyList[0] || sorted[0];
-        return monthlyList[0] || sorted[0]; // CURRENT month
-      }
-
-      // INDICES — 4 weeklies + monthly
-      if (expiry === 'MONTHLY') {
-        const monthlyList = getMonthlyExpiries(sorted);
+        if (expiry === 'NEXT') {
+          // NEXT month: skip current month's expiry, return following month's
+          return monthlyList[1] || monthlyList[0] || sorted[0];
+        }
+        // CURRENT: nearest upcoming monthly expiry
         return monthlyList[0] || sorted[0];
       }
-      // W1 W2 W3 W4 — pick the Nth weekly contract
-      const wkIdx = { W1:0, W2:1, W3:2, W4:3 }[expiry] ?? 0;
+
+      // INDICES — weekly + monthly contracts
+      if (expiry === 'MONTHLY') {
+        return getMonthlyExpiries(sorted)[0] || sorted[0];
+      }
+      // W1/W2/W3/W4 — pick the Nth contract in the sorted weekly list
+      const wkIdx = { W1: 0, W2: 1, W3: 2, W4: 3 }[expiry] ?? 0;
       return sorted[wkIdx] || sorted[sorted.length - 1];
     };
 
@@ -915,8 +934,27 @@ app.post('/option-chain', async (req, res) => {
       };
     });
 
-    log(`✅ Option chain for ${sym}: ${result.length} strikes fetched`, 'OK');
-    return res.json({ status: true, symbol: sym, spotPrice: spot, atmStrike, strikes: result });
+    // Determine the actual expiry date being used (from first ATM strike CE or PE instrument)
+    const atmEntry = strikeMap[atmStrike];
+    const expiryDateUsed = (() => {
+      // Find any instrument chosen for ATM to get its real expiry date
+      for (const strike of strikeList) {
+        const entry = strikeMap[strike];
+        if (entry?.CE_sym || entry?.PE_sym) {
+          // Re-pick to get the full instrument with expiry date
+          const sampleList = allOptions.filter(i =>
+            parseFloat(i.strike) === strike * 100 &&
+            i.symbol && (i.symbol.toUpperCase().endsWith('CE') || i.symbol.toUpperCase().endsWith('PE'))
+          );
+          const picked = pickExpiry(sampleList);
+          if (picked?.expiry) return picked.expiry;
+        }
+      }
+      return null;
+    })();
+
+    log(`✅ Option chain for ${sym} [expiry=${expiry}] expiryDate=${expiryDateUsed}: ${result.length} strikes, using contracts up to ${isIndex ? expiry : (expiry==='NEXT'?'next month':'current month')}`, 'OK');
+    return res.json({ status: true, symbol: sym, spotPrice: spot, atmStrike, expiryDate: expiryDateUsed, strikes: result });
 
   } catch (error) {
     const msg = error.response?.data?.message || error.message;

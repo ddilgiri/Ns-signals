@@ -27,6 +27,35 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
+
+/* ── LIGHT THEME ── */
+html.light{
+  --bg:#f0f4fa;--bg2:#e4eaf5;--bg3:#ffffff;--bg4:#edf1fa;--bg5:#dde4f0;
+  --border:#c8d4e8;--border2:#a8bcd8;--border3:#8aaac8;
+  --text:#0d1e38;--text2:#3a5580;--text3:#7a9cc0;--text4:#b0c4de;
+  --green:#00916e;--green2:#00c47d;--green-bg:#00916e12;
+  --red:#d42040;--red2:#b01830;--red-bg:#d4204012;
+  --amber:#c07800;--amber-bg:#c0780012;
+  --blue:#1a6fd4;--cyan:#0891b2;--purple:#6d3fd6;
+}
+html.light body{background:var(--bg)}
+html.light .topbar{background:var(--bg2);border-color:var(--border)}
+html.light .nav-bar{background:var(--bg2);border-color:var(--border)}
+html.light .sig-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+html.light .stock-logo-fallback{background:linear-gradient(135deg,var(--bg4),var(--bg5))}
+html.light input,html.light select,html.light textarea{background:var(--bg3)!important;color:var(--text)!important;border-color:var(--border)!important}
+html.light .chip{background:var(--bg3);color:var(--text2)}
+html.light .chip.on{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+html.light .field-input{background:var(--bg3)!important}
+html.light .drawer{background:var(--bg2)!important}
+html.light .prob-bar{background:var(--bg4)}
+html.light .log-entry{background:var(--bg3);border-color:var(--border)}
+html.light .sig-tab{background:var(--bg3)}
+html.light .page{background:var(--bg)!important}
+
+/* Theme toggle button */
+.theme-toggle{width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;flex-shrink:0}
+.theme-toggle:active{transform:scale(.9)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
@@ -293,6 +322,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="dot" id="mDot"></div>
       <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
     </div>
+    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
     <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
   </div>
 </div>
@@ -1063,6 +1093,33 @@ function toggleWL(sym) {
 // ══════════════════════════════════════════════════════════════════
 // MARKET CLOCK
 // ══════════════════════════════════════════════════════════════════
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+  // Update meta theme-color for status bar
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = isLight ? '#e4eaf5' : '#080c14';
+  try { localStorage.setItem('fno_theme', isLight ? 'light' : 'dark'); } catch(e) {}
+}
+// Init theme from saved preference
+(function initTheme() {
+  let saved;
+  try { saved = localStorage.getItem('fno_theme'); } catch(e) {}
+  const preferLight = saved ? saved === 'light' : window.matchMedia('(prefers-color-scheme: light)').matches;
+  if (preferLight) {
+    document.documentElement.classList.add('light');
+    // Set icon after DOM ready
+    window.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('themeBtn');
+      if (btn) btn.textContent = '☀️';
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = '#e4eaf5';
+    });
+  }
+})();
+
 function tickClock() {
   const { nseOpen } = getMarketStatus();
   document.getElementById('mDot').className = 'dot' + (nseOpen ? ' live' : '');
@@ -1756,7 +1813,12 @@ async function generateSignal(symbolObj, isIndex) {
   if (!liveP || liveP <= 0) return null; // no live price → skip entirely
 
   const baseP = liveP;
-  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+  // Correct NSE strike intervals per underlying symbol
+  const STRIKE_STEP = { NIFTY:50, BANKNIFTY:100, FINNIFTY:50, MIDCAP:25, MIDCPNIFTY:25 };
+  const step = STRIKE_STEP[symbolObj.sym] || (
+    baseP > 50000 ? 100 : baseP > 20000 ? 50 : baseP > 5000 ? 50 :
+    baseP > 2000 ? 50 : baseP > 500 ? 10 : 5
+  );
 
   // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
   let analysis = null;
@@ -1802,40 +1864,39 @@ async function generateSignal(symbolObj, isIndex) {
     relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
-  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
+  // ── STEP 6: DERIVATIVES ──
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  // OI delta and IV rank: still estimated (Angel One doesn't provide historical OI via free SmartAPI)
-  // but we mark them as null-possible to avoid fabrication in scoring
-  const oiDelta   = Math.random() * 0.55;   // from OI gainers if available, else estimated
-  const ivRank    = 8 + Math.random() * 32; // from option chain IV surface if available
-  const daysToExp = 2 + Math.floor(Math.random() * 5);
+  const oiDelta = Math.random() * 0.55;
+  const ivRank  = 8 + Math.random() * 32;
 
   // ── STEP 7: NEWS ──
   const newsScore = S_NEWS?.sentimentScore ?? null;
   const geoRisk   = S_NEWS?.geoRisk ?? 0;
 
-  // ── STEP 8: RUN RA PIPELINE ──
-  const ra = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
-    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
-    orbConfirm, daysToExpiry: daysToExp,
-    pdhBreak, pdlBreak, atStructure, relStrength,
-    pdh, pdl,
-  });
-
-  if (ra.grade === 'REJECT') return null;
-  if (ra.prob < S.config.minProb) return null;
-
-  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
+  // ── STEP 8: OPTION CHAIN — fetch first to get real expiry date ──
   const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
+  let realExpiryDate = null; // actual expiry date string from server e.g. '2026-05-28'
+  let daysToExp = 5; // default safe value before we know real expiry
 
   if (S.connected) {
-    // Indices use idxExpiry (W1/W2/W3/W4/MONTHLY); stocks always monthly (CURRENT or NEXT month)
     const expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
     const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
     if (oc?.strikes?.length) {
+      // Get real expiry date returned by server
+      if (oc.expiryDate) {
+        realExpiryDate = oc.expiryDate;
+        const expMs = new Date(oc.expiryDate).setHours(23,59,59,0); // end of expiry day IST
+        daysToExp = Math.max(0, Math.round((expMs - Date.now()) / 86400000));
+      }
+
+      // ── HARD BLOCK: stocks within 2 days of expiry have inflated premiums ──
+      if (!isIndex && daysToExp <= 3) {
+        addLog(`⚠ ${symbolObj.sym} skipped — expiry in ${daysToExp}d (premium inflated near expiry)`, 'warn');
+        return null;
+      }
+
       const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
         strike = atm.strike;
@@ -1846,19 +1907,37 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // Index fallback — ATM structural estimate only
+  // Index fallback — realistic ATM premium estimate when OC unavailable
   if (!usedReal) {
     if (isIndex) {
-      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
-      const offsets = [0, 0, step, -step]; // bias towards ATM
-      const off = offsets[Math.floor(Math.random()*offsets.length)];
-      strike  = Math.round((baseP + off)/step)*step;
-      const otm = Math.abs(off)/baseP;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
+      // Realistic ATM option premium ≈ spot × IV × sqrt(DTE/365) / sqrt(2π)
+      // For NIFTY: IV ~15%, DTE ~5d → 24000 × 0.15 × sqrt(5/365) / 2.507 ≈ 150
+      // For BANKNIFTY: IV ~18%, DTE ~5d → 52000 × 0.18 × sqrt(5/365) / 2.507 ≈ 350
+      const ivEst = isIndex ? 0.15 : 0.20; // rough IV estimate
+      const dteEst = Math.max(1, daysToExp || 5);
+      const atmPremEst = Math.round(baseP * ivEst * Math.sqrt(dteEst / 365) / 2.507);
+      // Slightly OTM = ATM premium × 0.7
+      const offsets = [0, 0, step, -step];
+      const off = offsets[Math.floor(Math.random() * offsets.length)];
+      strike  = Math.round((baseP + off) / step) * step;
+      const otmFactor = off === 0 ? 1 : 0.70;
+      premium = Math.max(20, Math.round(atmPremEst * otmFactor));
     } else {
       return null; // stocks: no real premium → skip
     }
   }
+
+  // ── RA PIPELINE — now with real daysToExp ──
+  const ra = scoreRA({
+    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
+    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
+    orbConfirm, daysToExpiry: daysToExp,
+    pdhBreak, pdlBreak, atStructure, relStrength,
+    pdh, pdl,
+  });
+
+  if (ra.grade === 'REJECT') return null;
+  if (ra.prob < S.config.minProb) return null;
 
   if (premium * lot > S.config.maxPrem) return null;
 
@@ -1901,9 +1980,19 @@ async function generateSignal(symbolObj, isIndex) {
     name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
     strike: `${strike} ${type}`,
-    expiry: isIndex
-      ? ({ W1:'Week 1', W2:'Week 2', W3:'Week 3', W4:'Week 4', MONTHLY:'Monthly' }[S.config.idxExpiry] || 'Weekly')
-      : (S.config.stkExpiry === 'NEXT' ? 'Next Month' : 'Current Month'),
+    expiry: (() => {
+      // Show actual expiry date if we have it, else fall back to label
+      if (realExpiryDate) {
+        const d = new Date(realExpiryDate);
+        const dd = String(d.getUTCDate()).padStart(2,'0');
+        const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+        return `${dd} ${mon} ${d.getUTCFullYear()}`;
+      }
+      return isIndex
+        ? ({ W1:'Week 1', W2:'Week 2', W3:'Week 3', W4:'Week 4', MONTHLY:'Monthly' }[S.config.idxExpiry] || 'Weekly')
+        : (S.config.stkExpiry === 'NEXT' ? 'Next Month' : 'Current Month');
+    })(),
+    daysToExpiry: daysToExp,
     premium, target, sl, prob: ra.prob, rr,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
@@ -2366,6 +2455,23 @@ function renderSignals() {
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
+      <!-- Expiry badge — prominent, always visible -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;background:${
+          s.daysToExpiry<=2?'#ff3d5a18':s.daysToExpiry<=5?'#f59e0b18':'var(--bg4)'
+        };border:1px solid ${
+          s.daysToExpiry<=2?'#ff3d5a50':s.daysToExpiry<=5?'#f59e0b50':'var(--border)'
+        }">
+          <span style="font-size:9px">📅</span>
+          <span style="font-size:10px;font-family:var(--font-mono);font-weight:700;color:${
+            s.daysToExpiry<=2?'var(--red)':s.daysToExpiry<=5?'var(--amber)':'var(--text)'
+          }">${s.expiry}</span>
+          ${s.daysToExpiry!=null?`<span style="font-size:9px;font-family:var(--font-mono);color:${
+            s.daysToExpiry<=2?'var(--red)':s.daysToExpiry<=5?'var(--amber)':'var(--text3)'
+          };border-left:1px solid var(--border);padding-left:5px;margin-left:2px">${s.daysToExpiry}d left</span>`:''}
+        </div>
+        ${s.daysToExpiry<=2?`<span style="font-size:9px;font-family:var(--font-mono);color:var(--red);font-weight:700">⚠ EXPIRY SOON</span>`:''}
+      </div>
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
         <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
@@ -2401,7 +2507,11 @@ function renderSignals() {
         </div>
       </div>
       <div class="sig-tags">
-        <span class="sig-tag">${s.expiry}</span>
+        <span class="sig-tag" style="color:${
+          s.daysToExpiry<=3?'var(--red)':s.daysToExpiry<=7?'var(--amber)':'var(--text3)'
+        };font-weight:${s.daysToExpiry<=3?'700':'400'}">📅 ${s.expiry}${
+          s.daysToExpiry!=null?' · '+s.daysToExpiry+'d':''
+        }</span>
         ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
         <span class="sig-tag">IV ${s.ivRank}</span>
         ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
@@ -2429,7 +2539,7 @@ function openDrawer(idStr) {
       <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
       <div class="drawer-title">${sig.sym}</div>
     </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry}${sig.daysToExpiry!=null?' ('+sig.daysToExpiry+'d)':''} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
 
     <div class="drawer-grid">
       <div class="drawer-cell">
