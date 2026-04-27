@@ -939,7 +939,22 @@ const S = {
   journal:[],
 };
 
-try { document.getElementById('serverUrl').value = localStorage.getItem('serverUrl') || 'http://localhost:3001'; } catch(e){}
+try {
+  // Auto-detect server URL:
+  // - If saved in localStorage, use that
+  // - If served from Railway/Render (not localhost), server IS the same origin
+  // - Otherwise default to localhost:3001 for local setup
+  const savedUrl = localStorage.getItem('serverUrl');
+  let defaultUrl = 'http://localhost:3001';
+  if(!savedUrl){
+    const h = window.location.hostname;
+    if(h && h !== 'localhost' && h !== '127.0.0.1' && !h.match(/^192\.168\.|^10\./)){
+      // Cloud deployment - server is same origin
+      defaultUrl = window.location.origin;
+    }
+  }
+  document.getElementById('serverUrl').value = savedUrl || defaultUrl;
+} catch(e){}
 try { S.soundOn = localStorage.getItem('soundOn')==='1'; document.getElementById('soundToggle').checked = S.soundOn; } catch(e){}
 
 // ── NSE TOKENS ──
@@ -1149,18 +1164,31 @@ function selectGroup(g,btn){
 
 // ── SERVER ──
 function getServer(){
-  const url=document.getElementById('serverUrl').value.trim().replace(/\/$/,'');
-  localStorage.setItem('serverUrl',url);
-  return url||'http://localhost:3001';
+  const el=document.getElementById('serverUrl');
+  const url=(el?el.value:'').trim().replace(/\/$/,'');
+  if(url) localStorage.setItem('serverUrl',url);
+  // Fallback: if no URL and we're on a cloud domain, use same origin
+  if(!url){
+    const h=window.location.hostname;
+    if(h&&h!=='localhost'&&h!=='127.0.0.1'&&!h.match(/^192\.168\.|^10\./))
+      return window.location.origin;
+    return 'http://localhost:3001';
+  }
+  return url;
 }
 
 async function testConnection(){
   try{
-    const r=await fetch(getServer()+'/health',{signal:AbortSignal.timeout(5000)});
+    const r=await fetch(getServer()+'/health',{signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),5000);return c.signal})()});
     const d=await r.json();
     if(d.status==='ok') toast('ok','✅ Server Online',`v${d.version||'?'} · ${d.authenticated?'Logged in as '+d.client:'Not logged in'}`);
     else toast('err','❌ Error','Unexpected response');
-  }catch(e){toast('err','❌ Cannot Connect',e.message);}
+  }catch(e){
+    let msg=e.message||'Unknown error';
+    if(msg.includes('abort')||msg.includes('timeout')) msg='Timed out — is node server.js running at that URL?';
+    else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')) msg='Cannot reach server — check URL and ensure server is running';
+    toast('err','❌ Cannot Connect',msg);
+  }
 }
 
 // ── ANGEL ONE LOGIN ──
@@ -1173,7 +1201,7 @@ async function connectAngel(){
   if(!client||!key||!pin){toast('warn','⚠ Missing Fields','Client ID, API Key, Password required');return;}
   document.getElementById('apiStat').textContent='Connecting...';
   try{
-    const r=await fetch(server+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:client,password:pin,apiKey:key,totpSecret:totp}),signal:AbortSignal.timeout(30000)});
+    const r=await fetch(server+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:client,password:pin,apiKey:key,totpSecret:totp}),signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal})()});
     const d=await r.json();
     if(d.status===true){
       S.connected=true;S.creds={client,key,pin,totp};
@@ -1185,7 +1213,14 @@ async function connectAngel(){
       if(S.mktRefreshInt)clearInterval(S.mktRefreshInt);
       S.mktRefreshInt=setInterval(()=>{if(S.connected)fetchMarketData();},5000);
     }else{setConnected(false);toast('err','❌ Login Failed',d.message);addLog(`Login failed: ${d.message}`,'err');}
-  }catch(e){toast('err','❌ Connection Error',e.message);addLog('Connection error: '+e.message,'err');}
+  }catch(e){
+    let msg=e.message||'Unknown error';
+    if(msg.includes('abort')||msg.includes('timeout')) msg='Request timed out — check server URL and ensure node server.js is running';
+    else if(msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')) msg='Cannot reach server — check URL in Setup tab. Server must be running.';
+    else if(msg.includes('CORS')) msg='CORS error — update server.js and restart';
+    toast('err','❌ Connection Error',msg);
+    addLog('Connection error: '+e.message,'err');
+  }
 }
 
 function setConnected(ok,client){
@@ -1868,13 +1903,29 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
 
 // ── INIT ──
 addLog('NSE F&O Signal Engine v5 — MACD · Supertrend · ATR · Trailing SL · Journal','ok');
-// v5: Default-select ALL FNO stocks on first load
-if(!localStorage.getItem('selectedStocks')){
-  FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
-} else {
-  try{const ss=JSON.parse(localStorage.getItem('selectedStocks'));ss.forEach(s=>S.selectedStocks.add(s));}catch(e){FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));}
+// v5: Default-select ALL stocks — runs after full parse
+function initStockSelection(){
+  const saved=localStorage.getItem('selectedStocks');
+  if(!saved){
+    // First time: select everything
+    FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
+    try{localStorage.setItem('selectedStocks',JSON.stringify(FNO_STOCKS.map(s=>s.sym)));}catch(e){}
+  } else {
+    try{
+      const ss=JSON.parse(saved);
+      if(!Array.isArray(ss)||ss.length===0){
+        // Saved but empty — reset to all selected
+        FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
+        try{localStorage.setItem('selectedStocks',JSON.stringify(FNO_STOCKS.map(s=>s.sym)));}catch(e){}
+      } else {
+        ss.forEach(s=>S.selectedStocks.add(s));
+      }
+    }catch(e){FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));}
+  }
 }
-renderWatchlistBar();renderStockList();
+initStockSelection();
+renderWatchlistBar();
+renderStockList();
 try{const saved=localStorage.getItem('fno_signals');if(saved){S.signals=JSON.parse(saved);document.getElementById('mSigs').textContent=S.signals.length;renderSignals();addLog(`Restored ${S.signals.length} signals`,'ok');}}catch(e){}
 try{const js=localStorage.getItem('fno_journal');if(js){S.journal=JSON.parse(js);addLog(`Journal: ${S.journal.length} entries`,'');}}catch(e){}
 
@@ -1889,11 +1940,15 @@ try{const js=localStorage.getItem('fno_journal');if(js){S.journal=JSON.parse(js)
     addLog(`Saved credentials found — auto-connecting ${creds.client}...`,'');
     document.getElementById('apiStat').textContent='Auto-connecting...';
     await new Promise(r=>setTimeout(r,1200));
-    const resp=await fetch(getServer()+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:creds.client,password:creds.pin,apiKey:creds.key,totpSecret:creds.totp}),signal:AbortSignal.timeout(30000)});
+    const resp=await fetch(getServer()+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:creds.client,password:creds.pin,apiKey:creds.key,totpSecret:creds.totp}),signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal})()});
     const d=await resp.json();
     if(d.status===true){S.connected=true;S.creds=creds;setConnected(true,d.client);toast('ok','✅ Auto-connected!',`Welcome back ${d.client}`);addLog(`Auto-login OK — ${d.client}`,'ok');fetchMarketData();S.mktRefreshInt=setInterval(()=>{if(S.connected)fetchMarketData();},5000);}
     else addLog(`Auto-login failed: ${d.message}`,'warn');
-  }catch(e){addLog('Auto-login error: '+e.message,'warn');}
+  }catch(e){
+    let msg=e.message||'Unknown';
+    if(msg.includes('abort')||msg.includes('timeout')) addLog('Auto-login timed out — server may be starting up, try manual login','warn');
+    else addLog('Auto-login error: '+msg+' — use Setup tab to connect manually','warn');
+  }
 })();
 </script>
 </body>

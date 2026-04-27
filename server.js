@@ -60,14 +60,10 @@ function rateLimiter(maxPerMin = 120) {
 // ─────────────────────────────────────────────────────────────────────
 // CORS — allow localhost and local LAN (192.168.x.x, 10.x.x.x)
 // ─────────────────────────────────────────────────────────────────────
-const CORS_ALLOWED = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-
+// CORS: allow all origins (server is protected by login credentials)
+// Railway/Render cloud deployments need open CORS since origin changes per deploy
 app.use(cors({
-  origin: (origin, cb) => {
-    // Allow requests with no origin (mobile PWA direct, curl, Postman)
-    if (!origin || CORS_ALLOWED.test(origin)) return cb(null, true);
-    cb(new Error('CORS blocked — origin not whitelisted'));
-  },
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -323,6 +319,11 @@ app.get('/health', (req, res) => {
     client: SESSION.clientCode || null,
     tokenExpiry: SESSION.expiresAt ? new Date(SESSION.expiresAt).toLocaleTimeString('en-IN') : null,
   });
+});
+
+// Simple ping — no auth needed, always returns 200
+app.get('/ping', (req, res) => {
+  res.json({ ok: true, version: '5.0', ts: Date.now() });
 });
 
 // ─────────────────────────────────────────────────────────────────────
