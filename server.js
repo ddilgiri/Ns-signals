@@ -699,23 +699,34 @@ app.post('/option-ltp', async (req, res) => {
       return da - db;
     });
 
-    let chosen;
-    if (expiry === 'MONTHLY') {
-      // Pick last expiry of the month
-      const thisMonth = now.getMonth();
-      const monthlyMatches = sortedMatches.filter(i => {
+    // Determine if this is an index or stock symbol
+    const INDEX_SYMS_LTP = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
+    const isIndexSym = INDEX_SYMS_LTP.includes(sym);
+
+    // findNextMonthlyExp: last expiry of the earliest future month
+    const futureAll = sortedMatches.filter(i => new Date(i.expiry) >= now);
+    const findNextMonthlyExp = (list) => {
+      const byMonth = {};
+      list.forEach(i => {
         const d = new Date(i.expiry);
-        return d.getMonth() === thisMonth && d >= now;
+        const key = d.getFullYear() + '-' + d.getMonth();
+        if (!byMonth[key] || d > new Date(byMonth[key].expiry)) byMonth[key] = i;
       });
-      chosen = monthlyMatches[monthlyMatches.length - 1] || sortedMatches[0];
+      return Object.values(byMonth).sort((a,b) => new Date(a.expiry) - new Date(b.expiry))[0] || list[0];
+    };
+
+    let chosen;
+    if (!isIndexSym) {
+      // STOCKS: always monthly — last expiry of next available month
+      chosen = findNextMonthlyExp(futureAll) || sortedMatches[0];
+    } else if (expiry === 'MONTHLY') {
+      chosen = findNextMonthlyExp(futureAll) || sortedMatches[0];
     } else if (expiry === 'NEXT') {
-      // Skip first expiry, pick second
-      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
-      chosen = futureMatches[1] || futureMatches[0] || sortedMatches[0];
+      // Next weekly for index: skip nearest, pick second
+      chosen = futureAll[1] || futureAll[0] || sortedMatches[0];
     } else {
-      // WEEKLY — pick nearest future expiry
-      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
-      chosen = futureMatches[0] || sortedMatches[0];
+      // WEEKLY: nearest upcoming expiry
+      chosen = futureAll[0] || sortedMatches[0];
     }
 
     if (!chosen) {
@@ -804,15 +815,43 @@ app.post('/option-chain', async (req, res) => {
       return true;
     });
 
-    // Pick best expiry
+    // ── Helpers ──
+    // isStockSymbol: stocks have only monthly expiry; indices have weekly
+    const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
+    const isIndex = INDEX_SYMS.includes(sym);
+
+    // findNextMonthlyExpiry: last expiry of current month, or next month if already passed
+    const findNextMonthlyExpiry = (sorted) => {
+      // Monthly = last expiry of a given calendar month (last Thu of month)
+      // Group by month+year and pick the LAST expiry in each group
+      const byMonth = {};
+      sorted.forEach(i => {
+        const key = i._exp.getFullYear() + '-' + i._exp.getMonth();
+        if (!byMonth[key] || i._exp > byMonth[key]._exp) byMonth[key] = i;
+      });
+      // Pick the earliest month-group whose last expiry is still in the future
+      return Object.values(byMonth).sort((a,b) => a._exp - b._exp)[0] || sorted[0];
+    };
+
+    // Pick best expiry based on symbol type + requested expiry config
     const pickExpiry = (optList) => {
       const sorted = optList
         .map(i => ({ ...i, _exp: new Date(i.expiry) }))
         .filter(i => i._exp >= now)
-        .sort((a,b) => a._exp - b._exp);
-      if (expiry === 'MONTHLY') return sorted.filter(i => i._exp.getMonth() === now.getMonth()).pop();
-      if (expiry === 'NEXT') return sorted[1];
-      return sorted[0]; // WEEKLY = nearest
+        .sort((a, b) => a._exp - b._exp);
+      if (!sorted.length) return null;
+
+      // STOCKS: always use monthly expiry (no weekly contracts)
+      if (!isIndex) return findNextMonthlyExpiry(sorted);
+
+      // INDICES: respect the user config
+      if (expiry === 'MONTHLY') return findNextMonthlyExpiry(sorted);
+      if (expiry === 'NEXT') {
+        // Skip the nearest weekly, pick the one after
+        return sorted[1] || sorted[0];
+      }
+      // WEEKLY (default): nearest upcoming expiry
+      return sorted[0];
     };
 
     // Collect tokens for all strikes CE+PE

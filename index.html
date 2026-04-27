@@ -448,9 +448,9 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="field">
         <label class="field-label">Expiry</label>
         <select class="field-input" id="cfgExpiry">
-          <option value="WEEKLY">Current Weekly</option>
-          <option value="NEXT">Next Weekly</option>
-          <option value="MONTHLY">Monthly</option>
+          <option value="WEEKLY">Index: Current Weekly · Stock: Monthly</option>
+          <option value="NEXT">Index: Next Weekly · Stock: Monthly</option>
+          <option value="MONTHLY">Index: Monthly · Stock: Monthly</option>
         </select>
       </div>
 
@@ -1449,19 +1449,21 @@ function getNewsAdjustedProb(baseProb, type) {
 const OC_CACHE = {};
 const OC_TTL = 30000;
 
-async function fetchOptionChain(sym, spotPrice) {
+async function fetchOptionChain(sym, spotPrice, expiryOverride) {
+  const expiryKey = expiryOverride || S.config.expiry;
+  const cacheKey = sym + '_' + expiryKey;
   const now = Date.now();
-  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
+  if (OC_CACHE[cacheKey] && (now - OC_CACHE[cacheKey].fetchTime) < OC_TTL) return OC_CACHE[cacheKey].data;
   try {
     const server = getServer();
     const r = await fetch(server + '/option-chain', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
+      body: JSON.stringify({symbol:sym, spotPrice, expiry: expiryKey, depth:5}),
     });
     const d = await r.json();
     if (d.status && d.strikes) {
-      OC_CACHE[sym] = {data:d, fetchTime:now};
-      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
+      OC_CACHE[cacheKey] = {data:d, fetchTime:now};
+      addLog(`Option chain: ${sym} [${expiryKey}] ATM=${d.atmStrike}`, 'ok');
       return d;
     }
   } catch(e) {}
@@ -1820,7 +1822,9 @@ async function generateSignal(symbolObj, isIndex) {
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
 
   if (S.connected) {
-    const oc = await fetchOptionChain(angelSym, baseP);
+    // Stocks always have MONTHLY expiry; indices follow user config (WEEKLY/NEXT/MONTHLY)
+    const expiryToUse = isIndex ? S.config.expiry : 'MONTHLY';
+    const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
     if (oc?.strikes?.length) {
       const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
@@ -1887,7 +1891,9 @@ async function generateSignal(symbolObj, isIndex) {
     name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
     strike: `${strike} ${type}`,
-    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
+    expiry: isIndex
+      ? (S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Weekly':'Monthly')
+      : 'Monthly',
     premium, target, sl, prob: ra.prob, rr,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
