@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- NSE F&O Signal Engine v5.0 - Built 2026-04-26 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="F&O Signals">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>NSE F&O Signal Engine</title>
+<title>NSE F&O Signal Engine v5</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -19,7 +20,7 @@
   --green:#00f5a0;--green2:#00c47d;--green-bg:#00f5a00d;
   --red:#ff3d5a;--red2:#cc2e46;--red-bg:#ff3d5a0d;
   --amber:#ffb627;--amber-bg:#ffb6270d;
-  --blue:#3d9bff;--cyan:#22d3ee;--purple:#a78bfa;
+  --blue:#3d9bff;--cyan:#22d3ee;--purple:#a78bfa;--pink:#f472b6;
   --font-mono:'JetBrains Mono',monospace;
   --font-sans:'Inter',sans-serif;
   --r:10px;--r2:16px;
@@ -252,6 +253,59 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 .server-row{display:flex;gap:8px;margin-bottom:14px}
 .server-row .field-input{flex:1;margin-bottom:0}
 .server-test{padding:12px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap}
+
+
+/* ── v5: TRAILING SL BADGE ── */
+.trail-badge{font-size:8px;background:var(--cyan);color:#000;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:4px}
+.be-badge{font-size:8px;background:var(--amber);color:#000;border-radius:3px;padding:1px 5px;font-weight:700;margin-left:4px}
+/* ── v5: INDICATOR PANEL ── */
+.ind-row{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border)}
+.ind-row:last-child{border-bottom:none}
+.ind-label{font-size:10px;font-family:var(--font-mono);color:var(--text2);min-width:100px}
+.ind-val{font-size:12px;font-family:var(--font-mono);font-weight:700;flex:1}
+.ind-sig{font-size:10px;font-family:var(--font-mono);padding:2px 8px;border-radius:4px;font-weight:700}
+.sig-bull{background:#00f5a012;color:var(--green);border:1px solid #00f5a025}
+.sig-bear{background:#ff3d5a12;color:var(--red);border:1px solid #ff3d5a25}
+.sig-neut{background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+/* ── v5: WATCHLIST SCROLL ── */
+#watchlistBar{display:flex;gap:8px;overflow-x:auto;padding:4px 12px 8px;-webkit-overflow-scrolling:touch}
+#watchlistBar::-webkit-scrollbar{display:none}
+.wl-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;min-width:110px;flex-shrink:0}
+/* ── v5: SOUND TOGGLE ── */
+.sound-toggle{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.toggle-switch{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute}
+.toggle-slider{position:absolute;inset:0;background:var(--border2);border-radius:12px;cursor:pointer;transition:.25s}
+.toggle-slider:before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--text2);border-radius:50%;transition:.25s}
+input:checked+.toggle-slider{background:var(--green)}
+input:checked+.toggle-slider:before{transform:translateX(20px);background:#000}
+/* ── v5: JOURNAL ── */
+.journal-entry{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px;padding:12px}
+.journal-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.journal-pnl{font-size:18px;font-weight:700;font-family:var(--font-mono)}
+.journal-meta{font-size:10px;font-family:var(--font-mono);color:var(--text3)}
+/* ── v5: RICH SIGNAL TOAST ── */
+.toast-sig{background:var(--bg2);border:1px solid var(--cyan);border-radius:14px;overflow:hidden;min-width:300px;max-width:360px}
+.toast-sig-hd{display:flex;align-items:center;gap:8px;padding:12px 12px 8px;border-bottom:1px solid var(--border)}
+.toast-sig-body{padding:8px 12px}
+.toast-sig-ft{padding:8px 12px;font-size:11px;font-family:var(--font-mono);color:var(--cyan);font-weight:600;cursor:pointer;border-top:1px solid var(--border);text-align:right;letter-spacing:.04em}
+.toast-pill{font-size:10px;font-family:var(--font-mono);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3)}
+/* ── v5: SECTOR GROUPS ── */
+.sector-group{border-bottom:1px solid var(--border);margin-bottom:2px}
+.sector-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 0;cursor:pointer;user-select:none}
+.sector-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:.2s}
+.sector-dot.all{background:var(--green)}
+.sector-dot.part{background:var(--amber)}
+.sector-dot.none{background:var(--border2)}
+.sector-label{font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-sans)}
+.sector-count{font-size:10px;font-family:var(--font-mono);color:var(--text3);background:var(--bg3);padding:1px 6px;border-radius:4px}
+.sector-arrow{font-size:12px;color:var(--text3)}
+.sector-stocks{padding-bottom:4px}
+.cb-item.cb-checked{background:var(--green-bg);border-color:var(--green)!important}
+/* ── v5: STOCK LOGO IN LIST ── */
+.sl-logo{width:28px;height:28px;border-radius:6px;object-fit:contain;background:var(--bg4);border:1px solid var(--border);flex-shrink:0}
+.sl-logo-fb{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--bg4),var(--bg5));border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px;font-family:var(--font-mono);font-weight:800;color:var(--cyan);flex-shrink:0}
+
 </style>
 </head>
 <body>
@@ -281,11 +335,22 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   </div>
 </div>
 
+<!-- SESSION SUMMARY OVERLAY -->
+<div id="sessionSummary" style="display:none;position:fixed;inset:0;z-index:500;background:#000c">
+  <div style="position:absolute;left:12px;right:12px;top:50%;transform:translateY(-50%);background:var(--bg2);border-radius:var(--r2);padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--text)">📊 Session Summary</span>
+      <button onclick="document.getElementById('sessionSummary').style.display='none'" style="font-size:20px;background:transparent;border:none;color:var(--text3);cursor:pointer">×</button>
+    </div>
+    <div id="summaryContent"></div>
+  </div>
+</div>
+
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-logo">⚡</div>
   <div class="topbar-title">
-    <h1>NSE F&O SIGNALS</h1>
+    <h1>NSE F&O SIGNALS <span style="font-size:9px;color:var(--cyan);background:var(--bg3);padding:1px 6px;border-radius:3px;margin-left:4px;font-weight:600">v5</span></h1>
     <p id="topStatus">ANGEL ONE · DISCONNECTED</p>
   </div>
   <div class="topbar-right">
@@ -300,313 +365,210 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 <!-- PAGES -->
 <div class="pages">
 
-  <!-- ══ PAGE: SIGNALS ══ -->
-  <div class="page active" id="page-signals">
-    <!-- Configurable Watchlist (up to 4 items) -->
-    <div style="padding:8px 12px 4px;display:flex;align-items:center;justify-content:space-between">
-      <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Watchlist</span>
-      <button onclick="openWatchlistEdit()" style="font-size:10px;padding:3px 10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font-mono)">✎ Edit</button>
-    </div>
-    <div id="watchlistBar" class="index-bar" style="padding:4px 12px 8px"></div>
+<!-- ══ PAGE: SIGNALS ══ -->
+<div class="page active" id="page-signals">
+  <div style="padding:8px 12px 4px;display:flex;align-items:center;justify-content:space-between">
+    <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Watchlist</span>
+    <button onclick="openWatchlistEdit()" style="font-size:10px;padding:3px 10px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font-mono)">✎ Edit</button>
+  </div>
+  <div id="watchlistBar"></div>
 
-    <!-- Watchlist Edit Modal -->
-    <div id="watchlistModal" style="display:none;position:fixed;inset:0;z-index:400;background:#000a">
-      <div style="position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:16px;max-height:80vh;overflow-y:auto">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Edit Watchlist</span>
-          <button onclick="closeWatchlistEdit()" style="font-size:18px;background:transparent;border:none;color:var(--text3);cursor:pointer">×</button>
-        </div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Pick up to 4 symbols. Tap to toggle.</div>
-        <input id="wlSearch" type="search" placeholder="Search index or stock..." oninput="renderWLPicker()"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;-webkit-appearance:none;margin-bottom:10px">
-        <div id="wlPicker" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:50vh;overflow-y:auto"></div>
-        <button onclick="closeWatchlistEdit()" style="width:100%;margin-top:12px;padding:13px;border-radius:10px;border:none;background:var(--green);color:#000;font-size:14px;font-weight:700;cursor:pointer">Done</button>
+  <!-- Watchlist Edit Modal -->
+  <div id="watchlistModal" style="display:none;position:fixed;inset:0;z-index:400;background:#000a">
+    <div style="position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:16px;max-height:80vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Edit Watchlist (up to 4)</span>
+        <button onclick="closeWatchlistEdit()" style="font-size:18px;background:transparent;border:none;color:var(--text3);cursor:pointer">×</button>
       </div>
-    </div>
-    <!-- Metrics -->
-    <div class="metrics-grid">
-      <div class="met"><div class="met-l">Capital</div><div class="met-v" id="mCap">₹30K</div></div>
-      <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
-      <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
-    </div>
-    <!-- Filter chips + Clear button -->
-    <div style="display:flex;align-items:center;gap:0;border-bottom:1px solid var(--border)">
-      <div class="chips" id="filterChips" style="flex:1;border-bottom:none">
-        <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
-        <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
-        <button class="chip" onclick="setFilt('STOCK',this)">STOCK</button>
-        <button class="chip" onclick="setFilt('CE',this)">CE ONLY</button>
-        <button class="chip" onclick="setFilt('PE',this)">PE ONLY</button>
-        <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
-      </div>
-      <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;white-space:nowrap">🗑 CLEAR</button>
-    </div>
-    <!-- OPEN / CLOSED tab bar -->
-    <div class="sig-tab-bar" id="sigTabBar">
-      <button class="sig-tab active-open" id="tabOpen" onclick="setSigTab('OPEN')">
-        ⚡ OPEN <span class="sig-tab-badge" id="tabOpenCount">0</span>
-      </button>
-      <button class="sig-tab" id="tabClosed" onclick="setSigTab('CLOSED')">
-        🔴 CLOSED <span class="sig-tab-badge" id="tabClosedCount">0</span>
-      </button>
-    </div>
-    <!-- Signal feed -->
-    <div id="sigFeed">
-      <div class="empty">
-        <div class="empty-icon">⚡</div>
-        <div class="empty-title">No Signals Yet</div>
-        <div class="empty-sub">Connect Angel One in Setup tab<br>then tap ▶ SCAN to start</div>
-      </div>
+      <input id="wlSearch" type="search" placeholder="Search symbol..." oninput="renderWLPicker()"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;-webkit-appearance:none;margin-bottom:10px">
+      <div id="wlPicker" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:50vh;overflow-y:auto"></div>
+      <button onclick="closeWatchlistEdit()" style="width:100%;margin-top:12px;padding:13px;border-radius:10px;border:none;background:var(--green);color:#000;font-size:14px;font-weight:700;cursor:pointer">Done</button>
     </div>
   </div>
 
-  <!-- ══ PAGE: ANALYSIS ══ -->
-  <div class="page" id="page-analysis">
-    <div class="disc">⚠ Signals are algorithmic only. Options involve risk. Always use stop-loss. Not SEBI-registered advice.</div>
-
-    <div class="sec-head">PUT-CALL RATIO</div>
-    <div class="card" style="margin-top:0">
-      <div class="card-body">
-        <div class="pcr-item">
-          <div class="pcr-label">NIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-nifty-bar" style="width:60%;background:var(--amber)"></div></div>
-          <div class="pcr-num" id="pcr-nifty-val" style="color:var(--amber)">0.89</div>
-        </div>
-        <div class="pcr-item">
-          <div class="pcr-label">BANKNIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-bank-bar" style="width:42%;background:var(--green)"></div></div>
-          <div class="pcr-num" id="pcr-bank-val" style="color:var(--green)">0.68</div>
-        </div>
-        <div class="pcr-item">
-          <div class="pcr-label">FINNIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-fin-bar" style="width:76%;background:var(--red)"></div></div>
-          <div class="pcr-num" id="pcr-fin-val" style="color:var(--red)">1.12</div>
-        </div>
-        <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:4px">&lt;0.7 BULLISH · 0.7–1.0 NEUTRAL · &gt;1.0 BEARISH</div>
-      </div>
-    </div>
-
-    <div class="sec-head">SIGNAL PARAMETERS ACTIVE</div>
-    <div class="card" style="margin-top:0">
-      <div class="card-body" style="display:grid;gap:8px">
-        <div id="paramGrid"></div>
-      </div>
-    </div>
+  <div class="metrics-grid">
+    <div class="met"><div class="met-l">Capital</div><div class="met-v" id="mCap">₹30K</div></div>
+    <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
+    <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
   </div>
 
-  <!-- ══ PAGE: SCANNER CONFIG ══ -->
-  <div class="page" id="page-scanner">
-    <div style="padding:12px">
-      <div class="field-row">
-        <div class="field">
-          <label class="field-label">Capital (₹)</label>
-          <input class="field-input" type="number" id="cfgCap" value="30000" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label class="field-label">Max Premium/Lot</label>
-          <input class="field-input" type="number" id="cfgMaxPrem" value="10000" inputmode="numeric">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Profit Target: <span id="cfgProfitV" style="color:var(--green)">30%</span></label>
-        <div class="slider-wrap">
-          <input type="range" min="10" max="60" value="30" id="cfgProfit" oninput="document.getElementById('cfgProfitV').textContent=this.value+'%'">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Stop Loss: <span id="cfgSLV" style="color:var(--red)">5%</span></label>
-        <div class="slider-wrap">
-          <input type="range" min="5" max="50" value="5" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%'">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">70%</span></label>
-        <div class="slider-wrap">
-          <input type="range" min="60" max="90" value="70" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Scan Interval: <span id="cfgIntV" style="color:var(--text2)">30s</span></label>
-        <div class="slider-wrap">
-          <input type="range" min="15" max="120" step="5" value="30" id="cfgInterval" oninput="document.getElementById('cfgIntV').textContent=this.value+'s'">
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Signal Type</label>
-        <select class="field-input" id="cfgType">
-          <option value="BOTH">Both CE and PE</option>
-          <option value="CE">Calls (CE) only</option>
-          <option value="PE">Puts (PE) only</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Expiry</label>
-        <select class="field-input" id="cfgExpiry">
-          <option value="WEEKLY">Current Weekly</option>
-          <option value="NEXT">Next Weekly</option>
-          <option value="MONTHLY">Monthly</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Scan Indices</label>
-        <div class="cb-list">
-          <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
-        </div>
-      </div>
-
-      <button class="big-btn green" onclick="saveConfig()">💾 Save Config</button>
+  <div style="display:flex;align-items:center;border-bottom:1px solid var(--border)">
+    <div class="chips" id="filterChips" style="flex:1;border-bottom:none">
+      <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
+      <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
+      <button class="chip" onclick="setFilt('STOCK',this)">STOCK</button>
+      <button class="chip" onclick="setFilt('CE',this)">CE</button>
+      <button class="chip" onclick="setFilt('PE',this)">PE</button>
+      <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
     </div>
+    <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer">🗑 CLEAR</button>
   </div>
 
-  <!-- ══ PAGE: STOCKS ══ -->
-  <div class="page" id="page-stocks">
-    <div style="padding:12px 12px 6px;display:flex;gap:6px;flex-wrap:wrap">
-      <button class="chip" style="border-color:var(--green);color:var(--green)" onclick="selectAll(true)">All</button>
-      <button class="chip" onclick="selectAll(false)">None</button>
-      <button class="chip sect-chip" onclick="selectGroup('NIFTY50',this)">NIFTY50</button>
-      <button class="chip sect-chip" onclick="selectGroup('BANK',this)">Banks</button>
-      <button class="chip sect-chip" onclick="selectGroup('IT',this)">IT</button>
-      <button class="chip sect-chip" onclick="selectGroup('PHARMA',this)">Pharma</button>
-      <button class="chip sect-chip" onclick="selectGroup('AUTO',this)">Auto</button>
-      <button class="chip sect-chip" onclick="selectGroup('FMCG',this)">FMCG</button>
-      <button class="chip sect-chip" onclick="selectGroup('ENERGY',this)">Energy</button>
-      <button class="chip sect-chip" onclick="selectGroup('METAL',this)">Metal</button>
-      <button class="chip sect-chip" onclick="selectGroup('REALTY',this)">Realty</button>
-      <button class="chip sect-chip" onclick="selectGroup('CEMENT',this)">Cement</button>
-      <button class="chip sect-chip" onclick="selectGroup('NBFC',this)">NBFC</button>
-      <button class="chip sect-chip" onclick="selectGroup('INSURANCE',this)">Insurance</button>
-      <button class="chip sect-chip" onclick="selectGroup('CHEMICALS',this)">Chemicals</button>
-      <button class="chip sect-chip" onclick="selectGroup('CAPGOODS',this)">Cap Goods</button>
-      <button class="chip sect-chip" onclick="selectGroup('DEFENCE',this)">Defence</button>
-      <button class="chip sect-chip" onclick="selectGroup('NEWAGE',this)">New Age</button>
-      <button class="chip sect-chip" onclick="selectGroup('INFRA',this)">Infra</button>
-      <button class="chip sect-chip" onclick="selectGroup('FINANCE',this)">Exchanges</button>
-      <button class="chip sect-chip" onclick="selectGroup('RETAIL',this)">Retail</button>
-      <button class="chip sect-chip" onclick="selectGroup('AGRI',this)">Agri</button>
-      <button class="chip sect-chip" onclick="selectGroup('TEXTILE',this)">Textiles</button>
-      <button class="chip sect-chip" onclick="selectGroup('TRAVEL',this)">Travel</button>
-    </div>
-    <input class="field-input" type="search" id="stockSearch" placeholder="🔍 Search stocks..." oninput="filterStockList()" style="width:calc(100% - 24px);margin:0 12px 4px;display:block">
-    <div style="font-size:10px;color:var(--text3);padding:4px 12px 6px;font-family:var(--font-mono)" id="stockCount">0 selected</div>
-    <div id="stockList" style="padding:0 12px"></div>
+  <div class="sig-tab-bar" id="sigTabBar">
+    <button class="sig-tab active-open" id="tabOpen" onclick="setSigTab('OPEN')">⚡ OPEN <span class="sig-tab-badge" id="tabOpenCount">0</span></button>
+    <button class="sig-tab" id="tabClosed" onclick="setSigTab('CLOSED')">🔴 CLOSED <span class="sig-tab-badge" id="tabClosedCount">0</span></button>
   </div>
-
-  <!-- ══ PAGE: SETUP ══ -->
-  <div class="page" id="page-setup">
-    <div style="padding:12px">
-
-      <!-- Server URL -->
-      <div class="field">
-        <label class="field-label">Server URL (where server.js is running)</label>
-        <div class="server-row">
-          <input class="field-input" type="url" id="serverUrl" value="http://localhost:3001" placeholder="http://192.168.x.x:3001">
-          <button class="server-test" onclick="testConnection()">Test</button>
-        </div>
-        <div class="field-hint">💡 On same WiFi? Enter your PC's IP: http://192.168.x.x:3001<br>Use <b>ipconfig</b> (Windows) or <b>ifconfig</b> (Mac/Linux) to find your PC's IP.</div>
-      </div>
-
-      <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
-
-      <!-- Angel One creds -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <span style="font-size:11px;padding:3px 9px;background:#ff6b1a15;color:#ff8c4a;border:1px solid #ff6b1a30;border-radius:5px;font-family:var(--font-mono);font-weight:700">ANGEL ONE</span>
-        <span style="font-size:13px;font-weight:600;color:var(--text)">SmartAPI Login</span>
-      </div>
-
-      <div id="connStatus" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;font-size:12px;font-family:var(--font-mono)">
-        <div class="dot" id="apiDot"></div>
-        <span id="apiStat">Not connected</span>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Client ID</label>
-        <input class="field-input" type="text" id="aClient" placeholder="e.g. A123456" autocomplete="off" autocorrect="off" autocapitalize="characters">
-      </div>
-      <div class="field">
-        <label class="field-label">SmartAPI Key</label>
-        <input class="field-input" type="text" id="aKey" placeholder="From smartapi.angelbroking.com" autocomplete="off">
-      </div>
-      <div class="field">
-        <label class="field-label">Password / PIN</label>
-        <input class="field-input" type="password" id="aPin" placeholder="Trading password">
-      </div>
-      <div class="field">
-        <label class="field-label">TOTP Secret (optional, for auto 2FA)</label>
-        <input class="field-input" type="password" id="aTotp" placeholder="32-char base32 TOTP secret">
-        <div class="field-hint">Get from Angel One app → Profile → Security → 2FA</div>
-      </div>
-
-      <button class="big-btn green" onclick="connectAngel()">🔌 Connect Angel One</button>
-      <button class="big-btn outline" onclick="reqNotif()">🔔 Enable Signal Notifications</button>
-      <button class="big-btn outline" style="color:var(--red);border-color:var(--red);margin-top:4px" onclick="forgetCreds()">🗑 Forget Saved Login</button>
-
-      <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.8;padding:10px 0">
-        <b style="color:var(--text2)">How to get SmartAPI key (free):</b><br>
-        1. Visit <span style="color:var(--blue)">smartapi.angelbroking.com</span><br>
-        2. Register with Angel One account<br>
-        3. Create an app → copy API key<br>
-        4. Angel One is 100% free for SmartAPI
-      </div>
+  <div id="sigFeed">
+    <div class="empty">
+      <div class="empty-icon">⚡</div>
+      <div class="empty-title">No Signals Yet</div>
+      <div class="empty-sub">Connect Angel One in Setup tab<br>then tap ▶ SCAN to start</div>
     </div>
   </div>
+</div>
 
-  <!-- ══ PAGE: LOG ══ -->
-  <div class="page" id="page-log">
-    <div style="padding:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase">Activity Log</span>
-        <button class="chip" onclick="document.getElementById('logBody').innerHTML=''" style="font-size:10px;padding:4px 10px">Clear</button>
-      </div>
-      <div id="logBody">
-        <div class="log-row"><span class="log-t">--:--</span><span class="log-m">App loaded. Enter server URL and connect Angel One.</span></div>
+<!-- ══ PAGE: ANALYSIS ══ -->
+<div class="page" id="page-analysis">
+  <div class="disc">⚠ Signals are algorithmic only. Options involve risk. Always use stop-loss. Not SEBI-registered advice.</div>
+  <div class="sec-head">PUT-CALL RATIO</div>
+  <div class="card" style="margin-top:0"><div class="card-body">
+    <div class="pcr-item"><div class="pcr-label">NIFTY</div><div class="pcr-track"><div class="pcr-fill" id="pcr-nifty-bar" style="width:60%;background:var(--amber)"></div></div><div class="pcr-num" id="pcr-nifty-val" style="color:var(--amber)">0.89</div></div>
+    <div class="pcr-item"><div class="pcr-label">BANKNIFTY</div><div class="pcr-track"><div class="pcr-fill" id="pcr-bank-bar" style="width:42%;background:var(--green)"></div></div><div class="pcr-num" id="pcr-bank-val" style="color:var(--green)">0.68</div></div>
+    <div class="pcr-item"><div class="pcr-label">FINNIFTY</div><div class="pcr-track"><div class="pcr-fill" id="pcr-fin-bar" style="width:76%;background:var(--red)"></div></div><div class="pcr-num" id="pcr-fin-val" style="color:var(--red)">1.12</div></div>
+    <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:4px">&lt;0.7 BULLISH · 0.7–1.0 NEUTRAL · &gt;1.0 BEARISH</div>
+  </div></div>
+  <div class="sec-head">LIVE INDICATORS</div>
+  <div class="card" style="margin-top:0"><div class="card-body" id="indicatorPanel">
+    <div style="font-size:11px;color:var(--text3);font-family:var(--font-mono)">Indicators update after each scan cycle.</div>
+  </div></div>
+  <div class="sec-head">SIGNAL PARAMETERS</div>
+  <div class="card" style="margin-top:0"><div class="card-body"><div id="paramGrid"></div></div></div>
+</div>
+
+<!-- ══ PAGE: SCANNER CONFIG ══ -->
+<div class="page" id="page-scanner">
+  <div style="padding:12px">
+    <div class="field-row">
+      <div class="field"><label class="field-label">Capital (₹)</label><input class="field-input" type="number" id="cfgCap" value="30000" inputmode="numeric"></div>
+      <div class="field"><label class="field-label">Max Premium/Lot</label><input class="field-input" type="number" id="cfgMaxPrem" value="10000" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label class="field-label">Profit Target: <span id="cfgProfitV" style="color:var(--green)">30%</span></label><div class="slider-wrap"><input type="range" min="10" max="60" value="30" id="cfgProfit" oninput="document.getElementById('cfgProfitV').textContent=this.value+'%'"></div></div>
+    <div class="field"><label class="field-label">Stop Loss: <span id="cfgSLV" style="color:var(--red)">5%</span></label><div class="slider-wrap"><input type="range" min="5" max="50" value="5" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%'"></div></div>
+    <div class="field"><label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">70%</span></label><div class="slider-wrap"><input type="range" min="60" max="90" value="70" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'"></div></div>
+    <div class="field"><label class="field-label">Scan Interval: <span id="cfgIntV" style="color:var(--text2)">30s</span></label><div class="slider-wrap"><input type="range" min="15" max="120" step="5" value="30" id="cfgInterval" oninput="document.getElementById('cfgIntV').textContent=this.value+'s'"></div></div>
+    <div class="field"><label class="field-label">Signal Type</label><select class="field-input" id="cfgType"><option value="BOTH">Both CE and PE</option><option value="CE">Calls (CE) only</option><option value="PE">Puts (PE) only</option></select></div>
+    <div class="field"><label class="field-label">Expiry</label><select class="field-input" id="cfgExpiry"><option value="WEEKLY">Current Weekly</option><option value="NEXT">Next Weekly</option><option value="MONTHLY">Monthly</option></select></div>
+    <div class="field"><label class="field-label">Scan Indices</label>
+      <div class="cb-list">
+        <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
+        <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
+        <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
+        <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
       </div>
     </div>
+    <button class="big-btn green" onclick="saveConfig()">💾 Save Config</button>
   </div>
+</div>
 
-  </div><!-- /pages -->
+<!-- ══ PAGE: STOCKS ══ -->
+<div class="page" id="page-stocks">
+  <div style="padding:12px 12px 6px;display:flex;gap:6px;flex-wrap:wrap">
+    <button class="chip" style="border-color:var(--green);color:var(--green)" onclick="selectAll(true)">All</button>
+    <button class="chip" onclick="selectAll(false)">None</button>
+    <button class="chip sect-chip" onclick="selectGroup('NIFTY50',this)">NIFTY50</button>
+    <button class="chip sect-chip" onclick="selectGroup('BANK',this)">Banks</button>
+    <button class="chip sect-chip" onclick="selectGroup('IT',this)">IT</button>
+    <button class="chip sect-chip" onclick="selectGroup('PHARMA',this)">Pharma</button>
+    <button class="chip sect-chip" onclick="selectGroup('AUTO',this)">Auto</button>
+    <button class="chip sect-chip" onclick="selectGroup('FMCG',this)">FMCG</button>
+    <button class="chip sect-chip" onclick="selectGroup('ENERGY',this)">Energy</button>
+    <button class="chip sect-chip" onclick="selectGroup('METAL',this)">Metal</button>
+    <button class="chip sect-chip" onclick="selectGroup('REALTY',this)">Realty</button>
+    <button class="chip sect-chip" onclick="selectGroup('CEMENT',this)">Cement</button>
+    <button class="chip sect-chip" onclick="selectGroup('NBFC',this)">NBFC</button>
+    <button class="chip sect-chip" onclick="selectGroup('DEFENCE',this)">Defence</button>
+    <button class="chip sect-chip" onclick="selectGroup('TELECOM',this)">Telecom</button>
+    <button class="chip sect-chip" onclick="selectGroup('INSURANCE',this)">Insurance</button>
+  </div>
+  <input class="field-input" type="search" id="stockSearch" placeholder="🔍 Search stocks..." oninput="filterStockList()" style="width:calc(100% - 24px);margin:0 12px 4px;display:block">
+  <div style="font-size:10px;color:var(--text3);padding:4px 12px 6px;font-family:var(--font-mono)" id="stockCount">Loading...</div>
+  <div id="stockList" style="padding:0 12px"></div>
+</div>
+
+<!-- ══ PAGE: SETUP ══ -->
+<div class="page" id="page-setup">
+  <div style="padding:12px">
+    <div class="field">
+      <label class="field-label">Server URL</label>
+      <div class="server-row">
+        <input class="field-input" type="url" id="serverUrl" value="http://localhost:3001" placeholder="http://192.168.x.x:3001">
+        <button class="server-test" onclick="testConnection()">Test</button>
+      </div>
+      <div class="field-hint">💡 Same WiFi? Use your PC's IP: http://192.168.x.x:3001</div>
+    </div>
+    <div style="height:1px;background:var(--border);margin:6px 0 14px"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:11px;padding:3px 9px;background:#ff6b1a15;color:#ff8c4a;border:1px solid #ff6b1a30;border-radius:5px;font-family:var(--font-mono);font-weight:700">ANGEL ONE</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text)">SmartAPI Login</span>
+    </div>
+    <div id="connStatus" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;font-size:12px;font-family:var(--font-mono)">
+      <div class="dot" id="apiDot"></div><span id="apiStat">Not connected</span>
+    </div>
+    <div class="field"><label class="field-label">Client ID</label><input class="field-input" type="text" id="aClient" placeholder="e.g. A123456" autocomplete="off" autocapitalize="characters"></div>
+    <div class="field"><label class="field-label">SmartAPI Key</label><input class="field-input" type="text" id="aKey" placeholder="From smartapi.angelbroking.com" autocomplete="off"></div>
+    <div class="field"><label class="field-label">Password / PIN</label><input class="field-input" type="password" id="aPin" placeholder="Trading password"></div>
+    <div class="field"><label class="field-label">TOTP Secret (optional)</label><input class="field-input" type="password" id="aTotp" placeholder="32-char base32 TOTP secret"></div>
+    <button class="big-btn green" onclick="connectAngel()">🔌 Connect Angel One</button>
+    <button class="big-btn outline" onclick="reqNotif()">🔔 Enable Notifications</button>
+    <div class="sound-toggle" style="margin:12px 0">
+      <label class="toggle-switch">
+        <input type="checkbox" id="soundToggle" onchange="S.soundOn=this.checked;localStorage.setItem('soundOn',this.checked?'1':'0')">
+        <span class="toggle-slider"></span>
+      </label>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--text)">Signal Sound Alert</div>
+        <div style="font-size:10px;color:var(--text3)">Beep when a new signal fires</div>
+      </div>
+    </div>
+    <button class="big-btn outline" style="color:var(--red);border-color:var(--red)" onclick="forgetCreds()">🗑 Forget Saved Login</button>
+  </div>
+</div>
+
+<!-- ══ PAGE: JOURNAL ══ -->
+<div class="page" id="page-journal">
+  <div style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--text)">Trade Journal</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">Auto-logged closed signals</div>
+      </div>
+      <button onclick="exportJournal()" style="font-size:11px;padding:6px 12px;border-radius:10px;border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;font-family:var(--font-mono)">📋 Copy</button>
+    </div>
+    <div id="journalSummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
+    <div id="journalList">
+      <div class="empty"><div class="empty-icon">📓</div><div class="empty-title">No Journal Entries</div><div class="empty-sub">Closed signals are automatically logged here.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: LOG ══ -->
+<div class="page" id="page-log">
+  <div style="padding:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text3);text-transform:uppercase">Activity Log</span>
+      <button class="chip" onclick="document.getElementById('logBody').innerHTML=''" style="font-size:10px;padding:4px 10px">Clear</button>
+    </div>
+    <div id="logBody">
+      <div class="log-row"><span class="log-t">--:--</span><span class="log-m">NSE F&O v5 loaded.</span></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /pages -->
 
 <!-- BOTTOM NAV -->
 <div class="bottomnav">
-  <button class="nav-item active" onclick="goPage('signals',this)">
-    <div class="nav-icon">⚡</div>
-    <span>Signals</span>
-    <div class="nav-badge" id="sigBadge">0</div>
-  </button>
-  <button class="nav-item" onclick="goPage('analysis',this)">
-    <div class="nav-icon">📊</div>
-    <span>Analysis</span>
-  </button>
-  <button class="nav-item" onclick="goPage('scanner',this)">
-    <div class="nav-icon">⚙️</div>
-    <span>Scanner</span>
-  </button>
-  <button class="nav-item" onclick="goPage('stocks',this)">
-    <div class="nav-icon">📋</div>
-    <span>Stocks</span>
-  </button>
-  <button class="nav-item" onclick="goPage('setup',this)">
-    <div class="nav-icon">🔌</div>
-    <span>Setup</span>
-  </button>
+  <button class="nav-item active" onclick="goPage('signals',this)"><div class="nav-icon">⚡</div><span>Signals</span><div class="nav-badge" id="sigBadge">0</div></button>
+  <button class="nav-item" onclick="goPage('analysis',this)"><div class="nav-icon">📊</div><span>Analysis</span></button>
+  <button class="nav-item" onclick="goPage('scanner',this)"><div class="nav-icon">⚙️</div><span>Scanner</span></button>
+  <button class="nav-item" onclick="goPage('stocks',this)"><div class="nav-icon">📋</div><span>Stocks</span></button>
+  <button class="nav-item" onclick="goPage('setup',this)"><div class="nav-icon">🔌</div><span>Setup</span></button>
+  <button class="nav-item" onclick="goPage('journal',this)"><div class="nav-icon">📓</div><span>Journal</span></button>
 </div>
 
 <script>
-'use strict';
-
-// ══════════════════════════════════════════════════════════════════
-// FNO STOCKS
-// ══════════════════════════════════════════════════════════════════
+// ══ DATA BLOCKS ══
 const FNO_STOCKS = [
   // ── NIFTY 50 ── (lot sizes from Dhan Apr 2026)
   {sym:'RELIANCE',name:'Reliance Industries',lot:250,grp:'NIFTY50'},
@@ -806,21 +768,6 @@ const FNO_STOCKS = [
 ];
 
 // ══════════════════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════════════════
-const S = {
-  scanning:false, scanInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
-  notif:false, connected:false,
-  serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
-  creds:{client:'',key:'',pin:'',totp:''},
-  selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
-  livePrice:{}, livePrev:{}, livePCR:{},
-  newSigCount: 0,
-};
-
-// Load saved server URL
-document.getElementById('serverUrl').value = S.serverUrl;
 
 // ══════════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -974,1237 +921,724 @@ const WL_ALL = [
   { sym:'DIXON',      name:'Dixon Technologies',token:'15157', isIdx:false },
   { sym:'KAYNES',     name:'Kaynes Technology', token:'17503', isIdx:false },
 ];
-// Default watchlist: NIFTY, FINNIFTY, RELIANCE (no BANKNIFTY)
-const WL_DEFAULT = ['NIFTY','FINNIFTY','RELIANCE'];
-let S_WATCHLIST = JSON.parse(localStorage.getItem('watchlist') || 'null') || [...WL_DEFAULT];
 
-function saveWatchlist() { localStorage.setItem('watchlist', JSON.stringify(S_WATCHLIST)); }
 
-function renderWatchlistBar() {
-  const bar = document.getElementById('watchlistBar');
-  if (!bar) return;
-  if (!S_WATCHLIST.length) {
-    bar.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text3);font-size:11px;padding:10px">Tap ✎ Edit to add symbols</div>';
-    return;
+// ══ v5 STATE ══
+const S = {
+  connected:false, scanning:false, filter:'ALL', sigTab:'OPEN',
+  signals:[], selectedStocks:new Set(), livePrice:{}, livePrev:{},
+  livePCR:{}, notif:false, soundOn:false,
+  scanInt:null, mktRefreshInt:null, newSigCount:0,
+  config:{
+    capital:30000, profitPct:30, slPct:5, minProb:70,
+    maxPrem:10000, intervalSec:30, type:'BOTH', expiry:'WEEKLY',
+    indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'],
+  },
+  creds:{client:'',key:'',pin:'',totp:''},
+  lastIndicators:{},
+  journal:[],
+};
+
+try {
+  // Auto-detect server URL:
+  // - If saved in localStorage, use that
+  // - If served from Railway/Render (not localhost), server IS the same origin
+  // - Otherwise default to localhost:3001 for local setup
+  const savedUrl = localStorage.getItem('serverUrl');
+  let defaultUrl = 'http://localhost:3001';
+  if(!savedUrl){
+    const h = window.location.hostname;
+    if(h && h !== 'localhost' && h !== '127.0.0.1' && !h.match(/^192\.168\.|^10\./)){
+      // Cloud deployment - server is same origin
+      defaultUrl = window.location.origin;
+    }
   }
-  bar.style.gridTemplateColumns = `repeat(${Math.min(S_WATCHLIST.length,4)},1fr)`;
-  bar.innerHTML = S_WATCHLIST.slice(0,4).map(sym => {
-    const meta  = WL_ALL.find(w => w.sym === sym);
-    const ltp   = S.livePrice[sym];
-    const prev  = S.livePrev[sym] || ltp || 0;
-    const chg   = ltp && prev ? ((ltp-prev)/prev*100) : null;
-    const col   = chg === null ? 'var(--text3)' : chg >= 0 ? 'var(--green)' : 'var(--red)';
-    const arr   = chg === null ? '' : chg >= 0 ? '▲' : '▼';
-    const label = meta?.name || sym;
-    return `
-    <div class="idx-card">
-      <div class="idx-name" style="font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
-      <div class="idx-val" id="wl-${sym}-ltp" style="font-size:16px">${ltp ? '₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0}) : '–'}</div>
-      <div id="wl-${sym}-chg" style="font-size:10px;font-family:var(--font-mono);color:${col}">${chg!==null?arr+' '+Math.abs(chg).toFixed(2)+'%':'–'}</div>
+  document.getElementById('serverUrl').value = savedUrl || defaultUrl;
+} catch(e){}
+try { S.soundOn = localStorage.getItem('soundOn')==='1'; document.getElementById('soundToggle').checked = S.soundOn; } catch(e){}
+
+// ── NSE TOKENS ──
+const NSE_TOKENS = {'RELIANCE':'2885','TCS':'11536','HDFCBANK':'1333','INFY':'1594','ICICIBANK':'4963','HINDUNILVR':'356','KOTAKBANK':'1922','SBIN':'3045','BHARTIARTL':'10604','ITC':'1660','BAJFINANCE':'317','LT':'11483','ASIANPAINT':'236','AXISBANK':'5900','MARUTI':'10999','WIPRO':'3787','HCLTECH':'7229','SUNPHARMA':'3351','TITAN':'3506','ULTRACEMCO':'2962','NESTLEIND':'17963','TATASTEEL':'3499','TATAMOTORS':'3456','JSWSTEEL':'11723','M&M':'519','ADANIENT':'25','NTPC':'11630','ONGC':'2475','TECHM':'13538','POWERGRID':'14977','COALINDIA':'20374','BAJAJFINSV':'16675','DRREDDY':'881','CIPLA':'694','DIVISLAB':'10940','EICHERMOT':'910','HEROMOTOCO':'1348','APOLLOHOSP':'157','BPCL':'526','TATACONSUM':'3432','BRITANNIA':'547','GRASIM':'315','SHRIRAMFIN':'4306','INDUSINDBK':'5258'};
+const STOCK_TOKENS = NSE_TOKENS;
+
+// ── NAVIGATION ──
+function goPage(id,el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(el) el.classList.add('active');
+  document.getElementById('sigBadge').classList.remove('show');
+  S.newSigCount=0;
+  if(id==='journal') renderJournal();
+}
+
+// ── WATCHLIST ──
+const WL_DEFAULT=['NIFTY','BANKNIFTY','FINNIFTY','RELIANCE'];
+let S_WATCHLIST=JSON.parse(localStorage.getItem('watchlist')||'null')||[...WL_DEFAULT];
+function saveWatchlist(){localStorage.setItem('watchlist',JSON.stringify(S_WATCHLIST));}
+
+function renderWatchlistBar(){
+  const bar=document.getElementById('watchlistBar');
+  if(!S_WATCHLIST.length){bar.innerHTML='';return;}
+  bar.innerHTML=S_WATCHLIST.map(sym=>{
+    const meta=WL_ALL.find(w=>w.sym===sym);
+    const ltp=S.livePrice[sym];
+    const prev=S.livePrev[sym]||ltp||0;
+    const chg=ltp&&prev?((ltp-prev)/prev*100):null;
+    const col=chg===null?'var(--text3)':chg>=0?'var(--green)':'var(--red)';
+    const arr=chg===null?'':chg>=0?'▲':'▼';
+    return `<div class="wl-card">
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">${meta?.name?.length>10?sym:meta?.name||sym}</div>
+      <div id="wl-${sym}-ltp" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:var(--text)">${ltp?'₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0}):'-'}</div>
+      <div id="wl-${sym}-chg" style="font-size:10px;font-family:var(--font-mono);color:${col};margin-top:2px">${chg!==null?arr+Math.abs(chg).toFixed(2)+'%':'-'}</div>
     </div>`;
   }).join('');
 }
 
-// Update watchlist cards in-place (no rebuild)
-function updateWatchlistBar() {
-  S_WATCHLIST.slice(0,4).forEach(sym => {
-    const ltp  = S.livePrice[sym];
-    const prev = S.livePrev[sym] || ltp || 0;
-    if (!ltp) return;
-    const chg  = prev ? ((ltp-prev)/prev*100) : null;
-    const col  = chg === null ? 'var(--text3)' : chg >= 0 ? 'var(--green)' : 'var(--red)';
-    const arr  = chg === null ? '' : chg >= 0 ? '▲' : '▼';
-    const ltpEl = document.getElementById(`wl-${sym}-ltp`);
-    const chgEl = document.getElementById(`wl-${sym}-chg`);
-    if (ltpEl) { ltpEl.textContent = '₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0}); ltpEl.style.color = col; }
-    if (chgEl) { chgEl.textContent = chg!==null?arr+' '+Math.abs(chg).toFixed(2)+'%':'–'; chgEl.style.color = col; }
+function updateWatchlistBar(){
+  S_WATCHLIST.forEach(sym=>{
+    const ltp=S.livePrice[sym]; const prev=S.livePrev[sym]||ltp||0;
+    const chg=prev?((ltp-prev)/prev*100):null;
+    const col=chg===null?'var(--text3)':chg>=0?'var(--green)':'var(--red)';
+    const arr=chg===null?'':chg>=0?'▲':'▼';
+    const le=document.getElementById(`wl-${sym}-ltp`);
+    const ce=document.getElementById(`wl-${sym}-chg`);
+    if(le&&ltp) le.textContent='₹'+ltp.toLocaleString('en-IN',{maximumFractionDigits:0});
+    if(ce){ce.textContent=chg!==null?arr+Math.abs(chg).toFixed(2)+'%':'-';ce.style.color=col;}
   });
 }
 
-function openWatchlistEdit() {
-  document.getElementById('watchlistModal').style.display = 'block';
-  document.getElementById('wlSearch').value = '';
-  renderWLPicker();
-}
-function closeWatchlistEdit() {
-  document.getElementById('watchlistModal').style.display = 'none';
-  saveWatchlist();
-  renderWatchlistBar();
-}
-function renderWLPicker() {
-  const q = document.getElementById('wlSearch').value.toLowerCase();
-  const filtered = WL_ALL.filter(w => !q || w.sym.toLowerCase().includes(q) || w.name.toLowerCase().includes(q));
-  document.getElementById('wlPicker').innerHTML = filtered.map(w => {
-    const sel = S_WATCHLIST.includes(w.sym);
-    const disabled = !sel && S_WATCHLIST.length >= 4;
-    return `<button onclick="toggleWL('${w.sym}')" style="padding:10px 8px;border-radius:8px;border:1px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-bg)':'var(--bg3)'};color:${sel?'var(--green)':'var(--text2)'};text-align:left;cursor:${disabled?'not-allowed':'pointer'};opacity:${disabled?'0.4':'1'}">
-      <div style="font-size:11px;font-weight:700;font-family:var(--font-mono)">${w.sym}</div>
-      <div style="font-size:10px;color:var(--text3)">${w.name}</div>
+function openWatchlistEdit(){renderWLPicker();document.getElementById('watchlistModal').style.display='block';}
+function closeWatchlistEdit(){document.getElementById('watchlistModal').style.display='none';saveWatchlist();renderWatchlistBar();}
+function renderWLPicker(){
+  const q=document.getElementById('wlSearch').value.toLowerCase();
+  const filtered=WL_ALL.filter(w=>!q||w.sym.toLowerCase().includes(q)||w.name.toLowerCase().includes(q));
+  document.getElementById('wlPicker').innerHTML=filtered.map(w=>{
+    const sel=S_WATCHLIST.includes(w.sym);
+    const disabled=!sel&&S_WATCHLIST.length>=4;
+    return `<button onclick="toggleWL('${w.sym}')" style="padding:10px 12px;border-radius:8px;border:1px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-bg)':'var(--bg3)'};color:${sel?'var(--green)':disabled?'var(--text3)':'var(--text2)'};text-align:left;cursor:${disabled?'not-allowed':'pointer'};font-family:var(--font-mono)">
+      <div style="font-size:12px;font-weight:700">${w.sym}</div>
+      <div style="font-size:9px;opacity:.7">${w.name.length>16?w.name.slice(0,16)+'…':w.name}</div>
     </button>`;
   }).join('');
 }
-function toggleWL(sym) {
-  const idx = S_WATCHLIST.indexOf(sym);
-  if (idx >= 0) { S_WATCHLIST.splice(idx,1); }
-  else if (S_WATCHLIST.length < 4) { S_WATCHLIST.push(sym); }
+function toggleWL(sym){
+  const i=S_WATCHLIST.indexOf(sym);
+  if(i>=0) S_WATCHLIST.splice(i,1);
+  else if(S_WATCHLIST.length<4) S_WATCHLIST.push(sym);
   renderWLPicker();
 }
 
-// ══════════════════════════════════════════════════════════════════
-// MARKET CLOCK
-// ══════════════════════════════════════════════════════════════════
-function tickClock() {
-  const { nseOpen } = getMarketStatus();
-  document.getElementById('mDot').className = 'dot' + (nseOpen ? ' live' : '');
-  document.getElementById('mStat').textContent = nseOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
-}
-tickClock();
-setInterval(tickClock, 30000);
-
-// ══════════════════════════════════════════════════════════════════
-// ANALYSIS PAGE — PARAMS
-// ══════════════════════════════════════════════════════════════════
-const PARAMS = [
-  'RSI Divergence (5m + 15m)',
-  'OI Buildup + OI Change %',
-  'IV Rank (< 30 to enter)',
-  'PCR Sentiment Reversal',
-  'Volume Surge (> 2x avg)',
-  'VWAP Crossover Filter',
-  'Expiry Guard (> 1 day left)',
-  'Capital Fit Filter',
-];
-document.getElementById('paramGrid').innerHTML = PARAMS.map(p =>
-  `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <span style="font-size:12px;color:var(--text2)">${p}</span>
-    <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;color:var(--green);background:var(--green-bg);border:1px solid #00f5a025;padding:2px 7px;border-radius:4px">ACTIVE</span>
-  </div>`
-).join('');
-
-// ══════════════════════════════════════════════════════════════════
-// STOCK LIST
-// ══════════════════════════════════════════════════════════════════
-function renderStockList() {
-  const q = document.getElementById('stockSearch').value.toLowerCase();
-  const filtered = FNO_STOCKS.filter(s => !q || s.sym.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
-  document.getElementById('stockList').innerHTML = filtered.map(s => `
-    <div class="cb-item" onclick="toggleStock('${s.sym}',this)">
-      <input type="checkbox" ${S.selectedStocks.has(s.sym)?'checked':''} onclick="event.stopPropagation();toggleStock('${s.sym}',this.closest('.cb-item'))">
-      <div class="cb-info">
-        <div class="cb-name">${s.sym}</div>
-        <div class="cb-sub">${s.name} · Lot ${s.lot}</div>
-      </div>
-    </div>`).join('');
-  document.getElementById('stockCount').textContent = S.selectedStocks.size + ' stocks selected';
+// ── MARKET STATUS ──
+function getMarketStatus(){
+  const ist=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+  const day=ist.getDay(),h=ist.getHours(),m=ist.getMinutes(),mins=h*60+m;
+  return {nseOpen:day>=1&&day<=5&&mins>=555&&mins<930,ist};
 }
 
-function toggleStock(sym, el) {
-  if (S.selectedStocks.has(sym)) S.selectedStocks.delete(sym);
-  else S.selectedStocks.add(sym);
-  const cb = el.querySelector('input[type=checkbox]');
-  if (cb) cb.checked = S.selectedStocks.has(sym);
-  document.getElementById('stockCount').textContent = S.selectedStocks.size + ' stocks selected';
+// ── MARKET CLOCK ──
+function tickClock(){
+  const {nseOpen}=getMarketStatus();
+  const dot=document.getElementById('mDot'),stat=document.getElementById('mStat');
+  if(nseOpen){dot.className='dot live';stat.textContent='LIVE';stat.style.color='var(--green)';}
+  else{dot.className='dot';stat.textContent='CLOSED';stat.style.color='var(--text3)';}
 }
+setInterval(tickClock,30000);tickClock();
 
-function filterStockList() { renderStockList(); }
-function selectAll(v) { 
-  FNO_STOCKS.forEach(s => { v ? S.selectedStocks.add(s.sym) : S.selectedStocks.delete(s.sym); }); 
-  // Clear all sector chip highlights
-  document.querySelectorAll('.sect-chip').forEach(c => c.classList.remove('on'));
-  renderStockList(); 
-}
-
-function selectGroup(g, btn) { 
-  // Toggle: if this chip is already ON, deselect all stocks in group and turn off
-  const isOn = btn && btn.classList.contains('on');
-  // Clear all other sector chips first
-  document.querySelectorAll('.sect-chip').forEach(c => c.classList.remove('on'));
-  if (isOn) {
-    // Second click → deselect this group
-    FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.delete(s.sym); });
+// ── STOCK LIST ──
+function renderStockList(){
+  const q=document.getElementById('stockSearch').value.toLowerCase();
+  if(q){
+    const f=FNO_STOCKS.filter(s=>!q||s.sym.toLowerCase().includes(q)||s.name.toLowerCase().includes(q));
+    document.getElementById('stockList').innerHTML=f.map(s=>{
+      const checked=S.selectedStocks.has(s.sym);
+      const logoUrl=getLogoUrl(s.sym);
+      const initials=s.sym.replace(/[^A-Z]/g,'').substring(0,3);
+      const logoHtml=logoUrl
+        ?`<img class="sl-logo" src="${logoUrl}" alt="${s.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="sl-logo-fb" style="display:none">${initials}</div>`
+        :`<div class="sl-logo-fb">${initials}</div>`;
+      return `<label class="cb-item ${checked?'cb-checked':''}"><input type="checkbox" ${checked?'checked':''} onchange="toggleStock('${s.sym}')"><div style="display:flex;align-items:center;gap:8px;flex:1">${logoHtml}<div class="cb-info"><div class="cb-name">${s.sym}</div><div class="cb-sub">${s.name} · Lot ${s.lot}</div></div></div></label>`;
+    }).join('');
   } else {
-    // First click → select all stocks in this group + highlight chip
-    FNO_STOCKS.forEach(s => { if(s.grp.includes(g)) S.selectedStocks.add(s.sym); });
-    if (btn) btn.classList.add('on');
+    const sectors=[
+      {key:'NIFTY50',label:'NIFTY 50'},{key:'BANK',label:'Banks'},{key:'IT',label:'IT'},
+      {key:'PHARMA',label:'Pharma'},{key:'AUTO',label:'Auto'},{key:'FMCG',label:'FMCG'},
+      {key:'ENERGY',label:'Energy'},{key:'METAL',label:'Metal'},{key:'REALTY',label:'Realty'},
+      {key:'CEMENT',label:'Cement'},{key:'NBFC',label:'NBFC'},{key:'DEFENCE',label:'Defence'},
+      {key:'TELECOM',label:'Telecom'},{key:'INSURANCE',label:'Insurance'},
+    ];
+    const rendered=new Set();
+    let html='';
+    sectors.forEach(({key,label})=>{
+      const ss=FNO_STOCKS.filter(s=>s.grp?.includes(key)&&!rendered.has(s.sym));
+      if(!ss.length)return;
+      const selCount=ss.filter(s=>S.selectedStocks.has(s.sym)).length;
+      const dotCls=selCount===ss.length?'all':selCount===0?'none':'part';
+      html+=`<div class="sector-group">
+        <div class="sector-hd" onclick="toggleSectorOpen(this)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="sector-dot ${dotCls}" data-key="${key}"></div>
+            <span class="sector-label">${label}</span>
+            <span class="sector-count">${selCount}/${ss.length}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button onclick="event.stopPropagation();toggleSector('${key}')" style="font-size:10px;padding:2px 8px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:${selCount===ss.length?'var(--green)':'var(--text3)'};cursor:pointer;font-family:var(--font-mono)">${selCount===ss.length?'✓ All':'Select all'}</button>
+            <span class="sector-arrow">▾</span>
+          </div>
+        </div>
+        <div class="sector-stocks">
+        ${ss.map(s=>{
+          rendered.add(s.sym);
+          const checked=S.selectedStocks.has(s.sym);
+          const logoUrl=getLogoUrl(s.sym);
+          const initials=s.sym.replace(/[^A-Z]/g,'').substring(0,3);
+          const logoHtml=logoUrl
+            ?`<img class="sl-logo" src="${logoUrl}" alt="${s.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="sl-logo-fb" style="display:none">${initials}</div>`
+            :`<div class="sl-logo-fb">${initials}</div>`;
+          return `<label class="cb-item ${checked?'cb-checked':''}"><input type="checkbox" ${checked?'checked':''} onchange="toggleStock('${s.sym}')"><div style="display:flex;align-items:center;gap:8px;flex:1">${logoHtml}<div class="cb-info"><div class="cb-name">${s.sym}</div><div class="cb-sub">${s.name} · Lot ${s.lot}</div></div></div></label>`;
+        }).join('')}
+        </div></div>`;
+    });
+    const rest=FNO_STOCKS.filter(s=>!rendered.has(s.sym));
+    if(rest.length){
+      const selCount=rest.filter(s=>S.selectedStocks.has(s.sym)).length;
+      html+=`<div class="sector-group">
+        <div class="sector-hd" onclick="toggleSectorOpen(this)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="sector-dot ${selCount===rest.length?'all':selCount===0?'none':'part'}"></div>
+            <span class="sector-label">Others</span><span class="sector-count">${selCount}/${rest.length}</span>
+          </div><span class="sector-arrow">▾</span>
+        </div>
+        <div class="sector-stocks">${rest.map(s=>{
+          const checked=S.selectedStocks.has(s.sym);
+          const logoUrl=getLogoUrl(s.sym);
+          const initials=s.sym.replace(/[^A-Z]/g,'').substring(0,3);
+          const logoHtml=logoUrl
+            ?`<img class="sl-logo" src="${logoUrl}" alt="${s.sym}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="sl-logo-fb" style="display:none">${initials}</div>`
+            :`<div class="sl-logo-fb">${initials}</div>`;
+          return `<label class="cb-item ${checked?'cb-checked':''}"><input type="checkbox" ${checked?'checked':''} onchange="toggleStock('${s.sym}')"><div style="display:flex;align-items:center;gap:8px;flex:1">${logoHtml}<div class="cb-info"><div class="cb-name">${s.sym}</div><div class="cb-sub">${s.name} · Lot ${s.lot}</div></div></div></label>`;
+        }).join('')}</div></div>`;
+    }
+    document.getElementById('stockList').innerHTML=html;
   }
-  renderStockList(); 
+  document.getElementById('stockCount').textContent=S.selectedStocks.size+' of '+FNO_STOCKS.length+' selected';
+}
+function toggleSectorOpen(hd){
+  const body=hd.nextElementSibling;
+  const arrow=hd.querySelector('.sector-arrow');
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'';
+  arrow.textContent=open?'▸':'▾';
+}
+function toggleSector(key){
+  const ss=FNO_STOCKS.filter(s=>s.grp?.includes(key));
+  const allSel=ss.every(s=>S.selectedStocks.has(s.sym));
+  if(allSel)ss.forEach(s=>S.selectedStocks.delete(s.sym));
+  else ss.forEach(s=>S.selectedStocks.add(s.sym));
+  renderStockList();
+}
+function toggleStock(sym){
+  if(S.selectedStocks.has(sym))S.selectedStocks.delete(sym);
+  else S.selectedStocks.add(sym);
+  document.getElementById('stockCount').textContent=S.selectedStocks.size+' of '+FNO_STOCKS.length+' selected';
+}
+function filterStockList(){renderStockList();}
+function selectAll(v){
+  if(v)FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
+  else S.selectedStocks.clear();
+  document.querySelectorAll('.sect-chip').forEach(c=>c.classList.remove('on'));
+  renderStockList();
+}
+function selectGroup(g,btn){
+  const isOn=btn?.classList.contains('on');
+  // Keep other sector chips active — just toggle this one
+  if(isOn){btn?.classList.remove('on');FNO_STOCKS.filter(s=>s.grp?.includes(g)).forEach(s=>S.selectedStocks.delete(s.sym));}
+  else{btn?.classList.add('on');FNO_STOCKS.filter(s=>s.grp?.includes(g)).forEach(s=>S.selectedStocks.add(s.sym));}
+  renderStockList();
 }
 
-renderStockList();
 
-// ══════════════════════════════════════════════════════════════════
-// SERVER URL
-// ══════════════════════════════════════════════════════════════════
-function getServer() {
-  const url = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-  S.serverUrl = url;
-  localStorage.setItem('serverUrl', url);
+// ── SERVER ──
+function getServer(){
+  const el=document.getElementById('serverUrl');
+  const url=(el?el.value:'').trim().replace(/\/$/,'');
+  if(url) localStorage.setItem('serverUrl',url);
+  // Fallback: if no URL and we're on a cloud domain, use same origin
+  if(!url){
+    const h=window.location.hostname;
+    if(h&&h!=='localhost'&&h!=='127.0.0.1'&&!h.match(/^192\.168\.|^10\./))
+      return window.location.origin;
+    return 'http://localhost:3001';
+  }
   return url;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// API CONNECTION
-// ══════════════════════════════════════════════════════════════════
-async function testConnection() {
-  const server = getServer();
-  try {
-    const r = await fetch(server + '/health', { signal: AbortSignal.timeout(5000) });
-    const d = await r.json();
-    if (d.status === 'ok') {
-      toast('ok', '✅ Server reachable', d.authenticated ? `Logged in as ${d.client}` : 'Server running, not logged in');
-      if (d.authenticated) {
-        S.connected = true;
-        setConnected(true, d.client);
-      }
-    }
-  } catch(e) {
-    toast('err', '❌ Cannot reach server', `Check URL: ${server}\n${e.message}`);
+async function testConnection(){
+  try{
+    const r=await fetch(getServer()+'/health',{signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),5000);return c.signal})()});
+    const d=await r.json();
+    if(d.status==='ok') toast('ok','✅ Server Online',`v${d.version||'?'} · ${d.authenticated?'Logged in as '+d.client:'Not logged in'}`);
+    else toast('err','❌ Error','Unexpected response');
+  }catch(e){
+    let msg=e.message||'Unknown error';
+    if(msg.includes('abort')||msg.includes('timeout')) msg='Timed out — is node server.js running at that URL?';
+    else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')) msg='Cannot reach server — check URL and ensure server is running';
+    toast('err','❌ Cannot Connect',msg);
   }
 }
 
-async function connectAngel() {
-  const server = getServer();
-  const client = document.getElementById('aClient').value.trim();
-  const key = document.getElementById('aKey').value.trim();
-  const pin = document.getElementById('aPin').value;
-  const totp = document.getElementById('aTotp').value.trim();
-
-  if (!client || !key || !pin) {
-    toast('warn', '⚠ Missing Fields', 'Client ID, API Key, and Password are required');
-    return;
-  }
-
-  addLog('Connecting to Angel One...', '');
-  document.getElementById('apiStat').textContent = 'Connecting...';
-
-  try {
-    const r = await fetch(server + '/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientCode: client, password: pin, apiKey: key, totpSecret: totp }),
-      signal: AbortSignal.timeout(30000),
-    });
-    const d = await r.json();
-    if (d.status === true) {
-      S.connected = true;
-      S.creds = { client, key, pin, totp };
-      // Save credentials so app auto-reconnects next time
-      localStorage.setItem('ao_creds', JSON.stringify({ client, key, pin, totp }));
-      setConnected(true, d.client);
-      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
-      addLog(`Connected to Angel One — ${d.client}`, 'ok');
+// ── ANGEL ONE LOGIN ──
+async function connectAngel(){
+  const server=getServer();
+  const client=document.getElementById('aClient').value.trim();
+  const key=document.getElementById('aKey').value.trim();
+  const pin=document.getElementById('aPin').value;
+  const totp=document.getElementById('aTotp').value.trim();
+  if(!client||!key||!pin){toast('warn','⚠ Missing Fields','Client ID, API Key, Password required');return;}
+  document.getElementById('apiStat').textContent='Connecting...';
+  try{
+    const r=await fetch(server+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:client,password:pin,apiKey:key,totpSecret:totp}),signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal})()});
+    const d=await r.json();
+    if(d.status===true){
+      S.connected=true;S.creds={client,key,pin,totp};
+      localStorage.setItem('ao_creds',JSON.stringify(S.creds));
+      setConnected(true,d.client);
+      toast('ok','✅ Connected!',`${d.client} · ${d.tokenExpiry}`);
+      addLog(`Connected — ${d.client}`,'ok');
       fetchMarketData();
-      S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
-    } else {
-      setConnected(false);
-      toast('err', '❌ Login Failed', d.message || 'Check credentials');
-      addLog('Login failed: ' + (d.message || 'Unknown'), 'err');
-    }
-  } catch(e) {
-    setConnected(false);
-    toast('err', '❌ Connection Error', 'Is server.js running?\n' + e.message);
-    addLog('Connection error: ' + e.message, 'err');
+      if(S.mktRefreshInt)clearInterval(S.mktRefreshInt);
+      S.mktRefreshInt=setInterval(()=>{if(S.connected)fetchMarketData();},5000);
+    }else{setConnected(false);toast('err','❌ Login Failed',d.message);addLog(`Login failed: ${d.message}`,'err');}
+  }catch(e){
+    let msg=e.message||'Unknown error';
+    if(msg.includes('abort')||msg.includes('timeout')) msg='Request timed out — check server URL and ensure node server.js is running';
+    else if(msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')) msg='Cannot reach server — check URL in Setup tab. Server must be running.';
+    else if(msg.includes('CORS')) msg='CORS error — update server.js and restart';
+    toast('err','❌ Connection Error',msg);
+    addLog('Connection error: '+e.message,'err');
   }
 }
 
-function setConnected(ok, client) {
-  document.getElementById('apiDot').className = 'dot' + (ok ? ' live' : ' err');
-  document.getElementById('apiStat').textContent = ok ? `Connected — ${client}` : 'Not connected';
-  document.getElementById('topStatus').textContent = ok ? `ANGEL ONE · ${client}` : 'ANGEL ONE · DISCONNECTED';
+function setConnected(ok,client){
+  const dot=document.getElementById('apiDot'),stat=document.getElementById('apiStat'),top=document.getElementById('topStatus');
+  if(ok){dot.className='dot live';stat.textContent=`Connected — ${client}`;top.textContent=`ANGEL ONE · ${client}`;top.style.color='var(--green)';}
+  else{dot.className='dot err';stat.textContent='Not connected';top.textContent='ANGEL ONE · DISCONNECTED';top.style.color='var(--text3)';}
 }
 
-// ══════════════════════════════════════════════════════════════════
-// MARKET DATA
-// ══════════════════════════════════════════════════════════════════
-const STOCK_TOKENS = {
-  RELIANCE:'2885',TCS:'11536',HDFCBANK:'1333',INFY:'1594',ICICIBANK:'4963',
-  HINDUNILVR:'1394',KOTAKBANK:'1922',SBIN:'3045',BHARTIARTL:'10604',ITC:'1660',
-  BAJFINANCE:'317',LT:'11483',AXISBANK:'5900',MARUTI:'10999',WIPRO:'3787',
-  HCLTECH:'7229',SUNPHARMA:'3351',TITAN:'3506',TATAMOTORS:'3456',
-  TATASTEEL:'3499',NTPC:'11630',POWERGRID:'14977',ONGC:'2475',COALINDIA:'20374',
-  SBILIFE:'21808',BAJAJFINSV:'16675',CIPLA:'694',DRREDDY:'881',
-};
-
-async function fetchMarketData() {
-  const server = getServer();
-
-  // ── Build token list: all 4 indices + watchlist stocks ──
-  const INDEX_TOKENS = ['26000','26009','26037','26074'];
-  const watchTokens  = S_WATCHLIST
-    .map(sym => WL_ALL.find(w => w.sym===sym)?.token)
-    .filter(t => t && !INDEX_TOKENS.includes(t));
-  const allTokens = [...new Set([...INDEX_TOKENS, ...watchTokens])];
-
-  try {
-    const r = await fetch(server + '/quote', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({mode:'FULL', exchangeTokens:{NSE: allTokens}}),
-    });
-    const d = await r.json();
-    if (d.status && d.data?.fetched) {
-      d.data.fetched.forEach(q => {
-        const ltp  = parseFloat(q.ltp  || q.close || 0);
-        const prev = parseFloat(q.close || q.previousClose || ltp);
-        if (!ltp) return;
-        const tok  = String(q.symbolToken);
-        const sym  = tok==='26000'?'NIFTY':tok==='26009'?'BANKNIFTY':tok==='26037'?'FINNIFTY':tok==='26074'?'MIDCAP'
-          : Object.keys(STOCK_TOKENS).find(s => String(STOCK_TOKENS[s])===tok)
-          || WL_ALL.find(w => w.token===tok)?.sym;
-        if (!sym) return;
-        // Store prev before updating (for % change calc)
-        if (S.livePrice[sym] && S.livePrice[sym] > 0) S.livePrev[sym] = prev;
-        S.livePrice[sym] = ltp;
+// ── MARKET DATA ──
+async function fetchMarketData(){
+  if(!S.connected)return;
+  const server=getServer();
+  const INDEX_TOKENS=['26000','26009','26037','26074'];
+  const wt=S_WATCHLIST.map(s=>STOCK_TOKENS[s]).filter(Boolean);
+  try{
+    const r=await fetch(server+'/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'LTP',exchangeTokens:{NSE:[...new Set([...INDEX_TOKENS,...wt])]}})});
+    const d=await r.json();
+    if(d.status&&d.data?.fetched){
+      d.data.fetched.forEach(q=>{
+        const ltp=parseFloat(q.ltp||q.close||0);
+        const prev=parseFloat(q.close||q.previousClose||ltp);
+        const tok=String(q.symbolToken);
+        const sym=tok==='26000'?'NIFTY':tok==='26009'?'BANKNIFTY':tok==='26037'?'FINNIFTY':tok==='26074'?'MIDCAP':Object.keys(STOCK_TOKENS).find(k=>STOCK_TOKENS[k]===tok)||tok;
+        if(!S.livePrev[sym])S.livePrev[sym]=prev;
+        S.livePrice[sym]=ltp;
       });
-      // Update watchlist bar in-place
       updateWatchlistBar();
     }
-  } catch(e) { /* silent */ }
-
-  // Stock LTPs (selected stocks not already in watchlist)
-  try {
-    const selArr = [...S.selectedStocks].filter(s => STOCK_TOKENS[s] && !S_WATCHLIST.includes(s));
-    const batch  = selArr.slice(0,20).map(s => STOCK_TOKENS[s]);
-    if (batch.length) {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:batch}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          const sym = Object.keys(STOCK_TOKENS).find(s => String(STOCK_TOKENS[s])===String(q.symbolToken));
-          if (sym && q.ltp) S.livePrice[sym] = parseFloat(q.ltp);
-        });
-      }
-    }
-  } catch(e) { /* silent */ }
-
-  // PCR
-  try {
-    const server = getServer();
-    const r = await fetch(server + '/pcr');
-    const d = await r.json();
-    if (d.status && d.data) {
-      const list = Array.isArray(d.data) ? d.data : [];
-      const niftyP = list.find(p => (p.symbol||'').toUpperCase().includes('NIFTY') && !(p.symbol||'').toUpperCase().includes('BANK'));
-      const bankP  = list.find(p => (p.symbol||'').toUpperCase().includes('BANKNIFTY'));
-      const finP   = list.find(p => (p.symbol||'').toUpperCase().includes('FINNIFTY'));
-      if (niftyP) { const v=parseFloat(niftyP.putCallRatio||niftyP.pcr||0); updPCR('nifty',v); S.livePCR['NIFTY']=v; }
-      if (bankP)  { const v=parseFloat(bankP.putCallRatio||bankP.pcr||0);   updPCR('bank',v);  S.livePCR['BANKNIFTY']=v; }
-      if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
-    }
-  } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
-
-  // Update live prices on all signal cards
-  updateSignalLivePrices();
-}
-
-function updPCR(key, val) {
-  if (!val || val <= 0) return; // skip zero/null — keep previous value
-  const pct = Math.min(95, Math.round(val*60));
-  const col = val<0.7?'var(--green)':val>1.0?'var(--red)':'var(--amber)';
-  const bar = document.getElementById(`pcr-${key}-bar`);
-  const num = document.getElementById(`pcr-${key}-val`);
-  if (bar) { bar.style.width = pct+'%'; bar.style.background = col; }
-  if (num) { num.textContent = val.toFixed(2); num.style.color = col; }
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════════════════
-// MARKET OPEN HELPER — shared by NSE and MCX scanners
-// NSE: 9:15 AM – 3:30 PM Mon–Fri
-// MCX: 9:00 AM – 11:30 PM Mon–Fri
-// ══════════════════════════════════════════════════════════════════
-function getMarketStatus() {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-  const h = ist.getHours(), m = ist.getMinutes(), day = ist.getDay();
-  const isWeekday = day > 0 && day < 6;
-  const totalMin  = h * 60 + m;
-  const nseOpen   = isWeekday && totalMin >= 9*60+15  && totalMin <= 15*60+30;
-  const mcxOpen   = isWeekday && totalMin >= 9*60      && totalMin <= 23*60+30;
-  return { nseOpen, mcxOpen, ist };
-}
-
-// ══════════════════════════════════════════════════════════════════
-// NEWS-AWARE SIGNAL SCORING (internal — not shown on screen)
-// Uses geopolitical + macro + sector news context to adjust signal
-// probability score before displaying to user
-// ══════════════════════════════════════════════════════════════════
-const NEWS_CONTEXT = {
-  // Geopolitical risk factors that suppress CE signals and boost PE signals
-  geopolitical: [
-    { keywords:['war','conflict','missile','attack','sanction','tension'],      ceAdj:-8,  peAdj:+8  },
-    { keywords:['ceasefire','peace','deal','agreement','truce'],               ceAdj:+5,  peAdj:-5  },
-    { keywords:['tariff','trade war','import duty','export ban'],              ceAdj:-6,  peAdj:+6  },
-    { keywords:['oil supply','opec','crude ban'],                              ceAdj:-5,  peAdj:+5  },
-  ],
-  // Macro economic signals
-  macro: [
-    { keywords:['rate hike','hawkish','inflation high','rbi hike'],            ceAdj:-7,  peAdj:+7  },
-    { keywords:['rate cut','dovish','inflation eases','rbi cut'],              ceAdj:+8,  peAdj:-8  },
-    { keywords:['gdp miss','recession','slowdown','contraction'],              ceAdj:-9,  peAdj:+9  },
-    { keywords:['gdp beat','growth','expansion','recovery'],                   ceAdj:+7,  peAdj:-7  },
-    { keywords:['rupee fall','usd inr high','currency weakness'],              ceAdj:-4,  peAdj:+4  },
-    { keywords:['fii sell','fii outflow','foreign sell'],                      ceAdj:-6,  peAdj:+6  },
-    { keywords:['fii buy','fii inflow','foreign buying'],                      ceAdj:+6,  peAdj:-6  },
-    { keywords:['budget','fiscal deficit','government spend'],                 ceAdj:+3,  peAdj:-3  },
-  ],
-  // Sector-specific news
-  sector: [
-    { keywords:['bank npa','npa rise','bad loans'],                  sectors:['BANK'],           ceAdj:-8,  peAdj:+8  },
-    { keywords:['bank results','credit growth','loan growth'],       sectors:['BANK'],           ceAdj:+6,  peAdj:-6  },
-    { keywords:['crude rise','oil up','brent high'],                 sectors:['ENERGY','AUTO'],  ceAdj:-5,  peAdj:+5  },
-    { keywords:['drug approval','fda','usfda'],                      sectors:['PHARMA'],         ceAdj:+8,  peAdj:-8  },
-    { keywords:['price erosion','usfda warning','import alert'],     sectors:['PHARMA'],         ceAdj:-7,  peAdj:+7  },
-    { keywords:['it deal','deal win','large deal'],                  sectors:['IT'],             ceAdj:+7,  peAdj:-7  },
-    { keywords:['it layoff','visa issue','h1b'],                     sectors:['IT'],             ceAdj:-5,  peAdj:+5  },
-    { keywords:['real estate','housing demand','property up'],       sectors:['REALTY'],         ceAdj:+6,  peAdj:-6  },
-    { keywords:['auto sales','vehicle sales','ev push'],             sectors:['AUTO'],           ceAdj:+5,  peAdj:-5  },
-    { keywords:['metal price','steel rise','aluminium'],             sectors:['METAL'],          ceAdj:+5,  peAdj:-5  },
-  ],
-  // MCX commodity influence on related stocks
-  mcx: [
-    { commodity:'GOLD',     direction:'up',   sectors:['FINANCE'],    ceAdj:+4,  peAdj:-4 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['ENERGY'],     ceAdj:+6,  peAdj:-6 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['AUTO'],       ceAdj:-4,  peAdj:+4 },
-    { commodity:'CRUDEOIL', direction:'down', sectors:['AUTO'],       ceAdj:+5,  peAdj:-5 },
-    { commodity:'SILVER',   direction:'up',   sectors:['METAL'],      ceAdj:+3,  peAdj:-3 },
-  ],
-};
-
-// Simulated live news headlines (updated each scan cycle with realistic patterns)
-// In production these would come from a news API — here they model real market dynamics
-const NEWS_POOLS = {
-  bullish: [
-    'FII inflows surge ₹4,200cr — markets rally expected',
-    'RBI holds rates, signals dovish stance for Q2',
-    'India GDP beats estimates at 7.8% — strong momentum',
-    'SEBI eases F&O margin norms — positive for retail traders',
-    'US Fed pauses — EM markets including India to benefit',
-    'Crude oil slides 2% — positive for India import bill',
-    'IT sector deal pipeline robust — Nasscom upgrades outlook',
-    'GST collections hit record ₹2.1L cr — fiscal strong',
-  ],
-  bearish: [
-    'Middle East tensions escalate — safe haven demand rises',
-    'Inflation data above estimate — rate cut hopes recede',
-    'FII outflows ₹3,500cr — dollar strengthening',
-    'US recession fears resurface — global risk-off',
-    'Crude oil jumps 3% on OPEC cut — India CAD concern',
-    'Rupee at 84.5 vs USD — RBI may intervene',
-    'China slowdown weighs on metals — India exports at risk',
-    'Corporate earnings miss in BFSI — caution warranted',
-  ],
-  neutral: [
-    'Markets await Fed minutes — consolidation likely',
-    'Q4 results season begins — stock-specific moves expected',
-    'Budget expectations build — infra and defence in focus',
-    'Global cues mixed — Nifty likely range-bound 24000-24500',
-  ],
-};
-
-// Current news sentiment state (refreshed each scan)
-let NEWS_STATE = { sentiment: 'neutral', headlines: [], adjustments: {} };
-
-function refreshNewsSentiment() {
-  // Pick 2-3 random headlines reflecting realistic market state
-  const hour = new Date().getHours();
-  const isMarketOpen = hour >= 9 && hour < 16;
-
-  let pool = ['bullish','bearish','neutral'][Math.floor(Math.random()*3)];
-
-  const headlines = [];
-  const src = NEWS_POOLS[pool];
-  for (let i = 0; i < 2; i++) headlines.push(src[Math.floor(Math.random()*src.length)]);
-  if (Math.random() > 0.6) headlines.push(NEWS_POOLS.neutral[Math.floor(Math.random()*NEWS_POOLS.neutral.length)]);
-
-  NEWS_STATE = { sentiment: pool, headlines, adjustments: {} };
-
-  // Build adjustment map from matching keywords
-  const allFactors = [...NEWS_CONTEXT.geopolitical, ...NEWS_CONTEXT.macro];
-  const combined = headlines.join(' ').toLowerCase();
-  allFactors.forEach(f => {
-    if (f.keywords.some(k => combined.includes(k))) {
-      NEWS_STATE.adjustments['CE'] = (NEWS_STATE.adjustments['CE']||0) + (f.ceAdj||0);
-      NEWS_STATE.adjustments['PE'] = (NEWS_STATE.adjustments['PE']||0) + (f.peAdj||0);
-    }
-  });
-
-
-}
-
-function getNewsAdjustedProb(baseProb, type) {
-  // News context is informational only — never penalises CE or PE probability
-  // This prevents one-sided news randomly killing CE or PE signals
-  return baseProb;
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// OPTION CHAIN CACHE
-// ══════════════════════════════════════════════════════════════════
-const OC_CACHE = {};
-const OC_TTL = 30000;
-
-async function fetchOptionChain(sym, spotPrice) {
-  const now = Date.now();
-  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
-  try {
-    const server = getServer();
-    const r = await fetch(server + '/option-chain', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
+  }catch(e){}
+  try{
+    const pr=await fetch(server+'/pcr');const pd=await pr.json();
+    if(pd.status&&pd.data)pd.data.forEach(d=>{
+      if(d.symbol==='NIFTY'){S.livePCR['NIFTY']=d.putCallRatio;updPCR('nifty',d.putCallRatio);}
+      if(d.symbol==='BANKNIFTY'){S.livePCR['BANKNIFTY']=d.putCallRatio;updPCR('bank',d.putCallRatio);}
+      if(d.symbol==='FINNIFTY'){S.livePCR['FINNIFTY']=d.putCallRatio;updPCR('fin',d.putCallRatio);}
     });
-    const d = await r.json();
-    if (d.status && d.strikes) {
-      OC_CACHE[sym] = {data:d, fetchTime:now};
-      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
-      return d;
-    }
-  } catch(e) {}
+  }catch(e){}
+}
+
+function updPCR(key,val){
+  const pct=Math.min(100,Math.max(0,(val/2)*100));
+  const col=val<0.7?'var(--green)':val>1.0?'var(--red)':'var(--amber)';
+  const bar=document.getElementById(`pcr-${key}-bar`),v=document.getElementById(`pcr-${key}-val`);
+  if(bar){bar.style.width=pct+'%';bar.style.background=col;}
+  if(v){v.textContent=val?.toFixed(2)||'-';v.style.color=col;}
+}
+
+// ── NEWS / INST BIAS ──
+let S_NEWS=null,INST_BIAS={bias:'NEUTRAL',fiiNet:0};
+async function fetchInstBias(){
+  try{const r=await fetch(getServer()+'/fii-dii');const d=await r.json();if(d.status!==false)INST_BIAS={bias:d.instBias||'NEUTRAL',fiiNet:d.fiiNet||0};}catch(e){}
+}
+
+// ── ANALYSIS CACHE ──
+const ANALYSIS_CACHE={},ANALYSIS_TTL=5*60*1000;
+async function fetchMarketAnalysis(sym){
+  const now=Date.now();
+  if(ANALYSIS_CACHE[sym]&&(now-ANALYSIS_CACHE[sym].fetchTime)<ANALYSIS_TTL)return ANALYSIS_CACHE[sym].data;
+  const token=NSE_TOKENS[sym];if(!token)return null;
+  try{
+    const r=await fetch(getServer()+'/market-bias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbolToken:token,exchange:'NSE'})});
+    const d=await r.json();
+    if(d.status){ANALYSIS_CACHE[sym]={data:d,fetchTime:now};S.lastIndicators[sym]=d;return d;}
+  }catch(e){}
   return null;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// NEWS SENTIMENT — fetched silently for scanner scoring
-// ══════════════════════════════════════════════════════════════════
-let S_NEWS = { sentiment: 'NEUTRAL', sentimentScore: 50, geoRisk: 0, fetchTime: 0 };
-
-async function fetchNewsSentiment() {
-  if (!S.connected) return;
-  try {
-    const r = await fetch(getServer() + '/news-sentiment');
-    const d = await r.json();
-    if (d.status) {
-      S_NEWS = { ...d, fetchTime: Date.now() };
-      addLog(`News: ${d.sentiment} (${d.sentimentScore}%) · GeoRisk: ${d.geoRisk}`, 'ok');
-    }
-  } catch(e) {}
+// ── v5: INDICATOR PANEL ──
+function updateIndicatorPanel(){
+  const panel=document.getElementById('indicatorPanel');if(!panel)return;
+  const syms=Object.keys(S.lastIndicators).slice(0,4);
+  if(!syms.length){panel.innerHTML='<div style="font-size:11px;color:var(--text3);font-family:var(--font-mono)">Indicators update after each scan cycle.</div>';return;}
+  panel.innerHTML=syms.map(sym=>{
+    const d=S.lastIndicators[sym];if(!d)return'';
+    const macd=d.macd,st=d.supertrend,rsi=d.rsi,atr=d.atr14;
+    const macdSig=macd?(macd.crossover?'🚀 Cross UP':macd.crossunder?'⬇ Cross DN':macd.bullish?'BULLISH':'BEARISH'):'-';
+    const macdCol=macd?(macd.bullish?'var(--green)':'var(--red)'):'var(--text3)';
+    const stCol=st?.direction==='UP'?'var(--green)':st?.direction==='DOWN'?'var(--red)':'var(--text3)';
+    const rsiCol=rsi?(rsi<30?'var(--green)':rsi>70?'var(--red)':'var(--amber)'):'var(--text3)';
+    return `<div style="margin-bottom:12px">
+      <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--cyan);text-transform:uppercase;margin-bottom:6px">${sym}</div>
+      <div class="ind-row"><div class="ind-label">RSI-14</div><div class="ind-val" style="color:${rsiCol}">${rsi?.toFixed(1)||'-'}</div><span class="ind-sig ${rsi<30?'sig-bull':rsi>70?'sig-bear':'sig-neut'}">${rsi<30?'OVERSOLD':rsi>70?'OVERBOUGHT':'NEUTRAL'}</span></div>
+      <div class="ind-row"><div class="ind-label">MACD 12/26/9</div><div class="ind-val" style="color:${macdCol}">${macd?macd.hist.toFixed(2):'-'}</div><span class="ind-sig ${macd?.bullish?'sig-bull':'sig-bear'}">${macdSig}</span></div>
+      <div class="ind-row"><div class="ind-label">Supertrend 7/3</div><div class="ind-val" style="color:${stCol}">${st?st.supertrend.toFixed(0):'-'}</div><span class="ind-sig ${st?.direction==='UP'?'sig-bull':st?.direction==='DOWN'?'sig-bear':'sig-neut'}">${st?.direction||'-'}</span></div>
+      <div class="ind-row"><div class="ind-label">ATR-14</div><div class="ind-val" style="color:var(--text2)">${atr||'-'}</div><span class="ind-sig sig-neut">VOLATILITY</span></div>
+    </div>`;
+  }).join('<div style="height:1px;background:var(--border);margin:8px 0"></div>');
 }
 
-// Fetch news every 5 minutes silently
-fetchNewsSentiment();
-setInterval(fetchNewsSentiment, 5 * 60 * 1000);
-
-
-// ══════════════════════════════════════════════════════════════════
-// RA PIPELINE: bias → level → setup → trigger → confirmation → risk
-//
-// HARD BLOCKS (instant null — no exceptions):
-//   • Market bias opposes direction (EMA structure)
-//   • No real candle data for that symbol (skip, never fabricate)
-//   • Real option premium unavailable (stocks); index gets est only
-//   • Price AT S/R level without breakout confirmation
-//   • Volume < 1.0x avg (illiquid — skip entirely)
-//   • Extreme geo-risk (≥5) or expiry crush (≤1 day)
-//   • >2 signals for same symbol+type this session (overtrading)
-//   • RR < 1:2 after SL placed at structure
-//
-// SOFT PENALTIES (score reduction, not rejection):
-//   • VWAP opposing        → −12 pts
-//   • FII opposing         → −10 pts
-//   • News/event opposing  → −8 pts
-//   • Low IV rank missing  → −5 pts
-//   • ORB absent           → −0 pts (neutral)
-//
-// RELATIVE STRENGTH vs INDEX:
-//   • Stock stronger than Nifty → +8 pts CE / −8 pts PE
-//   • Stock weaker  than Nifty → +8 pts PE / −8 pts CE
-// ══════════════════════════════════════════════════════════════════
-
-const ANALYSIS_CACHE = {};
-const ANALYSIS_TTL   = 30000; // 30s per symbol
-
-const NSE_TOKENS = {
-  NIFTY:'26000', BANKNIFTY:'26009', FINNIFTY:'26037', MIDCAP:'26074',
-  RELIANCE:'2885',  TCS:'11536',    HDFCBANK:'1333',  INFY:'1594',
-  ICICIBANK:'4963', HINDUNILVR:'1394', KOTAKBANK:'1922', SBIN:'3045',
-  BHARTIARTL:'10604', ITC:'1660',   BAJFINANCE:'317', LT:'11483',
-  ASIANPAINT:'236', AXISBANK:'5900', MARUTI:'10999',  WIPRO:'3787',
-  HCLTECH:'7229',   SUNPHARMA:'3351', TITAN:'3506',   ULTRACEMCO:'11532',
-  NESTLEIND:'17963', POWERGRID:'14977', NTPC:'11630', TECHM:'13538',
-  ONGC:'2475',      TATASTEEL:'3499', TATAMOTORS:'3456', JSWSTEEL:'11723',
-  'M&M':'2031',     ADANIENT:'25',   ADANIPORTS:'15083', COALINDIA:'20374',
-  BAJAJFINSV:'16675', HDFCLIFE:'467', SBILIFE:'21808', CIPLA:'694',
-  DRREDDY:'881',    DIVISLAB:'10940', EICHERMOT:'910', HEROMOTOCO:'1348',
-  APOLLOHOSP:'157', BPCL:'526',      TATACONSUM:'3432', BRITANNIA:'547',
-  GRASIM:'1232',    INDUSINDBK:'5258', SHRIRAMFIN:'4306',
-  BANDHANBNK:'2263', IDFCFIRSTB:'11783', RBLBANK:'4708',
-  PNB:'2730',       BANKBARODA:'4668', FEDERALBNK:'1023', CANBK:'10794',
-  MPHASIS:'4503',   COFORGE:'11543', LTIM:'17818',    PERSISTENT:'4825',
-  KPITTECH:'11223', 'BAJAJ-AUTO':'16669', TVSMOTORS:'3753', ASHOKLEY:'212',
-  MOTHERSON:'4204', LUPIN:'10440',   AUROPHARMA:'275', BIOCON:'2911',
-  IOC:'1624',       HPCL:'1406',     GAIL:'1207',     TATAPOWER:'3426',
-  HINDALCO:'1363',  VEDL:'3063',     NMDC:'15332',
-  DLF:'14732',      GODREJPROP:'17875', GODREJCP:'10099', DABUR:'772',
-  COLPAL:'2955',    MARICO:'4067',   VBL:'15459',
-  CHOLAFIN:'685',   MUTHOOTFIN:'3596',
-  ACC:'3',          AMBUJACEM:'1270', SHREECEM:'3103',
-  HAL:'2303',       BEL:'383',       BHEL:'438',
-  ZOMATO:'5097',    INDIGO:'11195',  IRCTC:'13611',
-  CONCOR:'4344',    IRB:'19504',     PRESTIGE:'8982',
-};
-let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
-
-async function fetchInstBias() {
-  if (Date.now() - INST_BIAS.fetchTime < 30*60*1000) return;
-  try {
-    const r = await fetch(getServer() + '/fii-dii');
-    const d = await r.json();
-    if (d.status) {
-      INST_BIAS = { bias:d.instBias, fiiNet:d.fiiNet, diiNet:d.diiNet, fetchTime:Date.now() };
-      addLog(`📊 FII ₹${d.fiiNet}Cr DII ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
-    }
-  } catch(e) {}
+// ── RA SCORER ──
+function scoreRA(p){
+  const{type,rsi,bias,aboveVwap,volRatio,oiDelta,pcr,ivRank,instBias,newsScore,geoRisk,orbConfirm,daysToExpiry,pdhBreak,pdlBreak,atStructure,relStrength,macd,supertrend}=p;
+  if(bias==='BEARISH'&&type==='CE')return{score:0,grade:'REJECT',reason:'Trend BEARISH — CE blocked'};
+  if(bias==='BULLISH'&&type==='PE')return{score:0,grade:'REJECT',reason:'Trend BULLISH — PE blocked'};
+  if(atStructure&&!pdhBreak&&!pdlBreak)return{score:0,grade:'REJECT',reason:'Price at S/R without breakout'};
+  if(volRatio!==null&&volRatio<1.0)return{score:0,grade:'REJECT',reason:`Volume ${volRatio?.toFixed(1)}x — illiquid`};
+  if(daysToExpiry<=1)return{score:0,grade:'REJECT',reason:'Expiry tomorrow — theta crush'};
+  let score=0;const reasons=[];
+  if(type==='CE'&&bias==='BULLISH'){score+=25;reasons.push('BULLISH trend');}
+  else if(type==='PE'&&bias==='BEARISH'){score+=25;reasons.push('BEARISH trend');}
+  else{score+=10;reasons.push('NEUTRAL trend');}
+  if(rsi!==null){
+    if(type==='CE'){if(rsi<30){score+=22;reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`);}else if(rsi<38){score+=16;reasons.push(`RSI ${rsi.toFixed(0)} oversold`);}else if(rsi<45)score+=9;else if(rsi<50)score+=3;}
+    else{if(rsi>70){score+=22;reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`);}else if(rsi>62){score+=16;reasons.push(`RSI ${rsi.toFixed(0)} overbought`);}else if(rsi>55)score+=9;else if(rsi>50)score+=3;}
+  }
+  if(oiDelta!==null){if(oiDelta>0.40){score+=15;reasons.push('Strong OI buildup');}else if(oiDelta>0.25){score+=10;reasons.push('OI buildup');}else if(oiDelta>0.10)score+=5;}
+  if(pcr!==null){if(type==='CE'){if(pcr<0.60){score+=12;reasons.push(`PCR ${pcr.toFixed(2)} bullish`);}else if(pcr<0.75)score+=8;else if(pcr<0.90)score+=4;}else{if(pcr>1.20){score+=12;reasons.push(`PCR ${pcr.toFixed(2)} bearish`);}else if(pcr>1.00)score+=8;else if(pcr>0.85)score+=4;}}
+  if(ivRank!==null){if(ivRank<20){score+=8;reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`);}else if(ivRank<30)score+=5;else if(ivRank<40)score+=2;else score-=5;}
+  if(volRatio!==null){if(volRatio>=2.5){score+=8;reasons.push(`Vol ${volRatio.toFixed(1)}x surge`);}else if(volRatio>=1.8)score+=5;else if(volRatio>=1.2)score+=2;}
+  if(macd){
+    if(type==='CE'&&macd.crossover){score+=10;reasons.push('MACD cross UP ✓');}else if(type==='CE'&&macd.bullish)score+=5;else if(type==='CE'&&!macd.bullish)score-=8;
+    if(type==='PE'&&macd.crossunder){score+=10;reasons.push('MACD cross DN ✓');}else if(type==='PE'&&!macd.bullish)score+=5;else if(type==='PE'&&macd.bullish)score-=8;
+  }
+  if(supertrend){
+    if(type==='CE'&&supertrend.direction==='UP'){score+=supertrend.crossUp?10:6;reasons.push(supertrend.crossUp?'Supertrend cross UP ✓':'Supertrend UP ✓');}
+    else if(type==='CE'&&supertrend.direction==='DOWN')score-=10;
+    if(type==='PE'&&supertrend.direction==='DOWN'){score+=supertrend.crossDown?10:6;reasons.push(supertrend.crossDown?'Supertrend cross DN ✓':'Supertrend DOWN ✓');}
+    else if(type==='PE'&&supertrend.direction==='UP')score-=10;
+  }
+  if(aboveVwap!==null){if(type==='CE'&&aboveVwap){score+=6;reasons.push('Above VWAP ✓');}else if(type==='CE'&&!aboveVwap){score-=12;reasons.push('Below VWAP ✗');}else if(type==='PE'&&!aboveVwap){score+=6;reasons.push('Below VWAP ✓');}else if(type==='PE'&&aboveVwap){score-=12;reasons.push('Above VWAP ✗');}}
+  if(type==='CE'&&instBias==='BULLISH'){score+=6;reasons.push('FII buying ✓');}else if(type==='CE'&&instBias==='BEARISH')score-=10;else if(type==='PE'&&instBias==='BEARISH'){score+=6;reasons.push('FII selling ✓');}else if(type==='PE'&&instBias==='BULLISH')score-=10;
+  if(newsScore!==null){if(type==='CE'&&newsScore>65)score+=5;else if(type==='CE'&&newsScore<35)score-=8;else if(type==='PE'&&newsScore<35)score+=5;else if(type==='PE'&&newsScore>65)score-=8;if(geoRisk>=3)score-=6*Math.min(geoRisk,4);}
+  if(orbConfirm===true){score+=8;reasons.push('ORB breakout ✓');}
+  if(pdhBreak){score+=6;reasons.push('PDH break ✓');}if(pdlBreak){score+=6;reasons.push('PDL break ✓');}
+  if(relStrength!==null){if(type==='CE'&&relStrength>0.5){score+=8;reasons.push('RS+ vs Nifty');}else if(type==='CE'&&relStrength<-0.5)score-=8;else if(type==='PE'&&relStrength<-0.5){score+=8;reasons.push('RS- vs Nifty');}else if(type==='PE'&&relStrength>0.5)score-=8;}
+  if(daysToExpiry<=2)score=Math.floor(score*0.75);
+  const clamped=Math.min(100,Math.max(0,score));
+  const prob=Math.min(92,60+Math.round(clamped*0.32));
+  const grade=prob>=85?'A':prob>=78?'B':prob>=70?'C':'REJECT';
+  return{score:clamped,prob,grade,reasons};
 }
 
-async function fetchMarketAnalysis(sym) {
-  const now = Date.now();
-  if (ANALYSIS_CACHE[sym] && (now - ANALYSIS_CACHE[sym].fetchTime) < ANALYSIS_TTL)
-    return ANALYSIS_CACHE[sym].data;
-  const token = NSE_TOKENS[sym];
-  if (!token) return null; // no token → no analysis → signal skipped
-  try {
-    const r = await fetch(getServer() + '/market-bias', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ symbolToken:token, exchange:'NSE' }),
-    });
-    const d = await r.json();
-    if (d.status) { ANALYSIS_CACHE[sym] = { data:d, fetchTime:now }; return d; }
-  } catch(e) {}
+// ── DETECT SETUP ──
+function detectSetup(type,analysis,baseP,rsi,macd,st){
+  if(macd?.crossover&&type==='CE')return'MACD CROSS';
+  if(macd?.crossunder&&type==='PE')return'MACD CROSS';
+  if(st?.crossUp&&type==='CE')return'ST BREAKOUT';
+  if(st?.crossDown&&type==='PE')return'ST BREAKOUT';
+  if(!analysis)return'MOMENTUM';
+  const{orb_high,orb_low,pdh,pdl}=analysis;
+  if(orb_high&&orb_low){if(type==='CE'&&baseP>orb_high)return'ORB BREAKOUT';if(type==='PE'&&baseP<orb_low)return'ORB BREAKOUT';}
+  if(rsi!==null){if(rsi<30||rsi>70)return'REVERSAL';if(rsi<38||rsi>62)return'PULLBACK';}
+  if(pdh&&pdl){if(type==='CE'&&baseP>pdh)return'BREAKOUT';if(type==='PE'&&baseP<pdl)return'BREAKOUT';}
+  return'MOMENTUM';
+}
+
+// ── OPTION CHAIN CACHE ──
+const OC_CACHE={},OC_TTL=3*60*1000;
+async function fetchOptionChain(sym,spotPrice){
+  const now=Date.now();
+  if(OC_CACHE[sym]&&(now-OC_CACHE[sym].t)<OC_TTL)return OC_CACHE[sym].d;
+  try{
+    const r=await fetch(getServer()+'/option-chain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:sym,spotPrice,expiry:S.config.expiry,depth:5})});
+    const d=await r.json();
+    if(d.status){OC_CACHE[sym]={d,t:now};return d;}
+  }catch(e){}
   return null;
 }
 
-// ── RA Scorer ──
-// Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
-function scoreRA(p) {
-  const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
-          instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
-          pdhBreak, pdlBreak, atStructure, relStrength } = p;
-
-  // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
-  // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
-  if (bias === 'BEARISH' && type === 'CE') return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
-  if (bias === 'BULLISH' && type === 'PE') return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
-
-  // ── STAGE 2: LEVEL — PDH/PDL S/R enforcement ──
-  // atStructure = price within 0.3% of PDH (CE) or PDL (PE) without breakout
-  if (atStructure && !pdhBreak && !pdlBreak)
-    return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
-
-  // ── STAGE 3: VOLUME — hard reject if illiquid ──
-  if (volRatio !== null && volRatio < 1.0)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — illiquid, skipping` };
-
-  // ── STAGE 4: EXPIRY ──
-  if (daysToExpiry <= 1) return { score:0, grade:'REJECT', reason:'Expiry tomorrow — theta crush' };
-
-  // ── STAGE 5: SCORE all soft conditions ──
-  let score = 0;
-  const reasons = [];
-
-  // Bias (0–25 pts)
-  if (type === 'CE' && bias === 'BULLISH')  { score += 25; reasons.push(`BULLISH trend`); }
-  else if (type === 'PE' && bias === 'BEARISH') { score += 25; reasons.push(`BEARISH trend`); }
-  else { score += 10; reasons.push(`NEUTRAL trend`); } // neutral allowed
-
-  // RSI — real candle data required (not random)
-  // (0–22 pts)
-  if (rsi !== null) {
-    if (type === 'CE') {
-      if (rsi < 30)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
-      else if (rsi < 38)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
-      else if (rsi < 45)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
-      else if (rsi < 50)  { score += 3; }
-    } else {
-      if (rsi > 70)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
-      else if (rsi > 62)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
-      else if (rsi > 55)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
-      else if (rsi > 50)  { score += 3; }
-    }
-  }
-
-  // OI buildup (0–15 pts) — from Angel One option chain
-  if (oiDelta !== null) {
-    if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
-    else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
-    else if (oiDelta > 0.10) { score += 5; }
-  }
-
-  // PCR (0–12 pts) — from Angel One PCR API
-  if (pcr !== null) {
-    if (type === 'CE') {
-      if (pcr < 0.60)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
-      else if (pcr < 0.75)  { score += 8; }
-      else if (pcr < 0.90)  { score += 4; }
-    } else {
-      if (pcr > 1.20)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
-      else if (pcr > 1.00)  { score += 8; }
-      else if (pcr > 0.85)  { score += 4; }
-    }
-  }
-
-  // IV Rank (0–8 pts) — buy when cheap
-  if (ivRank !== null) {
-    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 30)  { score += 5; }
-    else if (ivRank < 40)  { score += 2; }
-    else                   { score -= 5; } // expensive — soft penalty
-  }
-
-  // Volume surge (0–8 pts)
-  if (volRatio !== null) {
-    if (volRatio >= 2.5)    { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
-    else if (volRatio >= 1.8) { score += 5; }
-    else if (volRatio >= 1.2) { score += 2; }
-  }
-
-  // ── SOFT PENALTIES (non-critical — reduce score but don't reject) ──
-
-  // VWAP (−12 to +6 pts)
-  if (aboveVwap !== null) {
-    if (type === 'CE' && aboveVwap === true)   { score += 6;  reasons.push(`Above VWAP ✓`); }
-    else if (type === 'CE' && aboveVwap === false) { score -= 12; reasons.push(`Below VWAP ✗`); }
-    else if (type === 'PE' && aboveVwap === false) { score += 6;  reasons.push(`Below VWAP ✓`); }
-    else if (type === 'PE' && aboveVwap === true)  { score -= 12; reasons.push(`Above VWAP ✗`); }
-  }
-
-  // FII/DII (−10 to +6 pts)
-  if (type === 'CE' && instBias === 'BULLISH')   { score += 6;  reasons.push(`FII buying ✓`); }
-  else if (type === 'CE' && instBias === 'BEARISH') { score -= 10; }
-  else if (type === 'PE' && instBias === 'BEARISH') { score += 6;  reasons.push(`FII selling ✓`); }
-  else if (type === 'PE' && instBias === 'BULLISH') { score -= 10; }
-
-  // News/Events (−8 to +5 pts)
-  if (newsScore !== null) {
-    if (type === 'CE' && newsScore > 65)         { score += 5; }
-    else if (type === 'CE' && newsScore < 35)    { score -= 8; }
-    else if (type === 'PE' && newsScore < 35)    { score += 5; }
-    else if (type === 'PE' && newsScore > 65)    { score -= 8; }
-    if (geoRisk >= 3)                            { score -= 6 * Math.min(geoRisk, 4); }
-  }
-
-  // ORB Breakout (+8 pts bonus)
-  if (orbConfirm === true)  { score += 8; reasons.push(`ORB breakout ✓`); }
-
-  // PDH/PDL Breakout (+6 pts bonus)
-  if (pdhBreak)  { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
-  if (pdlBreak)  { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
-
-  // Relative Strength vs Nifty (±8 pts)
-  if (relStrength !== null) {
-    if (type === 'CE' && relStrength > 0.5)    { score += 8; reasons.push(`RS+ vs Nifty`); }
-    else if (type === 'CE' && relStrength < -0.5) { score -= 8; }
-    else if (type === 'PE' && relStrength < -0.5) { score += 8; reasons.push(`RS− vs Nifty`); }
-    else if (type === 'PE' && relStrength > 0.5)  { score -= 8; }
-  }
-
-  // Expiry time decay
-  if (daysToExpiry <= 2) score = Math.floor(score * 0.75);
-
-  // ── Map raw score to 60–92 display probability ──
-  // Score range roughly −40 to +100. Need ~50+ to pass.
-  const clamped = Math.min(100, Math.max(0, score));
-  const prob = Math.min(92, 60 + Math.round(clamped * 0.32));
-
-  // Grade
-  const grade = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
-
-  return { score:clamped, prob, grade, reasons };
+// ── GENERATE SIGNAL ──
+async function generateSignal(symbolObj,isIndex){
+  const type=S.config.type==='BOTH'?(Math.random()>0.5?'CE':'PE'):S.config.type;
+  const lot=symbolObj.lot||75;
+  const liveP=S.livePrice[symbolObj.sym];
+  if(!liveP||liveP<=0)return null;
+  const baseP=liveP;
+  let analysis=null;
+  if(S.connected&&NSE_TOKENS[symbolObj.sym])analysis=await fetchMarketAnalysis(symbolObj.sym);
+  if(!isIndex&&!analysis&&!NSE_TOKENS[symbolObj.sym])return null;
+  const bias=analysis?.bias??'NEUTRAL',rsi=analysis?.rsi??null,aboveVwap=analysis?.aboveVwap??null;
+  const volRatio=analysis?.volRatio??null,pdh=analysis?.pdh??null,pdl=analysis?.pdl??null;
+  const orbHigh=analysis?.orb_high??null,orbLow=analysis?.orb_low??null;
+  const vwap=analysis?.vwap??null,ema20=analysis?.ema20??null,ema50=analysis?.ema50??null;
+  const macd=analysis?.macd??null,st=analysis?.supertrend??null,atr14=analysis?.atr14??null;
+  const TOL=0.003;
+  const atPDH=pdh&&Math.abs(baseP-pdh)/pdh<TOL,atPDL=pdl&&Math.abs(baseP-pdl)/pdl<TOL;
+  const atStructure=(type==='CE'&&atPDH)||(type==='PE'&&atPDL);
+  const pdhBreak=pdh&&baseP>pdh*(1+TOL),pdlBreak=pdl&&baseP<pdl*(1-TOL);
+  const orbConfirm=orbHigh&&orbLow?(type==='CE'?baseP>orbHigh:baseP<orbLow):null;
+  let relStrength=null;
+  if(!isIndex&&S.livePrice['NIFTY']>0){const nc=(S.livePrice['NIFTY']-24200)/24200*100;const sc=(baseP-(ema20||baseP))/(ema20||baseP)*100;relStrength=parseFloat((sc-nc).toFixed(2));}
+  const livePCR=S.livePCR[symbolObj.sym]||S.livePCR['NIFTY']||null;
+  const daysToExp=2+Math.floor(Math.random()*5);
+  const newsScore=S_NEWS?.sentimentScore??null,geoRisk=S_NEWS?.geoRisk??0;
+  const SYM_MAP={NIFTY:'NIFTY',BANKNIFTY:'BANKNIFTY',FINNIFTY:'FINNIFTY',MIDCAP:'MIDCPNIFTY'};
+  const angelSym=SYM_MAP[symbolObj.sym]||symbolObj.sym;
+  let ivRank=null,oiDelta=null;
+  const oc=S.connected?await fetchOptionChain(angelSym,baseP):null;
+  if(oc?.ivRank!=null)ivRank=oc.ivRank;
+  if(oc?.strikes){const atm=oc.strikes.find(r=>r.isATM)||oc.strikes[Math.floor(oc.strikes.length/2)];if(atm){const tot=(atm.CE_oi||0)+(atm.PE_oi||0);oiDelta=tot>0?parseFloat((Math.abs((atm.CE_oi||0)-(atm.PE_oi||0))/tot).toFixed(3)):null;}}
+  const ra=scoreRA({type,rsi,bias,aboveVwap,volRatio,oiDelta,pcr:livePCR,ivRank,instBias:INST_BIAS.bias,newsScore,geoRisk,orbConfirm,daysToExpiry:daysToExp,pdhBreak,pdlBreak,atStructure,relStrength,pdh,pdl,macd,supertrend:st});
+  if(ra.grade==='REJECT')return null;
+  if(ra.prob<S.config.minProb)return null;
+  const step=baseP>10000?500:baseP>5000?200:baseP>2000?100:baseP>500?50:10;
+  let premium=0,strike=Math.round(baseP/step)*step,usedReal=false,optionToken=null;
+  if(oc?.strikes?.length){const atm=oc.strikes.find(r=>r.isATM)||oc.strikes[Math.floor(oc.strikes.length/2)];if(atm){strike=atm.strike;const ltp=type==='CE'?atm.CE_ltp:atm.PE_ltp;optionToken=type==='CE'?atm.CE_token:atm.PE_token;if(ltp&&ltp>0){premium=ltp;usedReal=true;}}}
+  if(!usedReal){if(isIndex){strike=Math.round(baseP/step)*step;premium=Math.max(10,Math.round(baseP*0.008));}else return null;}
+  if(premium*lot>S.config.maxPrem)return null;
+  let sl;
+  if(atr14&&atr14>0){const atrSL=Math.max(1,parseFloat((premium-1.5*atr14).toFixed(2)));const cfgSL=parseFloat((premium*(1-S.config.slPct/100)).toFixed(2));sl=Math.max(atrSL,cfgSL);}
+  else sl=Math.max(1,parseFloat((premium*(1-S.config.slPct/100)).toFixed(2)));
+  const riskPts=premium-sl;
+  const minTarget=parseFloat((premium+2*riskPts).toFixed(2));
+  const cfgTarget=parseFloat((premium*(1+S.config.profitPct/100)).toFixed(2));
+  const target=parseFloat(Math.max(minTarget,cfgTarget).toFixed(2));
+  const rr=riskPts>0?((target-premium)/riskPts).toFixed(1):'-';
+  if(parseFloat(rr)<2.0)return null;
+  const cap=premium*lot;if(cap>S.config.capital)return null;
+  const lots=Math.floor(S.config.capital/cap);
+  const setupType=detectSetup(type,analysis,baseP,rsi,macd,st);
+  const reason=ra.reasons.length?ra.reasons.join(' · '):`${setupType} setup`;
+  const existing=S.signals.filter(s=>s.sym===symbolObj.sym&&s.type===type&&!isSLHit(s));
+  if(existing.length>=2)return null;
+  return{id:Date.now()+Math.random(),sym:symbolObj.sym,name:isIndex?symbolObj.sym:(symbolObj.name||symbolObj.sym),isIndex,type,setupType,strike:`${strike} ${type}`,expiry:S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',premium,target,sl,prob:ra.prob,rr,lot,lots,capital:lots*cap,isRealPremium:usedReal,optionToken,stockToken:NSE_TOKENS[symbolObj.sym]||null,entryPremium:premium,entryPrice:baseP,livePremium:premium,livePrice:baseP,trailSL:sl,atBreakeven:false,trailActivated:false,reason,rsi:rsi!==null?parseFloat(rsi.toFixed(1)):null,ivRank:ivRank!==null?Math.round(ivRank):null,pcr:livePCR!==null?parseFloat(livePCR.toFixed(2)):null,volRatio:volRatio!==null?parseFloat(volRatio.toFixed(1)):null,oi:oiDelta!==null?Math.round(oiDelta*100):0,atr14,macdBullish:macd?.bullish??null,stDirection:st?.direction??null,isExpiryDay:daysToExp<=1,bias,instBias:INST_BIAS.bias,relStrength,pdh,pdl,orb_high:orbHigh,orb_low:orbLow,vwap,ema20,ema50,time:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),ts:Date.now()};
 }
 
-// ── Determine setup type from structure ──
-function detectSetup(type, analysis, baseP, step, rsi) {
-  if (!analysis) return 'MOMENTUM';
-  const { orb_high, orb_low, pdh, pdl, bias } = analysis;
-  if (orb_high && orb_low) {
-    if (type === 'CE' && baseP > orb_high) return 'ORB BREAKOUT';
-    if (type === 'PE' && baseP < orb_low)  return 'ORB BREAKOUT';
+// ── LIVE PRICE + TRAILING SL UPDATER ──
+async function updateSignalLivePrices(){
+  if(!S.connected||!S.signals.length)return;
+  const server=getServer();
+  const optionTokens=[...new Set(S.signals.filter(s=>s.optionToken).map(s=>s.optionToken))];
+  const optionLTPs={};
+  if(optionTokens.length){
+    try{const r=await fetch(server+'/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'LTP',exchangeTokens:{NFO:optionTokens.slice(0,50)}})}); const d=await r.json();if(d.status&&d.data?.fetched)d.data.fetched.forEach(q=>{if(q.ltp)optionLTPs[String(q.symbolToken)]=parseFloat(q.ltp);});}catch(e){}
   }
-  if (rsi !== null) {
-    if (rsi < 30 || rsi > 70) return 'REVERSAL';
-    if (rsi < 38 || rsi > 62) return 'PULLBACK';
-  }
-  if (pdh && pdl) {
-    if (type === 'CE' && baseP > pdh) return 'BREAKOUT';
-    if (type === 'PE' && baseP < pdl) return 'BREAKOUT';
-  }
-  return 'MOMENTUM';
-}
-
-async function generateSignal(symbolObj, isIndex) {
-  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
-  const lot  = symbolObj.lot || 75;
-
-  // ── STEP 1: SPOT PRICE — must be real (live) ──
-  const liveP = S.livePrice[symbolObj.sym];
-  if (!liveP || liveP <= 0) return null; // no live price → skip entirely
-
-  const baseP = liveP;
-  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
-
-  // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
-  let analysis = null;
-  if (S.connected && NSE_TOKENS[symbolObj.sym]) {
-    analysis = await fetchMarketAnalysis(symbolObj.sym);
-  }
-  // Stocks without token AND no analysis → skip (no fabrication)
-  if (!isIndex && !analysis && !NSE_TOKENS[symbolObj.sym]) return null;
-
-  // ── STEP 3: EXTRACT REAL VALUES ──
-  // All null if unavailable — pipeline will handle each gracefully
-  const bias      = analysis?.bias      ?? 'NEUTRAL';
-  const rsi       = analysis?.rsi       ?? null;
-  const aboveVwap = analysis?.aboveVwap ?? null;
-  const volRatio  = analysis?.volRatio  ?? null;
-  const pdh       = analysis?.pdh       ?? null;
-  const pdl       = analysis?.pdl       ?? null;
-  const orbHigh   = analysis?.orb_high  ?? null;
-  const orbLow    = analysis?.orb_low   ?? null;
-  const vwap      = analysis?.vwap      ?? null;
-  const ema20     = analysis?.ema20     ?? null;
-  const ema50     = analysis?.ema50     ?? null;
-
-  // ── STEP 4: PDH/PDL S/R checks ──
-  const TOL = 0.003; // 0.3% tolerance band
-  const atPDH      = pdh && Math.abs(baseP - pdh) / pdh < TOL;
-  const atPDL      = pdl && Math.abs(baseP - pdl) / pdl < TOL;
-  const atStructure = (type === 'CE' && atPDH) || (type === 'PE' && atPDL);
-  const pdhBreak   = pdh && baseP > pdh * (1 + TOL); // confirmed above PDH
-  const pdlBreak   = pdl && baseP < pdl * (1 - TOL); // confirmed below PDL
-  const orbConfirm = orbHigh && orbLow
-    ? (type === 'CE' ? baseP > orbHigh : baseP < orbLow)
-    : null;
-
-  // ── STEP 5: RELATIVE STRENGTH vs Nifty ──
-  // pct change of stock vs pct change of Nifty (both from live prices vs entry)
-  let relStrength = null;
-  if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
-    // Use EMA20 as proxy for stock's "fair value" baseline when available
-    const base = ema20 || baseP;
-    const stockChg = (baseP - base) / base * 100;
-    relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
-  }
-
-  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
-  const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  // OI delta and IV rank: still estimated (Angel One doesn't provide historical OI via free SmartAPI)
-  // but we mark them as null-possible to avoid fabrication in scoring
-  const oiDelta   = Math.random() * 0.55;   // from OI gainers if available, else estimated
-  const ivRank    = 8 + Math.random() * 32; // from option chain IV surface if available
-  const daysToExp = 2 + Math.floor(Math.random() * 5);
-
-  // ── STEP 7: NEWS ──
-  const newsScore = S_NEWS?.sentimentScore ?? null;
-  const geoRisk   = S_NEWS?.geoRisk ?? 0;
-
-  // ── STEP 8: RUN RA PIPELINE ──
-  const ra = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
-    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
-    orbConfirm, daysToExpiry: daysToExp,
-    pdhBreak, pdlBreak, atStructure, relStrength,
-    pdh, pdl,
+  let changed=false;
+  S.signals.forEach(sig=>{
+    if(sig.optionToken&&optionLTPs[sig.optionToken]!==undefined){
+      const newPrem=optionLTPs[sig.optionToken];sig.livePremium=newPrem;changed=true;
+      if(!isSLHit(sig)&&newPrem>0&&sig.entryPremium>0){
+        const gain=newPrem-sig.entryPremium,risk=sig.entryPremium-sig.sl;
+        if(!sig.atBreakeven&&gain>=risk){sig.trailSL=parseFloat((sig.entryPremium*1.01).toFixed(2));sig.atBreakeven=true;sig.sl=sig.trailSL;addLog(`🔒 ${sig.sym} ${sig.type} SL moved to breakeven ₹${sig.trailSL.toFixed(2)}`,'ok');}
+        if(sig.atBreakeven&&gain>=2*risk){const nt=parseFloat((newPrem-risk).toFixed(2));if(nt>sig.trailSL){sig.trailSL=nt;sig.sl=sig.trailSL;sig.trailActivated=true;}}
+      }
+    }
+    if(S.livePrice[sig.sym]&&S.livePrice[sig.sym]>0){sig.livePrice=S.livePrice[sig.sym];changed=true;}
   });
-
-  if (ra.grade === 'REJECT') return null;
-  if (ra.prob < S.config.minProb) return null;
-
-  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
-  const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
-  const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
-  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
-
-  if (S.connected) {
-    const oc = await fetchOptionChain(angelSym, baseP);
-    if (oc?.strikes?.length) {
-      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
-      if (atm) {
-        strike = atm.strike;
-        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
-        optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
-        if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
-      }
-    }
-  }
-
-  // Index fallback — ATM structural estimate only
-  if (!usedReal) {
-    if (isIndex) {
-      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
-      const offsets = [0, 0, step, -step]; // bias towards ATM
-      const off = offsets[Math.floor(Math.random()*offsets.length)];
-      strike  = Math.round((baseP + off)/step)*step;
-      const otm = Math.abs(off)/baseP;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
-    } else {
-      return null; // stocks: no real premium → skip
-    }
-  }
-
-  if (premium * lot > S.config.maxPrem) return null;
-
-  // ── STEP 10: RISK MODEL ──
-  // SL: from structure (PDH/PDL) if available, else config slPct
-  let slPrice;
-  if (type === 'CE') {
-    // CE SL = PDL if known and within 2% of current price, else slPct of premium
-    slPrice = pdl && (baseP - pdl)/baseP < 0.02 ? pdl : null;
-  } else {
-    slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
-  }
-  const slPct = S.config.slPct / 100;
-  const sl    = Math.max(1, parseFloat((premium * (1 - slPct)).toFixed(2)));
-  const riskPts   = premium - sl;
-
-  // Enforce RR ≥ 1:2
-  const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
-  const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
-  const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
-  const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-
-  if (parseFloat(rr) < 2.0) return null; // hard RR gate
-
-  const cap  = premium * lot;
-  if (cap > S.config.capital) return null;
-  const lots = Math.floor(S.config.capital / cap);
-
-  // ── STEP 11: SETUP TYPE + REASON ──
-  const setupType = detectSetup(type, analysis, baseP, step, rsi);
-  const reason    = ra.reasons.length ? ra.reasons.join(' · ') : `${setupType} setup`;
-
-  // ── STEP 12: OVERTRADING GUARD ──
-  const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
-  if (existing.length >= 2) return null; // max 2 per symbol+type
-
-  return {
-    id: Date.now() + Math.random(),
-    sym:   symbolObj.sym,
-    name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
-    isIndex, type, setupType,
-    strike: `${strike} ${type}`,
-    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
-    premium, target, sl, prob: ra.prob, rr,
-    lot, lots, capital: lots*cap,
-    isRealPremium: usedReal,
-    optionToken,
-    stockToken: NSE_TOKENS[symbolObj.sym] || null,
-    entryPremium: premium, entryPrice: baseP,
-    livePremium: premium, livePrice: baseP,
-    reason,
-    rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
-    ivRank:    Math.round(ivRank),
-    pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
-    volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
-    oi:        Math.round(oiDelta*100),
-    bias, instBias: INST_BIAS.bias, setupType,
-    relStrength,
-    pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
-    time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    ts: Date.now(),
-  };
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// LIVE SIGNAL PRICE UPDATER — runs every 5 seconds with market data
-// Updates livePremium and livePrice on each signal in S.signals
-// ══════════════════════════════════════════════════════════════════
-async function updateSignalLivePrices() {
-  if (!S.connected || !S.signals.length) return;
-  const server = getServer();
-
-  // Collect unique option tokens and stock tokens from active signals
-  const optionTokens = [...new Set(S.signals.filter(s=>s.optionToken).map(s=>s.optionToken))];
-  const stockTokens  = [...new Set(S.signals.filter(s=>s.stockToken).map(s=>s.stockToken))];
-
-  // Batch fetch option (NFO) LTPs
-  const optionLTPs = {};
-  if (optionTokens.length) {
-    try {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NFO: optionTokens.slice(0,50)}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          if (q.ltp) optionLTPs[String(q.symbolToken)] = parseFloat(q.ltp);
-        });
-      }
-    } catch(e) {}
-  }
-
-  // Batch fetch stock (NSE) LTPs — merge with existing livePrice cache
-  if (stockTokens.length) {
-    try {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE: stockTokens.slice(0,50)}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          if (q.ltp) S.livePrice[String(q.symbolToken)] = parseFloat(q.ltp);
-        });
-      }
-    } catch(e) {}
-  }
-
-  // Apply updates to signals and re-render if anything changed
-  let changed = false;
-  S.signals.forEach(sig => {
-    if (sig.optionToken && optionLTPs[sig.optionToken] !== undefined) {
-      sig.livePremium = optionLTPs[sig.optionToken];
-      changed = true;
-    }
-    // Fix: always match by symbol name (S.livePrice is keyed by sym, not numeric token)
-    if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
-      sig.livePrice = S.livePrice[sig.sym];
-      changed = true;
-    }
-  });
-
-  if (changed) {
-    // Check if any signal just crossed into SL-hit — if so, full re-render to move to closed group
-    const slHitChanged = S.signals.some(sig => {
-      const wasHit = sig._prevSLHit || false;
-      const nowHit = isSLHit(sig);
-      sig._prevSLHit = nowHit;
-      return wasHit !== nowHit;
+  if(changed){
+    const slHitChanged=S.signals.some(sig=>{const wasHit=sig._prevSLHit||false;const nowHit=isSLHit(sig);sig._prevSLHit=nowHit;if(wasHit!==nowHit&&nowHit)saveToJournal(sig);return wasHit!==nowHit;});
+    if(slHitChanged)renderSignals();
+    else S.signals.forEach(sig=>{
+      const pe=document.getElementById(`sig-prem-${sig.id}`);
+      const pre=document.getElementById(`sig-price-${sig.id}`);
+      const pne=document.getElementById(`sig-pnl-${sig.id}`);
+      const sle=document.getElementById(`sig-sl-${sig.id}`);
+      if(pe&&sig.livePremium>0){const chg=sig.livePremium-(sig.entryPremium||sig.premium);pe.textContent='₹'+sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});pe.style.color=chg>0?'var(--green)':chg<0?'var(--red)':'var(--amber)';}
+      if(pre&&sig.livePrice>0){const chg=sig.livePrice-(sig.entryPrice||0);pre.textContent='₹'+sig.livePrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});pre.style.color=sig.type==='CE'?(chg>=0?'var(--green)':'var(--red)'):(chg<=0?'var(--green)':'var(--red)');}
+      if(pne&&sig.livePremium>0&&sig.entryPremium>0){const pnl=Math.round((sig.livePremium-sig.entryPremium)*sig.lot*sig.lots);pne.textContent=(pnl>=0?'+':'-')+'₹'+Math.abs(pnl).toLocaleString('en-IN');pne.style.color=pnl>=0?'var(--green)':'var(--red)';}
+      if(sle&&sig.atBreakeven)sle.textContent='₹'+sig.sl.toFixed(2);
     });
-
-    if (slHitChanged) {
-      // Full re-render to move cards between OPEN/CLOSED groups
-      renderSignals();
-    } else {
-      // Update signal cards in-place without full re-render (smooth, no flicker)
-      S.signals.forEach(sig => {
-      const premEl  = document.getElementById(`sig-prem-${sig.id}`);
-      const priceEl = document.getElementById(`sig-price-${sig.id}`);
-      const pnlEl   = document.getElementById(`sig-pnl-${sig.id}`);
-      if (premEl && sig.livePremium && sig.livePremium > 0) {
-        const chg = sig.livePremium - (sig.entryPremium || sig.premium);
-        premEl.textContent = '₹' + sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        premEl.style.color = chg > 0 ? 'var(--green)' : chg < 0 ? 'var(--red)' : 'var(--amber)';
-      }
-      if (priceEl && sig.livePrice && sig.livePrice > 0) {
-        const chg = sig.livePrice - (sig.entryPrice || 0);
-        priceEl.textContent = '₹' + sig.livePrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-        // CE: price UP = good (green). PE: price DOWN = good (green)
-        if (sig.type === 'CE') {
-          priceEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
-        } else {
-          priceEl.style.color = chg <= 0 ? 'var(--green)' : 'var(--red)';
-        }
-      }
-      if (pnlEl && sig.livePremium && sig.livePremium > 0 && sig.entryPremium > 0) {
-        const pnl = Math.round((sig.livePremium - sig.entryPremium) * sig.lot * sig.lots);
-        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toLocaleString('en-IN');
-        pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      }
-    });
-    } // end else (no SL-hit group change)
-    // Save updated signals to localStorage
-    try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
+    try{localStorage.setItem('fno_signals',JSON.stringify(S.signals));}catch(e){}
   }
 }
 
+// ── JOURNAL ──
+function saveToJournal(sig){
+  const pnl=sig.livePremium>0&&sig.entryPremium>0?Math.round((sig.livePremium-sig.entryPremium)*sig.lot*sig.lots):0;
+  const entry={id:sig.id,sym:sig.sym,type:sig.type,strike:sig.strike,setupType:sig.setupType,prob:sig.prob,entryPremium:sig.entryPremium||sig.premium,exitPremium:sig.livePremium||sig.sl,sl:sig.sl,target:sig.target,lot:sig.lot,lots:sig.lots,pnl,capital:sig.capital,reason:sig.reason,time:sig.time,exitTime:new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),date:new Date().toLocaleDateString('en-IN'),trailActivated:sig.trailActivated||false,atBreakeven:sig.atBreakeven||false};
+  S.journal.unshift(entry);S.journal=S.journal.slice(0,200);
+  try{localStorage.setItem('fno_journal',JSON.stringify(S.journal));}catch(e){}
+}
 
-function toggleScan() {
-  const btn = document.getElementById('scanBtn');
-  if (S.scanning) {
-    clearInterval(S.scanInt);
-    S.scanning = false;
-    btn.textContent = '▶ SCAN';
-    btn.className = 'scan-btn go';
-    document.getElementById('mScanSt').textContent = 'IDLE';
-    document.getElementById('mScanSt').style.color = 'var(--text3)';
-    addLog('Scanner stopped', 'warn');
-  } else {
-    if (!S.connected) {
-      toast('warn', '⚠ Not Connected', 'Connect Angel One in Setup tab first');
-      return;
-    }
-    const { nseOpen } = getMarketStatus();
-    if (!nseOpen) {
-      toast('warn', '⏰ NSE Market Closed', 'Scanner works only during\n9:15 AM – 3:30 PM · Mon–Fri IST');
-      addLog('Scan blocked — NSE market is closed', 'warn');
-      return;
-    }
-    S.scanning = true;
-    btn.textContent = '⏹ STOP';
-    btn.className = 'scan-btn stop';
-    document.getElementById('mScanSt').textContent = 'LIVE';
-    document.getElementById('mScanSt').style.color = 'var(--green)';
-    saveConfig();
-    addLog('Scanner started — ' + S.selectedStocks.size + ' stocks + ' + S.config.indices.join(', '), 'ok');
-    runScan();
-    S.scanInt = setInterval(runScan, (S.config.intervalSec||30)*1000);
+function renderJournal(){
+  const list=document.getElementById('journalList'),sumEl=document.getElementById('journalSummary');
+  if(!S.journal.length){list.innerHTML='<div class="empty"><div class="empty-icon">📓</div><div class="empty-title">No Journal Entries</div><div class="empty-sub">Closed signals are automatically logged here.</div></div>';sumEl.innerHTML='';return;}
+  const totalPnl=S.journal.reduce((a,e)=>a+e.pnl,0);
+  const wins=S.journal.filter(e=>e.pnl>=0).length;
+  const wr=Math.round(wins/S.journal.length*100);
+  sumEl.innerHTML=[{l:'Total P&L',v:(totalPnl>=0?'+₹':'-₹')+Math.abs(totalPnl).toLocaleString('en-IN'),c:totalPnl>=0?'var(--green)':'var(--red)'},{l:'Win Rate',v:wr+'%',c:wr>=50?'var(--green)':'var(--red)'},{l:'Trades',v:S.journal.length,c:'var(--amber)'}].map(m=>`<div class="met"><div class="met-l">${m.l}</div><div class="met-v" style="color:${m.c}">${m.v}</div></div>`).join('');
+  list.innerHTML=S.journal.map(e=>{
+    const pnlC=e.pnl>=0?'var(--green)':'var(--red)';
+    return `<div class="journal-entry"><div class="journal-header"><span class="sig-type ${e.type.toLowerCase()}" style="font-size:10px">${e.type}</span><div style="flex:1"><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text)">${e.sym} <span style="color:var(--text2)">${e.strike}</span></div><div class="journal-meta">${e.date} · ${e.time}→${e.exitTime} · ${e.setupType}</div></div><div class="journal-pnl" style="color:${pnlC}">${e.pnl>=0?'+':'-'}₹${Math.abs(e.pnl).toLocaleString('en-IN')}</div></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:10px;font-family:var(--font-mono)"><div><div style="color:var(--text3)">Entry</div><div style="color:var(--text)">₹${e.entryPremium.toFixed(2)}</div></div><div><div style="color:var(--text3)">Exit</div><div style="color:${pnlC}">₹${e.exitPremium.toFixed(2)}</div></div><div><div style="color:var(--text3)">Lots</div><div style="color:var(--text)">${e.lots}</div></div><div><div style="color:var(--text3)">Prob</div><div style="color:var(--amber)">${e.prob}%</div></div></div>${e.trailActivated?'<div style="margin-top:6px;font-size:9px;color:var(--cyan);font-family:var(--font-mono)">🔒 Trailing SL activated</div>':''}</div>`;
+  }).join('');
+}
+
+function exportJournal(){
+  if(!S.journal.length){toast('warn','⚠ Empty Journal','No closed trades to export');return;}
+  const totalPnl=S.journal.reduce((a,e)=>a+e.pnl,0);
+  const wins=S.journal.filter(e=>e.pnl>=0).length;
+  const lines=['NSE F&O v5 — Trade Journal','==========================================',`Exported: ${new Date().toLocaleDateString('en-IN')}`,`Total P&L: ${totalPnl>=0?'+₹':'-₹'}${Math.abs(totalPnl).toLocaleString('en-IN')}`,`Win Rate: ${Math.round(wins/S.journal.length*100)}% (${wins}/${S.journal.length})`,'', ...S.journal.map(e=>`${e.date} ${e.time} | ${e.sym} ${e.strike} ${e.type} | Entry:₹${e.entryPremium.toFixed(2)} Exit:₹${e.exitPremium.toFixed(2)} | P&L:${e.pnl>=0?'+₹':'-₹'}${Math.abs(e.pnl).toLocaleString('en-IN')} | ${e.setupType} | ${e.reason.slice(0,50)}`)].join('\n');
+  navigator.clipboard.writeText(lines).then(()=>toast('ok','📋 Copied!','Journal copied to clipboard')).catch(()=>toast('warn','⚠ Copy Failed',''));
+}
+
+// ── SCAN TOGGLE ──
+function toggleScan(){
+  const btn=document.getElementById('scanBtn');
+  if(S.scanning){
+    clearInterval(S.scanInt);S.scanning=false;btn.textContent='▶ SCAN';btn.className='scan-btn go';
+    document.getElementById('mScanSt').textContent='IDLE';document.getElementById('mScanSt').style.color='var(--text3)';
+    addLog('Scanner stopped','warn');showSessionSummary();
+  }else{
+    if(!S.connected){toast('warn','⚠ Not Connected','Connect Angel One in Setup tab first');return;}
+    const{nseOpen}=getMarketStatus();
+    if(!nseOpen){toast('warn','⏰ NSE Market Closed','9:15 AM – 3:30 PM · Mon–Fri IST');addLog('Scan blocked — market closed','warn');return;}
+    S.scanning=true;btn.textContent='⏹ STOP';btn.className='scan-btn stop';
+    document.getElementById('mScanSt').textContent='LIVE';document.getElementById('mScanSt').style.color='var(--green)';
+    saveConfig();addLog(`Scanner started — ${S.selectedStocks.size} stocks + ${S.config.indices.join(', ')}`,'ok');
+    runScan();S.scanInt=setInterval(runScan,(S.config.intervalSec||30)*1000);
   }
 }
 
-function saveConfig() {
-  S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
-  S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
-  S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 80;
-  S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
-  S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
-  S.config.type = document.getElementById('cfgType').value;
-  S.config.expiry = document.getElementById('cfgExpiry').value;
-  S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
-    document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
-  );
-  document.getElementById('mCap').textContent = '₹' + (S.config.capital>=100000?(S.config.capital/100000).toFixed(1)+'L':(S.config.capital/1000).toFixed(0)+'K');
-  addLog(`Config saved: ₹${S.config.capital.toLocaleString('en-IN')} · ${S.config.profitPct}% target · ${S.config.slPct}% SL`, 'ok');
-  toast('ok', '✅ Config Saved', `Capital: ₹${S.config.capital.toLocaleString('en-IN')}`);
+// ── SESSION SUMMARY ──
+function showSessionSummary(){
+  if(!S.journal.length)return;
+  const today=new Date().toLocaleDateString('en-IN');
+  const closed=S.journal.filter(e=>e.date===today);
+  if(!closed.length)return;
+  const totalPnl=closed.reduce((a,e)=>a+e.pnl,0);
+  const wins=closed.filter(e=>e.pnl>=0).length;
+  const best=closed.reduce((b,e)=>e.pnl>b.pnl?e:b,closed[0]);
+  const worst=closed.reduce((w,e)=>e.pnl<w.pnl?e:w,closed[0]);
+  document.getElementById('summaryContent').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div class="met"><div class="met-l">Day P&L</div><div class="met-v" style="color:${totalPnl>=0?'var(--green)':'var(--red)'}">${totalPnl>=0?'+':'-'}₹${Math.abs(totalPnl).toLocaleString('en-IN')}</div></div>
+      <div class="met"><div class="met-l">Win Rate</div><div class="met-v" style="color:${wins>=closed.length/2?'var(--green)':'var(--red)'}">${Math.round(wins/closed.length*100)}%</div></div>
+      <div class="met"><div class="met-l">Trades</div><div class="met-v" style="color:var(--amber)">${closed.length}</div></div>
+    </div>
+    <div style="font-size:11px;font-family:var(--font-mono);color:var(--text2)">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text3)">Best trade</span><span style="color:var(--green)">${best.sym} ${best.type} +₹${Math.abs(best.pnl).toLocaleString('en-IN')}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--text3)">Worst trade</span><span style="color:var(--red)">${worst.sym} ${worst.type} -₹${Math.abs(worst.pnl).toLocaleString('en-IN')}</span></div>
+    </div>`;
+  document.getElementById('sessionSummary').style.display='block';
 }
 
-async function runScan() {
-  if (!S.scanning) return;
+function updateParamGrid(){
+  const pg=document.getElementById('paramGrid');
+  if(!pg)return;
+  const c=S.config;
+  const typeLabel={'BOTH':'CE + PE','CE':'Calls Only','PE':'Puts Only'}[c.type]||c.type;
+  const expiryLabel={'WEEKLY':'Current Weekly','NEXT':'Next Weekly','MONTHLY':'Monthly'}[c.expiry]||c.expiry;
+  const rows=[
+    {label:'Capital',      val:'₹'+c.capital.toLocaleString('en-IN'),          color:'var(--cyan)'},
+    {label:'Max Premium',  val:'₹'+c.maxPrem.toLocaleString('en-IN'),           color:'var(--text)'},
+    {label:'Profit Target',val:c.profitPct+'%',                                  color:'var(--green)'},
+    {label:'Stop Loss',    val:c.slPct+'%',                                       color:'var(--red)'},
+    {label:'Min Prob',     val:c.minProb+'%',                                     color:'var(--amber)'},
+    {label:'Scan Interval',val:c.intervalSec+'s',                                 color:'var(--text2)'},
+    {label:'Signal Type',  val:typeLabel,                                          color:'var(--blue)'},
+    {label:'Expiry',       val:expiryLabel,                                        color:'var(--purple)'},
+    {label:'Indices',      val:c.indices.join(', ')||'None',                       color:'var(--cyan)'},
+    {label:'Stocks Active',val:S.selectedStocks.size+' stocks',                   color:'var(--green)'},
+  ];
+  pg.innerHTML=rows.map(r=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--text3)">${r.label}</span>
+      <span style="font-size:12px;font-family:var(--font-mono);font-weight:700;color:${r.color}">${r.val}</span>
+    </div>`).join('');
+}
 
-  // Auto-stop if market closed mid-session
-  const { nseOpen } = getMarketStatus();
-  if (!nseOpen) {
-    clearInterval(S.scanInt);
-    S.scanning = false;
-    document.getElementById('scanBtn').textContent = '▶ SCAN';
-    document.getElementById('scanBtn').className = 'scan-btn go';
-    document.getElementById('mScanSt').textContent = 'CLOSED';
-    document.getElementById('mScanSt').style.color = 'var(--amber)';
-    toast('warn', '⏰ Market Closed', 'NSE scanner auto-stopped at 3:30 PM');
-    addLog('Scanner auto-stopped — market closed', 'warn');
-    return;
-  }
+function saveConfig(){
+  S.config.capital=parseInt(document.getElementById('cfgCap').value)||30000;
+  S.config.profitPct=parseInt(document.getElementById('cfgProfit').value)||30;
+  S.config.slPct=parseInt(document.getElementById('cfgSL').value)||5;
+  S.config.minProb=parseInt(document.getElementById('cfgProb').value)||70;
+  S.config.maxPrem=parseInt(document.getElementById('cfgMaxPrem').value)||10000;
+  S.config.intervalSec=parseInt(document.getElementById('cfgInterval').value)||30;
+  S.config.type=document.getElementById('cfgType').value;
+  S.config.expiry=document.getElementById('cfgExpiry').value;
+  S.config.indices=['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i)=>document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked);
+  const cap=S.config.capital;
+  document.getElementById('mCap').textContent='₹'+(cap>=100000?(cap/100000).toFixed(1)+'L':(cap/1000).toFixed(0)+'K');
+  updateParamGrid();
+  toast('ok','✅ Config Saved',`Capital: ₹${cap.toLocaleString('en-IN')}`);
+}
 
-  document.getElementById('mScanSt').textContent = 'SCANNING...';
-
-  // Refresh news sentiment each scan cycle (internal — adjusts probability scoring)
-  // Fetch institutional flow (FII/DII) — cached 30 min, non-blocking
+async function runScan(){
+  if(!S.scanning)return;
+  const{nseOpen}=getMarketStatus();
+  if(!nseOpen){clearInterval(S.scanInt);S.scanning=false;document.getElementById('scanBtn').textContent='▶ SCAN';document.getElementById('scanBtn').className='scan-btn go';document.getElementById('mScanSt').textContent='CLOSED';document.getElementById('mScanSt').style.color='var(--amber)';toast('warn','⏰ Market Closed','Scanner auto-stopped');addLog('Scanner auto-stopped','warn');showSessionSummary();return;}
+  document.getElementById('mScanSt').textContent='SCANNING...';
   fetchInstBias();
-
-  // Fetch live news sentiment from server
-  try {
-    const nr = await fetch(getServer() + '/news-sentiment');
-    const nd = await nr.json();
-    if (nd.status) {
-      S_NEWS = { ...nd, fetchTime: Date.now() };
-      const icon = nd.sentiment === 'BULLISH' ? '🟢' : nd.sentiment === 'BEARISH' ? '🔴' : '🟡';
-      addLog(`${icon} News: ${nd.sentiment} (${nd.sentimentScore}%) · GeoRisk: ${nd.geoRisk} · ${nd.headlineCount} headlines`, '');
-    }
-  } catch(e) { /* non-critical */ }
-
-  addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
-
-  let newSigs = 0;
-  const IDX = [{sym:'NIFTY',lot:75},{sym:'BANKNIFTY',lot:30},{sym:'FINNIFTY',lot:40},{sym:'MIDCAP',lot:75}];
-  for (const idx of IDX) {
-    if (!S.config.indices.includes(idx.sym)) continue;
-    const sig = await generateSignal(idx, true);
-    if (sig) {
-      // Dedup: skip if same sym+strike+type already in last 20 signals
-      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
-      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
-    }
-  }
-
-  const stockArr = [...S.selectedStocks];
-  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 60));
-  for (const sym of batch) {
-    const obj = FNO_STOCKS.find(s=>s.sym===sym);
-    if (!obj) continue;
-    const sig = await generateSignal(obj, false);
-    if (sig) {
-      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
-      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
-    }
-  }
-
-  S.signals = S.signals.slice(0, 100);
-  // Persist signals so they survive app close/refresh
-  try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
-  document.getElementById('mSigs').textContent = S.signals.length;
-  document.getElementById('mScanSt').textContent = 'LIVE';
-
-  // Update badge if not on signals page
-  if (!document.getElementById('page-signals').classList.contains('active')) {
-    S.newSigCount += newSigs;
-    if (S.newSigCount > 0) {
-      document.getElementById('sigBadge').textContent = S.newSigCount > 9 ? '9+' : S.newSigCount;
-      document.getElementById('sigBadge').classList.add('show');
-    }
-  }
-
-  addLog(`Scan done — ${newSigs} new signals`, 'ok');
-  if (S.connected) fetchMarketData();
+  try{const nr=await fetch(getServer()+'/news-sentiment');const nd=await nr.json();if(nd.status){S_NEWS={...nd,fetchTime:Date.now()};const icon=nd.sentiment==='BULLISH'?'🟢':nd.sentiment==='BEARISH'?'🔴':'🟡';addLog(`${icon} News: ${nd.sentiment} (${nd.sentimentScore}%) · GeoRisk: ${nd.geoRisk}`,'');}}catch(e){}
+  addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`,'');
+  let newSigs=0;
+  const IDX=[{sym:'NIFTY',lot:75},{sym:'BANKNIFTY',lot:30},{sym:'FINNIFTY',lot:40},{sym:'MIDCAP',lot:75}];
+  for(const idx of IDX){if(!S.config.indices.includes(idx.sym))continue;const sig=await generateSignal(idx,true);if(sig){const isDup=S.signals.slice(0,20).some(e=>e.sym===sig.sym&&e.strike===sig.strike&&e.type===sig.type);if(!isDup){S.signals.unshift(sig);newSigs++;fireNotif(sig);}}}
+  const batch=[...S.selectedStocks].sort(()=>Math.random()-0.5).slice(0,Math.min(S.selectedStocks.size,60));
+  for(const sym of batch){const obj=FNO_STOCKS.find(s=>s.sym===sym);if(!obj)continue;const sig=await generateSignal(obj,false);if(sig){const isDup=S.signals.slice(0,20).some(e=>e.sym===sig.sym&&e.strike===sig.strike&&e.type===sig.type);if(!isDup){S.signals.unshift(sig);newSigs++;fireNotif(sig);}}}
+  S.signals=S.signals.slice(0,100);
+  try{localStorage.setItem('fno_signals',JSON.stringify(S.signals));}catch(e){}
+  document.getElementById('mSigs').textContent=S.signals.length;
+  document.getElementById('mScanSt').textContent='LIVE';
+  if(!document.getElementById('page-signals').classList.contains('active')){S.newSigCount+=newSigs;if(S.newSigCount>0){document.getElementById('sigBadge').textContent=S.newSigCount>9?'9+':S.newSigCount;document.getElementById('sigBadge').classList.add('show');}}
+  addLog(`Scan done — ${newSigs} new signals`,'ok');
+  if(S.connected)fetchMarketData();
+  updateIndicatorPanel();
   renderSignals();
 }
 
-// ══════════════════════════════════════════════════════════════════
-// RENDER SIGNALS
-// ══════════════════════════════════════════════════════════════════
-function ageLabel(ts) {
-  const mins = Math.floor((Date.now() - ts) / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.floor(mins / 60);
-  return hrs + 'h ago';
+// ── RENDER ──
+function ageLabel(ts){const m=Math.floor((Date.now()-ts)/60000);if(m<1)return'Just now';if(m<60)return m+'m ago';return Math.floor(m/60)+'h ago';}
+function ageColor(ts){const m=Math.floor((Date.now()-ts)/60000);return m<5?'var(--green)':m<30?'var(--amber)':'var(--red)';}
+setInterval(()=>{if(S.signals.length)renderSignals();},60000);
+setInterval(()=>{if(S.connected&&S.signals.length)updateSignalLivePrices();},5000);
+
+function setFilt(f,el){S.filter=f;document.querySelectorAll('#filterChips .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');renderSignals();}
+function setSigTab(tab){S.sigTab=tab;document.getElementById('tabOpen').className='sig-tab'+(tab==='OPEN'?' active-open':'');document.getElementById('tabClosed').className='sig-tab'+(tab==='CLOSED'?' active-closed':'');renderSignals();}
+function updateSigTabCounts(){
+  let sigs=[...S.signals];
+  if(S.filter==='INDEX')sigs=sigs.filter(s=>s.isIndex);else if(S.filter==='STOCK')sigs=sigs.filter(s=>!s.isIndex);else if(S.filter==='CE')sigs=sigs.filter(s=>s.type==='CE');else if(S.filter==='PE')sigs=sigs.filter(s=>s.type==='PE');else if(S.filter==='HIGH')sigs=sigs.filter(s=>s.prob>=80);
+  const oc=document.getElementById('tabOpenCount'),cc=document.getElementById('tabClosedCount');
+  if(oc)oc.textContent=sigs.filter(s=>!isSLHit(s)).length;if(cc)cc.textContent=sigs.filter(s=>isSLHit(s)).length;
+}
+// Logo.dev domain mapping (broader NSE coverage as fallback)
+function getLogoDev(sym){
+  const m={
+    'RELIANCE':'ril.com','TCS':'tcs.com','HDFCBANK':'hdfcbank.com','INFY':'infosys.com',
+    'ICICIBANK':'icicibank.com','SBIN':'sbi.co.in','KOTAKBANK':'kotak.com',
+    'AXISBANK':'axisbank.com','BAJFINANCE':'bajajfinserv.in','BHARTIARTL':'airtel.in',
+    'WIPRO':'wipro.com','HCLTECH':'hcltech.com','SUNPHARMA':'sunpharma.com',
+    'TITAN':'titancompany.in','NESTLEIND':'nestle.in','TATAMOTORS':'tatamotors.com',
+    'TATASTEEL':'tatasteel.com','ONGC':'ongcindia.com','NTPC':'ntpc.co.in',
+    'POWERGRID':'powergridindia.com','COALINDIA':'coalindia.in',
+    'M&M':'mahindra.com','MARUTI':'marutisuzuki.com','LT':'lntecc.com',
+  };
+  return m[sym]||sym.toLowerCase()+'.com';
 }
 
-function ageColor(ts) {
-  const mins = Math.floor((Date.now() - ts) / 60000);
-  if (mins < 5)  return 'var(--green)';
-  if (mins < 30) return 'var(--amber)';
-  return 'var(--red)';
-}
+function isSLHit(sig){const lp=(sig.livePremium&&sig.livePremium>0)?sig.livePremium:0;if(!lp||!sig.sl)return false;return lp<=sig.sl*0.90;}
 
-// Re-render signal age labels every 60 seconds automatically
-setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
-
-// Live price updater — every 5 seconds, updates premium + share price on all signal cards
-// Runs independently of scanner — keeps prices live even after scan stops
-setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
-
-function setFilt(f, el) {
-  S.filter = f;
-  document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
-  el.classList.add('on');
-  renderSignals();
-}
-
-function setSigTab(tab) {
-  S.sigTab = tab;
-  const tabOpen   = document.getElementById('tabOpen');
-  const tabClosed = document.getElementById('tabClosed');
-  tabOpen.className   = 'sig-tab' + (tab === 'OPEN'   ? ' active-open'   : '');
-  tabClosed.className = 'sig-tab' + (tab === 'CLOSED' ? ' active-closed' : '');
-  renderSignals();
-}
-
-function updateSigTabCounts() {
-  let sigs = [...S.signals];
-  if (S.filter === 'INDEX') sigs = sigs.filter(s => s.isIndex);
-  else if (S.filter === 'STOCK') sigs = sigs.filter(s => !s.isIndex);
-  else if (S.filter === 'CE') sigs = sigs.filter(s => s.type === 'CE');
-  else if (S.filter === 'PE') sigs = sigs.filter(s => s.type === 'PE');
-  else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
-  const openCount   = sigs.filter(s => !isSLHit(s)).length;
-  const closedCount = sigs.filter(s =>  isSLHit(s)).length;
-  const oc = document.getElementById('tabOpenCount');
-  const cc = document.getElementById('tabClosedCount');
-  if (oc) oc.textContent = openCount;
-  if (cc) cc.textContent = closedCount;
-}
-
-// Get logo URL for a stock symbol
-function getLogoUrl(sym) {
-  // Map NSE symbols → known brand domains
-  const domainMap = {
+function getLogoUrl(sym){
+  const m={
     'RELIANCE':'relianceindustries.com','TCS':'tcs.com','HDFCBANK':'hdfcbank.com',
     'INFY':'infosys.com','ICICIBANK':'icicibank.com','HINDUNILVR':'hul.co.in',
     'KOTAKBANK':'kotak.com','SBIN':'sbi.co.in','BHARTIARTL':'airtel.in',
@@ -2212,441 +1646,318 @@ function getLogoUrl(sym) {
     'ASIANPAINT':'asianpaints.com','AXISBANK':'axisbank.com','MARUTI':'marutisuzuki.com',
     'WIPRO':'wipro.com','HCLTECH':'hcltech.com','SUNPHARMA':'sunpharma.com',
     'TITAN':'titancompany.in','ULTRACEMCO':'ultratechcement.com','NESTLEIND':'nestle.in',
-    'POWERGRID':'powergridindia.com','NTPC':'ntpc.co.in','TECHM':'techmahindra.com',
-    'ONGC':'ongcindia.com','TATASTEEL':'tatasteel.com','TATAMOTORS':'tatamotors.com',
-    'JSWSTEEL':'jsw.in','M&M':'mahindra.com','ADANIENT':'adani.com',
-    'ADANIPORTS':'adaniports.com','COALINDIA':'coalindia.in','BAJAJFINSV':'bajajfinserv.in',
-    'HDFCLIFE':'hdfclife.com','SBILIFE':'sbilife.co.in','CIPLA':'cipla.com',
-    'DRREDDY':'drreddys.com','DIVISLAB':'divislab.com','EICHERMOT':'eichermotors.com',
-    'HEROMOTOCO':'heromotocorp.com','APOLLOHOSP':'apollohospitals.com','BPCL':'bharatpetroleum.com',
-    'TATACONSUM':'tataconsumer.com','BRITANNIA':'britannia.co.in','GRASIM':'grasim.com',
-    'SHRIRAMFIN':'shriramfinance.in','INDUSINDBK':'indusind.com','BANDHANBNK':'bandhanbank.com',
-    'IDFCFIRSTB':'idfcfirstbank.com','PNB':'pnbindia.in','BANKBARODA':'bankofbaroda.in',
-    'FEDERALBNK':'federalbank.co.in','CANBK':'canarabank.in','UNIONBANK':'unionbankofindia.co.in',
-    'MPHASIS':'mphasis.com','COFORGE':'coforge.com','BAJAJ-AUTO':'bajajauto.com',
-    'TVSMOTORS':'tvsmotor.com','ASHOKLEY':'ashokleyland.com','BOSCHLTD':'bosch.in',
-    'LUPIN':'lupin.com','AUROPHARMA':'aurobindo.com','BIOCON':'biocon.com',
-    'GLENMARK':'glenmarkpharma.com','MAXHEALTH':'maxhealthcare.in','FORTIS':'fortishealthcare.com',
-    'ADANIGREEN':'adanigreenenergy.com','IOC':'iocl.com','HINDPETRO':'hindustanpetroleum.com',
-    'GAIL':'gailonline.com','TATAPOWER':'tatapower.com','SUZLON':'suzlon.com',
-    'HINDALCO':'hindalco.com','VEDL':'vedantalimited.com','NMDC':'nmdc.co.in',
-    'SAIL':'sail.co.in','GODREJCP':'godrejcp.com','DABUR':'dabur.com',
-    'COLPAL':'colgatepalmolive.co.in','MARICO':'marico.com','VBL':'varunbev.com',
-    'JUBLFOOD':'jubilantfoodworks.com','AMBUJACEM':'ambujacement.com',
-    'IDEA':'myvi.in','ZEEL':'zeemedia.in','PVRINOX':'pvrinox.com',
-    'DLF':'dlf.in','GODREJPROP':'godrejproperties.com','OBEROIRLTY':'oberoirealty.com',
-    'CHOLAFIN':'cholamandalam.com','LICHSGFIN':'lichousing.com','MUTHOOTFIN':'muthootfin.com',
-    'ICICIGI':'icicilombard.com','ICICIPRULI':'iciciprulife.com','HDFCAMC':'hdfcfund.com',
-    'LICI':'licindia.in','ABB':'abb.com','HAVELLS':'havells.com',
-    'BEL':'bel-india.in','HAL':'hal-india.in','BHEL':'bhel.com',
-    'ETERNAL':'zomato.com','NYKAA':'nykaa.com','POLICYBZR':'policybazaar.com',
-    'DELHIVERY':'delhivery.com','ANGELONE':'angelbroking.com','MCX':'mcxindia.com',
-    'DMART':'dmartindia.com','TRENT':'trent.in','INDIGO':'goindigo.in',
-    'IRCTC':'irctc.co.in','INDHOTEL':'tajhotels.com','UPL':'upl-ltd.com',
-    'PIDILITIND':'pidilite.com','SRF':'srf.com','IRFC':'irfc.nic.in',
-    'DIXON':'dixoninfo.com','KALYANKJIL':'kalyanjewellers.com','IEX':'iexindia.com',
-    'BDL':'bdl-india.in','HDFCBANK':'hdfcbank.com','JIOFIN':'jio.com',
-    'AUBANK':'aubank.in','LTM':'ltimindtree.com','KPITTECH':'kpit.com',
-    'OFSS':'oracle.com','MOTHERSON':'motherson.com','BHARATFORG':'bharatforge.com',
-    'HYUNDAI':'hyundai.com','ALKEM':'alkemlab.com','MANKIND':'mankindpharma.com',
-    'LAURUSLABS':'lauruslabs.com','ADANIENSOL':'adaniports.com','ADANIPOWER':'adanipower.com',
-    'NHPC':'nhpcindia.com','IREDA':'iredaltd.com','JSWENERGY':'jsw.in',
-    'HINDZINC':'hzlindia.com','JINDALSTEL':'jspl.com','NATIONALUM':'nalcoindia.co.in',
-    'INDUSTOWER':'industowers.com','GMRAIRPORT':'gmrairports.com','CONCOR':'concorindia.com',
-    'LODHA':'lodhagroup.com','NAUKRI':'infoedge.in','BSE':'bseindia.com',
-    'CDSL':'cdslindia.com','MOTILALOFS':'motilaloswal.com','LTF':'ltfs.com',
-    'MFSL':'maxlifeinsurance.com','CGPOWER':'cgpower.com','AMBER':'ambergroup.in',
-    'KAYNES':'kaynes.in','KEI':'kei-ind.com','BLUESTARCO':'bluestarindia.com',
-    'CROMPTON':'crompton.co.in','NUVAMA':'nuvama.com','360ONE':'360.one',
-    'KFINTECH':'kfintech.com','CAMS':'camsonline.com','HUDCO':'hudco.org',
-    'NBCC':'nbccindia.com','COROMANDEL':'coromandel.net','EXIDEIND':'exideindustries.com',
-    'BANKINDIA':'bankofindia.co.in','INDIANB':'indianbank.in','INOXWIND':'inoxwind.com',
-    'ASTRAL':'astralpipes.com','BAJAJHLDNG':'bajaj.com','HINDPETRO':'hindustanpetroleum.com',
-    'NAM-INDIA':'nipponindiaim.com','BAJAJ-AUTO':'bajajauto.com','FORCEMOT':'forcemotors.com',
+    'TATASTEEL':'tatasteel.com','TATAMOTORS':'tatamotors.com','JSWSTEEL':'jsw.in',
+    'M&M':'mahindra.com','ADANIENT':'adani.com','ADANIPORTS':'adaniports.com',
+    'NTPC':'ntpc.co.in','ONGC':'ongcindia.com','TECHM':'techmahindra.com',
+    'POWERGRID':'powergridindia.com','COALINDIA':'coalindia.in','BAJAJFINSV':'bajajfinserv.in',
+    'DRREDDY':'drreddys.com','CIPLA':'cipla.com','DIVISLAB':'divislab.com',
+    'EICHERMOT':'eichergroup.com','HEROMOTOCO':'heromotocorp.com','APOLLOHOSP':'apollohospitals.com',
+    'BPCL':'bharatpetroleum.com','TATACONSUM':'tataconsumer.com','BRITANNIA':'britannia.co.in',
+    'GRASIM':'grasim.com','SHRIRAMFIN':'shriramfinance.in','INDUSINDBK':'indusind.com',
+    'HDFCLIFE':'hdfclife.com','SBILIFE':'sbilife.co.in',
+    'BANDHANBNK':'bandhanbank.com','IDFCFIRSTB':'idfcfirstbank.com','PNB':'pnbindia.in',
+    'BANKBARODA':'bankofbaroda.in','FEDERALBNK':'federalbank.co.in','CANBK':'canarabank.in',
+    'RBLBANK':'rblbank.com','MPHASIS':'mphasis.com','COFORGE':'coforge.com',
+    'LTIM':'ltimindtree.com','PERSISTENT':'persistent.com','KPITTECH':'kpit.com',
+    'BAJAJ-AUTO':'bajajauto.com','TVSMOTORS':'tvsmotor.com','ASHOKLEY':'ashokleyland.com',
+    'MOTHERSON':'motherson.com','BOSCHLTD':'bosch.in','LUPIN':'lupin.com',
+    'AUROPHARMA':'aurobindo.com','BIOCON':'biocon.com','TORNTPHARM':'torrentpharma.com',
+    'ADANIGREEN':'adanigreen.com','IOC':'iocl.com','HPCL':'hindustanpetroleum.com',
+    'GAIL':'gailonline.com','TATAPOWER':'tatapower.com','HINDALCO':'hindalco.com',
+    'VEDL':'vedantalimited.com','NMDC':'nmdc.co.in','DLF':'dlf.in',
+    'GODREJPROP':'godrejproperties.com','PRESTIGE':'prestigeconstructions.com',
+    'OBEROIRLTY':'oberoirealty.com','PHOENIXLTD':'thephoenixmills.com',
+    'ULTRACEMCO':'ultratechcement.com','ACC':'acclimited.com','AMBUJACEM':'ambujacement.com',
+    'RAMCOCEM':'ramcocements.com','MUTHOOTFIN':'muthootfinance.com','CHOLAFIN':'cholamandalam.in',
+    'BAJAJHLDNG':'bajajfinserv.in','HAL':'hal-india.in','BEL':'bel-india.in',
+    'GRSE':'grse.in','MAZDA':'mazdock.co.in','COCHINSHIP':'cochinshipyard.in',
+    'INDIGO':'goindigo.in','IRCTC':'irctc.co.in','ETERNAL':'zomato.com',
+    'NYKAA':'nykaa.com','ANGELONE':'angelbroking.com','MCX':'mcxindia.com',
+    'DIXON':'dixontech.in','KAYNES':'kaynes.in','POLICYBZR':'pbfintech.in',
+    'PAYTM':'paytm.com','DELHIVERY':'delhivery.com',
   };
-  const domain = domainMap[sym];
-  if (!domain) return null;
-  return 'https://logo.clearbit.com/' + domain;
+  return m[sym]?'https://logo.clearbit.com/'+m[sym]:null;
 }
 
-// Helper: check if signal is SL-hit (livePremium ≤ sl × 0.90)
-function isSLHit(sig) {
-  const livePrem = (sig.livePremium && sig.livePremium > 0) ? sig.livePremium : 0;
-  if (!livePrem || !sig.sl) return false;
-  return livePrem <= sig.sl * 0.90;
-}
-
-function renderSignals() {
-  const feed = document.getElementById('sigFeed');
-  let sigs = [...S.signals];
-  if (S.filter === 'INDEX') sigs = sigs.filter(s => s.isIndex);
-  else if (S.filter === 'STOCK') sigs = sigs.filter(s => !s.isIndex);
-  else if (S.filter === 'CE') sigs = sigs.filter(s => s.type === 'CE');
-  else if (S.filter === 'PE') sigs = sigs.filter(s => s.type === 'PE');
-  else if (S.filter === 'HIGH') sigs = sigs.filter(s => s.prob >= 80);
-
-  // Update tab counts first
+function renderSignals(){
+  const feed=document.getElementById('sigFeed');
+  let sigs=[...S.signals];
+  if(S.filter==='INDEX')sigs=sigs.filter(s=>s.isIndex);else if(S.filter==='STOCK')sigs=sigs.filter(s=>!s.isIndex);else if(S.filter==='CE')sigs=sigs.filter(s=>s.type==='CE');else if(S.filter==='PE')sigs=sigs.filter(s=>s.type==='PE');else if(S.filter==='HIGH')sigs=sigs.filter(s=>s.prob>=80);
   updateSigTabCounts();
-
-  // Filter by active tab (OPEN / CLOSED)
-  const openSigsAll   = sigs.filter(s => !isSLHit(s));
-  const closedSigsAll = sigs.filter(s =>  isSLHit(s));
-  sigs = S.sigTab === 'CLOSED' ? closedSigsAll : openSigsAll;
-
-  if (!sigs.length) {
-    const emptyMsg = S.sigTab === 'CLOSED'
-      ? '<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No Closed Signals</div><div class="empty-sub">No signals have hit stop loss yet.<br>All active signals are in the OPEN tab.</div></div>'
-      : `<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning for LIVE signals...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Only real Angel One NFO prices shown<br>Signals appear during market hours<br><b style="color:var(--amber)">9:15 AM – 3:30 PM · Mon–Fri</b>':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;
-    feed.innerHTML = emptyMsg;
-    return;
-  }
-
-  const probColor = p => p>=80?'var(--green)':p>=70?'var(--amber)':'var(--text2)';
-
-  const renderCard = s => {
-    const slHit = isSLHit(s);
-    const dispPrem  = (s.livePremium  && s.livePremium  > 0) ? s.livePremium  : (s.entryPremium && s.entryPremium > 0) ? s.entryPremium : s.premium;
-    const dispPrice = (s.livePrice    && s.livePrice    > 0) ? s.livePrice    : (s.entryPrice   && s.entryPrice   > 0) ? s.entryPrice   : null;
-    const premChg   = (s.livePremium  > 0 && s.entryPremium > 0) ? (s.livePremium  - s.entryPremium) : null;
-    const priceChg  = (s.livePrice    > 0 && s.entryPrice   > 0) ? (s.livePrice    - s.entryPrice)   : null;
-    const pnl       = (premChg !== null) ? Math.round(premChg * s.lot * s.lots) : null;
-    const entryColor = 'var(--text)';
-    const premColor  = slHit ? 'var(--red)' : premChg === null ? 'var(--amber)' : premChg > 0 ? 'var(--green)' : premChg < 0 ? 'var(--red)' : 'var(--amber)';
-    const priceColor = priceChg === null ? 'var(--text)'
-      : s.type === 'CE'
-        ? (priceChg >= 0 ? 'var(--green)' : 'var(--red)')
-        : (priceChg <= 0 ? 'var(--green)' : 'var(--red)');
-    const premChgTxt  = premChg  !== null ? ` <span style="color:${premChg >=0?'var(--green)':'var(--red)'}">${premChg >=0?'▲':'▼'}₹${Math.abs(premChg).toFixed(2)}</span>` : '';
-    const priceChgTxt = priceChg !== null ? ` <span style="color:${s.type==='CE'?(priceChg>=0?'var(--green)':'var(--red)'):(priceChg<=0?'var(--green)':'var(--red)')}">${priceChg>=0?'▲':'▼'}₹${Math.abs(priceChg).toFixed(2)}</span>` : '';
-    const setupColor = {'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)'}[s.setupType||'MOMENTUM']||'var(--blue)';
-    const biasIcon   = s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
-    const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
-    // Stock name — already stored in signal object when generated
-    const stockName = s.isIndex ? '' : (s.name && s.name !== s.sym ? s.name : (FNO_STOCKS.find(f => f.sym === s.sym)?.name || ''));
-    // Stock logo
-    const logoUrl = s.isIndex ? null : getLogoUrl(s.sym);
-    const initials = s.sym.replace(/[^A-Z]/g,'').substring(0,3);
-    const logoHtml = logoUrl
-      ? `<img class="stock-logo" src="${logoUrl}" alt="${s.sym}"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-           onload="this.style.display='block'"
-         /><div class="stock-logo-fallback" style="display:none">${initials}</div>`
-      : s.isIndex
-        ? `<div class="stock-logo-fallback" style="background:linear-gradient(135deg,#0d2240,#1a3a5c);color:var(--blue)">${initials}</div>`
-        : `<div class="stock-logo-fallback">${initials}</div>`;
-    const slHitBanner = slHit ? `<div class="sig-closed-banner">🔴 STOP LOSS HIT — Premium ≤ 90% of SL (₹${s.sl.toFixed(2)})</div>` : '';
-    return `
-    <div class="sig-card${slHit?' sl-hit':''}" onclick="openDrawer('${s.id}')">
+  sigs=S.sigTab==='CLOSED'?sigs.filter(s=>isSLHit(s)):sigs.filter(s=>!isSLHit(s));
+  if(!sigs.length){feed.innerHTML=S.sigTab==='CLOSED'?'<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No Closed Signals</div></div>':`<div class="empty"><div class="empty-icon">⚡</div><div class="empty-title">${S.scanning?'Scanning for LIVE signals...':'Scanner Inactive'}</div><div class="empty-sub">${S.scanning?'Only real Angel One NFO prices shown<br><b style=\"color:var(--amber)\">9:15 AM – 3:30 PM · Mon–Fri</b>':'Connect Angel One in Setup tab<br>then tap ▶ SCAN'}</div></div>`;return;}
+  const probColor=p=>p>=80?'var(--green)':p>=70?'var(--amber)':'var(--text2)';
+  const renderCard=s=>{
+    const slHit=isSLHit(s);
+    const dp=(s.livePremium>0)?s.livePremium:(s.entryPremium>0?s.entryPremium:s.premium);
+    const dpr=(s.livePrice>0)?s.livePrice:(s.entryPrice>0?s.entryPrice:null);
+    const pc=(s.livePremium>0&&s.entryPremium>0)?(s.livePremium-s.entryPremium):null;
+    const prc=(s.livePrice>0&&s.entryPrice>0)?(s.livePrice-s.entryPrice):null;
+    const pnl=pc!==null?Math.round(pc*s.lot*s.lots):null;
+    const premc=slHit?'var(--red)':pc===null?'var(--amber)':pc>0?'var(--green)':'var(--red)';
+    const pricec=prc===null?'var(--text)':s.type==='CE'?(prc>=0?'var(--green)':'var(--red)'):(prc<=0?'var(--green)':'var(--red)');
+    const sColor={'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)','MACD CROSS':'#ff6ec7','ST BREAKOUT':'var(--cyan)'}[s.setupType||'MOMENTUM']||'var(--blue)';
+    const biasIcon=s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
+    const instIcon=s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
+    const logoUrl=s.isIndex?null:getLogoUrl(s.sym);
+    const initials=s.sym.replace(/[^A-Z]/g,'').substring(0,3);
+    // Multi-source logo with fallback chain
+    const logoHtml=logoUrl
+      ?`<img class="stock-logo" src="${logoUrl}" alt="${s.sym}"
+          onerror="this.src='https://logo.dev/${getLogoDev(s.sym)}?token=pk_J9FwNrQTS2ieHdl7vVU1jA&size=32';this.onerror=function(){this.style.display='none';this.nextElementSibling.style.display='flex'}" />
+        <div class="stock-logo-fallback" style="display:none">${initials}</div>`
+      :s.isIndex
+        ?`<div class="stock-logo-fallback" style="background:linear-gradient(135deg,#0d2240,#1a3a5c);color:var(--blue)">${initials}</div>`
+        :`<div class="stock-logo-fallback">${initials}</div>`;
+    const macdTag=s.macdBullish!==null?`<span class="sig-tag" style="color:${s.macdBullish?'var(--green)':'var(--red)'}">MACD ${s.macdBullish?'↑':'↓'}</span>`:'';
+    const stTag=s.stDirection?`<span class="sig-tag" style="color:${s.stDirection==='UP'?'var(--green)':'var(--red)'}">ST ${s.stDirection}</span>`:'';
+    const expiryWarn=s.isExpiryDay?'<span class="sig-tag" style="color:var(--amber)">⚠ EXPIRY DAY</span>':'';
+    const trailBadge=s.trailActivated?'<span class="trail-badge">TRAIL</span>':s.atBreakeven?'<span class="be-badge">BE</span>':'';
+    return `<div class="sig-card${slHit?' sl-hit':''}" onclick="openDrawer('${s.id}')">
       <div class="sig-bar ${s.type.toLowerCase()}"></div>
-      ${slHitBanner}
+      ${slHit?`<div class="sig-closed-banner">🔴 STOP LOSS HIT — ₹${s.sl.toFixed(2)}</div>`:''}
       <div class="sig-r1">
         <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
         ${logoHtml}
         <div style="flex:1;min-width:0;overflow:hidden">
-          <div class="sig-name" style="line-height:1.2">${s.sym} <span style="color:var(--text2);font-weight:600">${s.strike}</span></div>
-          ${stockName?`<div style="font-size:9px;color:var(--cyan);font-family:var(--font-sans);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">${stockName}</div>`:''}
+          <div class="sig-name">${s.sym} <span style="color:var(--text2)">${s.strike}</span>${trailBadge}</div>
+          ${s.name&&s.name!==s.sym?`<div style="font-size:9px;color:var(--cyan);font-family:var(--font-sans);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>`:''}
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
-        <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
+        <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${sColor}18;color:${sColor};border:1px solid ${sColor}30">${s.setupType||'SIGNAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${instIcon} FII</span>
-        ${s.analysis?.vwap ? `<span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">VWAP ${s.analysis.vwap.toLocaleString('en-IN',{maximumFractionDigits:0})}</span>` : ''}
+        ${macdTag}${stTag}${expiryWarn}
       </div>
       <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
         <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Option Premium <span class="live-badge">LIVE</span></div>
-          <div id="sig-prem-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
+          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">Premium <span class="live-badge">LIVE</span></div>
+          <div id="sig-prem-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${premc}">₹${dp.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:10px;color:var(--text);margin-top:3px;font-family:var(--font-mono)">Entry ₹${(s.entryPremium||s.premium).toFixed(2)}</div>
         </div>
         <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Share Price <span class="live-badge">LIVE</span></div>
-          <div id="sig-price-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${priceColor}">${dispPrice ? '₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChgTxt}</div>
+          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">Spot <span class="live-badge">LIVE</span></div>
+          <div id="sig-price-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${pricec}">${dpr?'₹'+dpr.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'-'}</div>
+          <div style="font-size:10px;color:var(--text);margin-top:3px;font-family:var(--font-mono)">Entry ₹${s.entryPrice>0?s.entryPrice.toFixed(2):'-'}</div>
         </div>
       </div>
       <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target.toFixed(2)}</div>
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
-        </div>
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:${slHit?'var(--red)':'var(--red)'}">₹${s.sl.toFixed(2)}</div>
-          ${slHit?`<div style="font-size:8px;color:var(--red);font-family:var(--font-mono)">● HIT</div>`:''}
-        </div>
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
-          <div id="sig-pnl-${s.id}" style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
-        </div>
+        <div class="sig-cell"><div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">Target</div><div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${s.target.toFixed(2)}</div><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'-'}:1</div></div>
+        <div class="sig-cell"><div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">Stop Loss</div><div id="sig-sl-${s.id}" style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${s.sl.toFixed(2)}</div>${s.atBreakeven?'<div style="font-size:8px;color:var(--cyan);font-family:var(--font-mono)">BE</div>':''}</div>
+        <div class="sig-cell"><div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;margin-bottom:3px">Live P&L</div><div id="sig-pnl-${s.id}" style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'-':(pnl>=0?'+':'-')+'₹'+Math.abs(pnl).toLocaleString('en-IN')}</div></div>
       </div>
       <div class="sig-tags">
         <span class="sig-tag">${s.expiry}</span>
         ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
-        <span class="sig-tag">IV ${s.ivRank}</span>
+        ${s.ivRank!==null?`<span class="sig-tag">IV ${s.ivRank}</span>`:''}
         ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
         ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
-        ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''}${s.relStrength?.toFixed(1)}</span>`:''}
+        ${s.atr14?`<span class="sig-tag">ATR ${s.atr14}</span>`:''}
         <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
     </div>`;
   };
-
-  // Render only the signals for the active tab (already filtered above)
-  feed.innerHTML = sigs.map(renderCard).join('');
+  feed.innerHTML=sigs.map(renderCard).join('');
 }
-// ══════════════════════════════════════════════════════════════════
-// SIGNAL DETAIL DRAWER
-// ══════════════════════════════════════════════════════════════════
-function openDrawer(idStr) {
-  const sig = S.signals.find(s => String(s.id) === String(idStr));
-  if (!sig) return;
-  const probColor = sig.prob>=80?'var(--green)':sig.prob>=70?'var(--amber)':'var(--text2)';
-  document.getElementById('drawerContent').innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
-      <div class="drawer-title">${sig.sym}</div>
-    </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
 
+// ── DRAWER ──
+function openDrawer(idStr){
+  const sig=S.signals.find(s=>String(s.id)===String(idStr));if(!sig)return;
+  const pc=sig.prob>=80?'var(--green)':sig.prob>=70?'var(--amber)':'var(--text2)';
+  document.getElementById('drawerContent').innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span><div class="drawer-title">${sig.sym}</div></div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE</span></div>
     <div class="drawer-grid">
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Premium</div>
-        <div class="drawer-cell-val" style="color:var(--amber)">₹${sig.premium}</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Probability</div>
-        <div class="drawer-cell-val" style="color:${probColor}">${sig.prob}%</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--green)">₹${sig.target.toFixed(2)}</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--red)">₹${sig.sl.toFixed(2)}</div>
-      </div>
+      <div class="drawer-cell"><div class="drawer-cell-label">Premium</div><div class="drawer-cell-val" style="color:var(--amber)">₹${sig.premium}</div></div>
+      <div class="drawer-cell"><div class="drawer-cell-label">Probability</div><div class="drawer-cell-val" style="color:${pc}">${sig.prob}%</div></div>
+      <div class="drawer-cell"><div class="drawer-cell-label">Target</div><div class="drawer-cell-val" style="color:var(--green)">₹${sig.target.toFixed(2)}</div></div>
+      <div class="drawer-cell"><div class="drawer-cell-label">Stop Loss${sig.atBreakeven?' 🔒':''}</div><div class="drawer-cell-val" style="color:var(--red)">₹${sig.sl.toFixed(2)}</div></div>
     </div>
-
     <div class="drawer-row"><span class="drawer-row-label">Lot Size</span><span class="drawer-row-val">${sig.lot}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Lots Affordable</span><span class="drawer-row-val">${sig.lots}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Lots</span><span class="drawer-row-val">${sig.lots}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
-
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
-      <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
-      ${sig.reason}
-    </div>
-
-    <button class="big-btn outline" style="margin-top:6px" onclick="closeDrawer()">Close</button>
-  `;
+    <div class="drawer-row"><span class="drawer-row-label">RSI-14</span><span class="drawer-row-val">${sig.rsi||'-'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank!==null?sig.ivRank+'%':'-'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">ATR-14</span><span class="drawer-row-val">${sig.atr14||'-'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">MACD</span><span class="drawer-row-val" style="color:${sig.macdBullish?'var(--green)':'var(--red)'}">${sig.macdBullish===null?'-':sig.macdBullish?'📈 Bullish':'📉 Bearish'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Supertrend</span><span class="drawer-row-val" style="color:${sig.stDirection==='UP'?'var(--green)':sig.stDirection==='DOWN'?'var(--red)':'var(--text2)'}">${sig.stDirection||'-'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr||'-'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio||'-'}x</span></div>
+    ${sig.atBreakeven?'<div style="background:#00f5a012;border:1px solid #00f5a030;border-radius:var(--r);padding:9px 12px;margin:10px 0;font-size:11px;color:var(--cyan);font-family:var(--font-mono)">🔒 SL moved to breakeven — risk-free trade</div>':''}
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6"><b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase">Signal Reason</b><br>${sig.reason}</div>
+    <button class="big-btn outline" onclick="shareSignal('${sig.id}')" style="margin-bottom:6px">📋 Share Signal</button>
+    <button class="big-btn outline" onclick="closeDrawer()">Close</button>`;
   document.getElementById('drawer').classList.add('open');
 }
 
-function closeDrawer() {
-  document.getElementById('drawer').classList.remove('open');
+function shareSignal(idStr){
+  const sig=S.signals.find(s=>String(s.id)===String(idStr));if(!sig)return;
+  const pnl=sig.livePremium>0&&sig.entryPremium>0?Math.round((sig.livePremium-sig.entryPremium)*sig.lot*sig.lots):0;
+  const txt=`⚡ NSE F&O Signal v5\n${sig.sym} ${sig.strike} ${sig.type}\nSetup: ${sig.setupType} · Prob: ${sig.prob}%\nEntry: ₹${sig.premium} · Target: ₹${sig.target.toFixed(2)} · SL: ₹${sig.sl.toFixed(2)}\nRR: ${sig.rr}:1 · Lots: ${sig.lots}\nLive P&L: ${pnl>=0?'+':'-'}₹${Math.abs(pnl).toLocaleString('en-IN')}\n${sig.reason}\n${sig.time}`;
+  navigator.clipboard.writeText(txt).then(()=>toast('ok','📋 Copied!','Signal details copied')).catch(()=>toast('warn','⚠ Copy Failed',''));
 }
 
-// Swipe down to close drawer
-let startY = 0;
-document.getElementById('drawerSheet').addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, {passive:true});
-document.getElementById('drawerSheet').addEventListener('touchend', e => {
-  if (e.changedTouches[0].clientY - startY > 80) closeDrawer();
-}, {passive:true});
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
+let startY=0;
+document.getElementById('drawerSheet').addEventListener('touchstart',e=>{startY=e.touches[0].clientY;},{passive:true});
+document.getElementById('drawerSheet').addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-startY>80)closeDrawer();},{passive:true});
 
-// ══════════════════════════════════════════════════════════════════
-// NOTIFICATIONS
-// ══════════════════════════════════════════════════════════════════
-function forgetCreds() {
-  localStorage.removeItem('ao_creds');
-  document.getElementById('aClient').value = '';
-  document.getElementById('aKey').value    = '';
-  document.getElementById('aPin').value    = '';
-  document.getElementById('aTotp').value   = '';
-  S.connected = false;
-  S.creds = { client:'', key:'', pin:'', totp:'' };
-  setConnected(false);
-  toast('ok', '🗑 Credentials Cleared', 'Saved login removed from this device');
-  addLog('Saved credentials cleared', 'warn');
-}
-
-
-function reqNotif() {
-  if (!('Notification' in window)) { toast('warn','⚠ Not supported','Notifications not supported in this browser'); return; }
-  Notification.requestPermission().then(p => {
-    S.notif = p === 'granted';
-    if (S.notif) toast('ok','🔔 Notifications On','You will receive signal alerts');
-    else toast('warn','⚠ Denied','Enable notifications in browser settings');
-  });
-}
-
-function fireNotif(sig) {
-  if (S.notif && Notification.permission === 'granted') {
-    new Notification(`⚡ ${sig.sym} ${sig.strike}`, {
-      body: `Buy ₹${sig.premium} → Target ₹${sig.target.toFixed(2)} · SL ₹${sig.sl.toFixed(2)} · ${sig.prob}%\n${sig.reason.substring(0,60)}`,
-      icon: 'icon-192.png',
-      badge: 'icon-192.png',
-      tag: 'fno-' + sig.sym,
-      renotify: true,
+// ── SOUND ALERT ──
+function playSignalBeep(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    [880,1100,880].forEach((freq,i)=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.frequency.value=freq;osc.type='sine';
+      gain.gain.setValueAtTime(0.3,ctx.currentTime+i*0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.15+0.12);
+      osc.start(ctx.currentTime+i*0.15);osc.stop(ctx.currentTime+i*0.15+0.15);
     });
-  }
-  // In-app toast for signal
-  toast('sig', `⚡ ${sig.sym} ${sig.strike}`, `${sig.type} · ₹${sig.premium} → ₹${sig.target.toFixed(2)} · SL ₹${sig.sl.toFixed(2)} · ${sig.prob}%`);
-  // Auto-switch to OPEN tab when new signal fires
-  if (S.sigTab !== 'OPEN') setSigTab('OPEN');
+  }catch(e){}
 }
 
-// ══════════════════════════════════════════════════════════════════
-// TOAST
-// ══════════════════════════════════════════════════════════════════
-function toast(type, title, body) {
-  const icon = {ok:'✅',err:'❌',warn:'⚠️',sig:'⚡'}[type] || 'ℹ️';
-  const color = {ok:'var(--green)',err:'var(--red)',warn:'var(--amber)',sig:'var(--cyan)'}[type] || 'var(--text2)';
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.innerHTML = `
-    <div class="toast-hd">
-      <span class="toast-ic">${icon}</span>
-      <span class="toast-ti" style="color:${color}">${title}</span>
-      <span class="toast-cl" onclick="this.closest('.toast').remove()">×</span>
-    </div>
-    <div class="toast-bd">${(body||'').replace(/\n/g,'<br>')}</div>`;
-  document.getElementById('toasts').prepend(el);
-  setTimeout(() => el.remove(), type==='sig' ? 6000 : 4000);
-}
-
-// ══════════════════════════════════════════════════════════════════
-// LOG
-// ══════════════════════════════════════════════════════════════════
-function addLog(msg, cls) {
-  const t = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  const row = document.createElement('div');
-  row.className = 'log-row';
-  row.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${cls||''}">${msg}</span>`;
-  const body = document.getElementById('logBody');
-  body.prepend(row);
-  if (body.children.length > 100) body.lastElementChild.remove();
-}
-
-// ══════════════════════════════════════════════════════════════════
-// PWA INSTALL
-// ══════════════════════════════════════════════════════════════════
-let deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  document.getElementById('installBanner').classList.add('show');
-});
-document.getElementById('installBtn').addEventListener('click', async () => {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  const { outcome } = await deferredPrompt.userChoice;
-  if (outcome === 'accepted') toast('ok','✅ App Installed!','NSE F&O Signals added to home screen');
-  deferredPrompt = null;
-  document.getElementById('installBanner').classList.remove('show');
-});
-window.addEventListener('appinstalled', () => {
-  document.getElementById('installBanner').classList.remove('show');
-  toast('ok','✅ Installed!','App ready on your home screen');
-});
-
-// ══════════════════════════════════════════════════════════════════
-// SERVICE WORKER
-// ══════════════════════════════════════════════════════════════════
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
-
-// ══════════════════════════════════════════════════════════════════
-// INIT — Load saved credentials and auto-reconnect
-// ══════════════════════════════════════════════════════════════════
-addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
-renderWatchlistBar();
-
-// Restore signals from last session
-try {
-  const saved = localStorage.getItem('fno_signals');
-  if (saved) {
-    S.signals = JSON.parse(saved);
-    document.getElementById('mSigs').textContent = S.signals.length;
-    renderSignals();
-    addLog(`Restored ${S.signals.length} signals from last session`, 'ok');
-  }
-} catch(e) {}
-
-function clearSignals() {
-  S.signals = [];
-  localStorage.removeItem('fno_signals');
-  document.getElementById('mSigs').textContent = '0';
-  S.sigTab = 'OPEN';
-  setSigTab('OPEN');
-  renderSignals();
-  S.newSigCount = 0;
-  document.getElementById('sigBadge').classList.remove('show');
-  toast('ok', '🗑 Signals Cleared', 'All signals removed');
-  addLog('Signals cleared manually', 'warn');
-}
-
-(async function autoLogin() {
-  const saved = localStorage.getItem('ao_creds');
-  if (!saved) {
-    addLog('Enter your Angel One credentials in Setup tab', '');
-    return;
-  }
-  try {
-    const creds = JSON.parse(saved);
-    // Fill the form fields with saved values
-    document.getElementById('aClient').value = creds.client || '';
-    document.getElementById('aKey').value    = creds.key    || '';
-    document.getElementById('aPin').value    = creds.pin    || '';
-    document.getElementById('aTotp').value   = creds.totp   || '';
-
-    addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
-    document.getElementById('apiStat').textContent = 'Auto-connecting...';
-
-    // Small delay so UI renders first
-    await new Promise(r => setTimeout(r, 1200));
-
-    const server = getServer();
-    const resp = await fetch(server + '/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientCode: creds.client,
-        password:   creds.pin,
-        apiKey:     creds.key,
-        totpSecret: creds.totp,
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
-    const d = await resp.json();
-    if (d.status === true) {
-      S.connected = true;
-      S.creds = creds;
-      setConnected(true, d.client);
-      toast('ok', '✅ Auto-connected!', `Welcome back ${d.client} — session restored`);
-      addLog(`Auto-login success — ${d.client}`, 'ok');
-      fetchMarketData();
-      S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
+// ── NOTIFICATIONS ──
+function forgetCreds(){localStorage.removeItem('ao_creds');['aClient','aKey','aPin','aTotp'].forEach(id=>document.getElementById(id).value='');S.connected=false;setConnected(false);toast('ok','🗑 Cleared','Saved login removed');addLog('Credentials cleared','warn');}
+function reqNotif(){if(!('Notification'in window)){toast('warn','⚠ Not supported','');return;}Notification.requestPermission().then(p=>{S.notif=p==='granted';if(S.notif)toast('ok','🔔 On','Signal notifications enabled');else toast('warn','⚠ Denied','Enable in browser settings');});}
+function fireNotif(sig){
+  if(S.soundOn)playSignalBeep();
+  // Vibrate pattern for signal
+  if(navigator.vibrate)navigator.vibrate([100,50,100,50,200]);
+  if(S.notif&&Notification.permission==='granted'){
+    const opts={
+      body:`${sig.type==='CE'?'📈':'📉'} ${sig.strike}\nBuy ₹${sig.premium} → 🎯 ₹${sig.target.toFixed(2)} | SL ₹${sig.sl.toFixed(2)}\nProb ${sig.prob}% · RR ${sig.rr}:1\n${sig.reason.substring(0,80)}`,
+      icon:'icon-192.png',
+      badge:'icon-192.png',
+      tag:'fno-'+sig.sym+'-'+sig.type,
+      renotify:true,
+      requireInteraction:true,
+      silent:false,
+      data:{sigId:sig.id},
+    };
+    // Use service worker notification if available (shows even when app is backgrounded)
+    if(navigator.serviceWorker?.controller){
+      navigator.serviceWorker.ready.then(reg=>{
+        reg.showNotification(`⚡ ${sig.sym} ${sig.type} Signal`,opts).catch(()=>{
+          new Notification(`⚡ ${sig.sym} ${sig.type} Signal`,opts);
+        });
+      });
     } else {
-      addLog(`Auto-login failed: ${d.message} — tap Setup to reconnect`, 'warn');
-      toast('warn', '⚠ Auto-login failed', d.message + '\nGo to Setup tab to reconnect');
+      new Notification(`⚡ ${sig.sym} ${sig.type} Signal`,opts);
     }
-  } catch(e) {
-    addLog('Auto-login error: ' + e.message, 'warn');
+  }
+  toast('sig',`⚡ ${sig.sym} ${sig.type} Signal`,``,sig);
+  if(S.sigTab!=='OPEN')setSigTab('OPEN');
+}
+
+// ── TOAST ──
+function toast(type,title,body,sig=null){
+  const icon={ok:'✅',err:'❌',warn:'⚠️',sig:'⚡'}[type]||'ℹ️';
+  const color={ok:'var(--green)',err:'var(--red)',warn:'var(--amber)',sig:'var(--cyan)'}[type]||'var(--text2)';
+  const el=document.createElement('div');
+  el.className='toast'+(type==='sig'?' toast-sig':'');
+  if(type==='sig'&&sig){
+    const logoUrl=sig.isIndex?null:getLogoUrl(sig.sym);
+    const initials=sig.sym.replace(/[^A-Z]/g,'').substring(0,3);
+    const logoHtml=logoUrl
+      ?`<img src="${logoUrl}" style="width:36px;height:36px;border-radius:8px;object-fit:contain;background:var(--bg4);border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">`
+      :sig.isIndex
+        ?`<div style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#0d2240,#1a3a5c);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:var(--font-mono);font-weight:800;color:var(--blue);flex-shrink:0">${initials}</div>`
+        :`<div style="width:36px;height:36px;border-radius:8px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:var(--font-mono);font-weight:800;color:var(--cyan);flex-shrink:0">${initials}</div>`;
+    const typeColor=sig.type==='CE'?'var(--green)':'var(--red)';
+    const typeIcon=sig.type==='CE'?'📈':'📉';
+    el.innerHTML=`
+      <div class="toast-sig-hd">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          ${logoHtml}
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:700;color:var(--text);font-family:var(--font-mono)">${sig.sym}</span>
+              <span style="font-size:10px;font-weight:700;color:${typeColor};background:${typeColor}18;padding:1px 6px;border-radius:4px;border:1px solid ${typeColor}30">${typeIcon} ${sig.type}</span>
+              <span style="font-size:11px;color:var(--cyan);font-family:var(--font-mono);font-weight:600">${sig.prob}%</span>
+            </div>
+            <div style="font-size:11px;color:var(--text2);font-family:var(--font-mono);margin-top:2px">${sig.strike} · ${sig.setupType}</div>
+          </div>
+        </div>
+        <span onclick="this.closest('.toast').remove()" style="font-size:18px;color:var(--text3);cursor:pointer;flex-shrink:0;padding:0 4px">×</span>
+      </div>
+      <div class="toast-sig-body">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="toast-pill">Entry <b style="color:var(--amber)">₹${sig.premium}</b></div>
+          <div class="toast-pill">Target <b style="color:var(--green)">₹${sig.target.toFixed(2)}</b></div>
+          <div class="toast-pill">SL <b style="color:var(--red)">₹${sig.sl.toFixed(2)}</b></div>
+          <div class="toast-pill">RR <b style="color:var(--cyan)">${sig.rr}:1</b></div>
+          <div class="toast-pill">Lots <b style="color:var(--text)">${sig.lots}</b></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5">${sig.reason.substring(0,100)}</div>
+      </div>
+      <div class="toast-sig-ft" onclick="openDrawer('${sig.id}');this.closest('.toast').remove()">View Full Signal →</div>`;
+  } else {
+    el.innerHTML=`<div class="toast-hd"><span class="toast-ic">${icon}</span><span class="toast-ti" style="color:${color}">${title}</span><span class="toast-cl" onclick="this.closest('.toast').remove()">×</span></div><div class="toast-bd">${(body||'').replace(/\n/g,'<br>')}</div>`;
+  }
+  document.getElementById('toasts').prepend(el);
+  setTimeout(()=>{if(el.parentNode)el.remove();},type==='sig'?9000:4500);
+}
+
+function addLog(msg,cls){
+  const t=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  const row=document.createElement('div');row.className='log-row';
+  row.innerHTML=`<span class="log-t">${t}</span><span class="log-m ${cls||''}">${msg}</span>`;
+  const body=document.getElementById('logBody');body.prepend(row);
+  if(body.children.length>100)body.lastElementChild.remove();
+}
+
+function clearSignals(){S.signals=[];localStorage.removeItem('fno_signals');document.getElementById('mSigs').textContent='0';S.sigTab='OPEN';setSigTab('OPEN');renderSignals();S.newSigCount=0;document.getElementById('sigBadge').classList.remove('show');toast('ok','🗑 Cleared','All signals removed');}
+
+// ── PWA ──
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;document.getElementById('installBanner').classList.add('show');});
+document.getElementById('installBtn').addEventListener('click',async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();const{outcome}=await deferredPrompt.userChoice;if(outcome==='accepted')toast('ok','✅ Installed!','App on home screen');deferredPrompt=null;document.getElementById('installBanner').classList.remove('show');});
+
+// ── SW ──
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ── INIT ──
+addLog('NSE F&O Signal Engine v5 — MACD · Supertrend · ATR · Trailing SL · Journal','ok');
+// v5: Default-select ALL stocks — runs after full parse
+function initStockSelection(){
+  // Always select all stocks on load — no user action required
+  FNO_STOCKS.forEach(s=>S.selectedStocks.add(s.sym));
+}
+initStockSelection();
+renderWatchlistBar();
+renderStockList();
+updateParamGrid();
+try{const saved=localStorage.getItem('fno_signals');if(saved){S.signals=JSON.parse(saved);document.getElementById('mSigs').textContent=S.signals.length;renderSignals();addLog(`Restored ${S.signals.length} signals`,'ok');}}catch(e){}
+try{const js=localStorage.getItem('fno_journal');if(js){S.journal=JSON.parse(js);addLog(`Journal: ${S.journal.length} entries`,'');}}catch(e){}
+
+(async function autoLogin(){
+  const saved=localStorage.getItem('ao_creds');if(!saved){addLog('Enter credentials in Setup tab','');return;}
+  try{
+    const creds=JSON.parse(saved);
+    document.getElementById('aClient').value=creds.client||'';
+    document.getElementById('aKey').value=creds.key||'';
+    document.getElementById('aPin').value=creds.pin||'';
+    document.getElementById('aTotp').value=creds.totp||'';
+    addLog(`Saved credentials found — auto-connecting ${creds.client}...`,'');
+    document.getElementById('apiStat').textContent='Auto-connecting...';
+    await new Promise(r=>setTimeout(r,1200));
+    const resp=await fetch(getServer()+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientCode:creds.client,password:creds.pin,apiKey:creds.key,totpSecret:creds.totp}),signal:(()=>{const c=new AbortController();setTimeout(()=>c.abort(),30000);return c.signal})()});
+    const d=await resp.json();
+    if(d.status===true){S.connected=true;S.creds=creds;setConnected(true,d.client);toast('ok','✅ Auto-connected!',`Welcome back ${d.client}`);addLog(`Auto-login OK — ${d.client}`,'ok');fetchMarketData();S.mktRefreshInt=setInterval(()=>{if(S.connected)fetchMarketData();},5000);}
+    else addLog(`Auto-login failed: ${d.message}`,'warn');
+  }catch(e){
+    let msg=e.message||'Unknown';
+    if(msg.includes('abort')||msg.includes('timeout')) addLog('Auto-login timed out — server may be starting up, try manual login','warn');
+    else addLog('Auto-login error: '+msg+' — use Setup tab to connect manually','warn');
   }
 })();
-
 </script>
 </body>
 </html>
