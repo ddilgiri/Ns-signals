@@ -703,30 +703,33 @@ app.post('/option-ltp', async (req, res) => {
     const INDEX_SYMS_LTP = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
     const isIndexSym = INDEX_SYMS_LTP.includes(sym);
 
-    // findNextMonthlyExp: last expiry of the earliest future month
     const futureAll = sortedMatches.filter(i => new Date(i.expiry) >= now);
-    const findNextMonthlyExp = (list) => {
+
+    // Group by month, pick last of each (= monthly expiry)
+    const getMonthlyList = (list) => {
       const byMonth = {};
       list.forEach(i => {
         const d = new Date(i.expiry);
-        const key = d.getFullYear() + '-' + d.getMonth();
+        const key = d.getFullYear() + '-' + String(d.getMonth()).padStart(2,'0');
         if (!byMonth[key] || d > new Date(byMonth[key].expiry)) byMonth[key] = i;
       });
-      return Object.values(byMonth).sort((a,b) => new Date(a.expiry) - new Date(b.expiry))[0] || list[0];
+      return Object.values(byMonth).sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
     };
 
     let chosen;
     if (!isIndexSym) {
-      // STOCKS: always monthly — last expiry of next available month
-      chosen = findNextMonthlyExp(futureAll) || sortedMatches[0];
+      // STOCKS: monthly contracts only — CURRENT or NEXT month
+      const monthlyList = getMonthlyList(futureAll);
+      chosen = expiry === 'NEXT'
+        ? (monthlyList[1] || monthlyList[0] || sortedMatches[0])
+        : (monthlyList[0] || sortedMatches[0]);
     } else if (expiry === 'MONTHLY') {
-      chosen = findNextMonthlyExp(futureAll) || sortedMatches[0];
-    } else if (expiry === 'NEXT') {
-      // Next weekly for index: skip nearest, pick second
-      chosen = futureAll[1] || futureAll[0] || sortedMatches[0];
+      const monthlyList = getMonthlyList(futureAll);
+      chosen = monthlyList[0] || sortedMatches[0];
     } else {
-      // WEEKLY: nearest upcoming expiry
-      chosen = futureAll[0] || sortedMatches[0];
+      // W1 W2 W3 W4 — Nth weekly contract for index
+      const wkIdx = { W1:0, W2:1, W3:2, W4:3 }[expiry] ?? 0;
+      chosen = futureAll[wkIdx] || futureAll[futureAll.length-1] || sortedMatches[0];
     }
 
     if (!chosen) {
@@ -820,20 +823,18 @@ app.post('/option-chain', async (req, res) => {
     const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
     const isIndex = INDEX_SYMS.includes(sym);
 
-    // findNextMonthlyExpiry: last expiry of current month, or next month if already passed
-    const findNextMonthlyExpiry = (sorted) => {
-      // Monthly = last expiry of a given calendar month (last Thu of month)
-      // Group by month+year and pick the LAST expiry in each group
+    // Group sorted future expiries by calendar month, pick last of each month
+    const getMonthlyExpiries = (sorted) => {
       const byMonth = {};
       sorted.forEach(i => {
-        const key = i._exp.getFullYear() + '-' + i._exp.getMonth();
+        const key = i._exp.getFullYear() + '-' + String(i._exp.getMonth()).padStart(2,'0');
         if (!byMonth[key] || i._exp > byMonth[key]._exp) byMonth[key] = i;
       });
-      // Pick the earliest month-group whose last expiry is still in the future
-      return Object.values(byMonth).sort((a,b) => a._exp - b._exp)[0] || sorted[0];
+      return Object.values(byMonth).sort((a,b) => a._exp - b._exp);
     };
 
     // Pick best expiry based on symbol type + requested expiry config
+    // expiry values: W1 W2 W3 W4 MONTHLY (indices) | CURRENT NEXT (stocks)
     const pickExpiry = (optList) => {
       const sorted = optList
         .map(i => ({ ...i, _exp: new Date(i.expiry) }))
@@ -841,17 +842,21 @@ app.post('/option-chain', async (req, res) => {
         .sort((a, b) => a._exp - b._exp);
       if (!sorted.length) return null;
 
-      // STOCKS: always use monthly expiry (no weekly contracts)
-      if (!isIndex) return findNextMonthlyExpiry(sorted);
-
-      // INDICES: respect the user config
-      if (expiry === 'MONTHLY') return findNextMonthlyExpiry(sorted);
-      if (expiry === 'NEXT') {
-        // Skip the nearest weekly, pick the one after
-        return sorted[1] || sorted[0];
+      if (!isIndex) {
+        // STOCKS — monthly contracts only (CURRENT or NEXT month)
+        const monthlyList = getMonthlyExpiries(sorted);
+        if (expiry === 'NEXT') return monthlyList[1] || monthlyList[0] || sorted[0];
+        return monthlyList[0] || sorted[0]; // CURRENT month
       }
-      // WEEKLY (default): nearest upcoming expiry
-      return sorted[0];
+
+      // INDICES — 4 weeklies + monthly
+      if (expiry === 'MONTHLY') {
+        const monthlyList = getMonthlyExpiries(sorted);
+        return monthlyList[0] || sorted[0];
+      }
+      // W1 W2 W3 W4 — pick the Nth weekly contract
+      const wkIdx = { W1:0, W2:1, W3:2, W4:3 }[expiry] ?? 0;
+      return sorted[wkIdx] || sorted[sorted.length - 1];
     };
 
     // Collect tokens for all strikes CE+PE

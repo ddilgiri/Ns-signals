@@ -446,11 +446,21 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Expiry</label>
-        <select class="field-input" id="cfgExpiry">
-          <option value="WEEKLY">Index: Current Weekly · Stock: Monthly</option>
-          <option value="NEXT">Index: Next Weekly · Stock: Monthly</option>
-          <option value="MONTHLY">Index: Monthly · Stock: Monthly</option>
+        <label class="field-label">Index Expiry <span style="color:var(--text3);font-weight:400">(4 weekly + monthly)</span></label>
+        <select class="field-input" id="cfgIdxExpiry">
+          <option value="W1">Week 1 — nearest weekly</option>
+          <option value="W2">Week 2 — 2nd weekly</option>
+          <option value="W3">Week 3 — 3rd weekly</option>
+          <option value="W4">Week 4 — 4th weekly</option>
+          <option value="MONTHLY">Monthly — last Thu of month</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Stock Expiry <span style="color:var(--text3);font-weight:400">(monthly contracts only)</span></label>
+        <select class="field-input" id="cfgStkExpiry">
+          <option value="CURRENT">Current Month</option>
+          <option value="NEXT">Next Month</option>
         </select>
       </div>
 
@@ -814,7 +824,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',idxExpiry:'W1',stkExpiry:'CURRENT',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -1450,7 +1460,7 @@ const OC_CACHE = {};
 const OC_TTL = 30000;
 
 async function fetchOptionChain(sym, spotPrice, expiryOverride) {
-  const expiryKey = expiryOverride || S.config.expiry;
+  const expiryKey = expiryOverride || S.config.idxExpiry || 'W1';
   const cacheKey = sym + '_' + expiryKey;
   const now = Date.now();
   if (OC_CACHE[cacheKey] && (now - OC_CACHE[cacheKey].fetchTime) < OC_TTL) return OC_CACHE[cacheKey].data;
@@ -1463,7 +1473,7 @@ async function fetchOptionChain(sym, spotPrice, expiryOverride) {
     const d = await r.json();
     if (d.status && d.strikes) {
       OC_CACHE[cacheKey] = {data:d, fetchTime:now};
-      addLog(`Option chain: ${sym} [${expiryKey}] ATM=${d.atmStrike}`, 'ok');
+      addLog(`OC: ${sym} [${expiryKey}] ATM=${d.atmStrike}`, 'ok');
       return d;
     }
   } catch(e) {}
@@ -1822,8 +1832,8 @@ async function generateSignal(symbolObj, isIndex) {
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
 
   if (S.connected) {
-    // Stocks always have MONTHLY expiry; indices follow user config (WEEKLY/NEXT/MONTHLY)
-    const expiryToUse = isIndex ? S.config.expiry : 'MONTHLY';
+    // Indices use idxExpiry (W1/W2/W3/W4/MONTHLY); stocks always monthly (CURRENT or NEXT month)
+    const expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
     const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
     if (oc?.strikes?.length) {
       const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
@@ -1892,8 +1902,8 @@ async function generateSignal(symbolObj, isIndex) {
     isIndex, type, setupType,
     strike: `${strike} ${type}`,
     expiry: isIndex
-      ? (S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Weekly':'Monthly')
-      : 'Monthly',
+      ? ({ W1:'Week 1', W2:'Week 2', W3:'Week 3', W4:'Week 4', MONTHLY:'Monthly' }[S.config.idxExpiry] || 'Weekly')
+      : (S.config.stkExpiry === 'NEXT' ? 'Next Month' : 'Current Month'),
     premium, target, sl, prob: ra.prob, rr,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
@@ -2062,7 +2072,9 @@ function saveConfig() {
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
-  S.config.expiry = document.getElementById('cfgExpiry').value;
+  S.config.idxExpiry = document.getElementById('cfgIdxExpiry').value;
+  S.config.stkExpiry = document.getElementById('cfgStkExpiry').value;
+  S.config.expiry = S.config.idxExpiry; // legacy compat
   S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
     document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
   );
