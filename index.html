@@ -27,35 +27,6 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
-
-/* ── LIGHT THEME ── */
-html.light{
-  --bg:#f0f4fa;--bg2:#e4eaf5;--bg3:#ffffff;--bg4:#edf1fa;--bg5:#dde4f0;
-  --border:#c8d4e8;--border2:#a8bcd8;--border3:#8aaac8;
-  --text:#0d1e38;--text2:#3a5580;--text3:#7a9cc0;--text4:#b0c4de;
-  --green:#00916e;--green2:#00c47d;--green-bg:#00916e12;
-  --red:#d42040;--red2:#b01830;--red-bg:#d4204012;
-  --amber:#c07800;--amber-bg:#c0780012;
-  --blue:#1a6fd4;--cyan:#0891b2;--purple:#6d3fd6;
-}
-html.light body{background:var(--bg)}
-html.light .topbar{background:var(--bg2);border-color:var(--border)}
-html.light .nav-bar{background:var(--bg2);border-color:var(--border)}
-html.light .sig-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
-html.light .stock-logo-fallback{background:linear-gradient(135deg,var(--bg4),var(--bg5))}
-html.light input,html.light select,html.light textarea{background:var(--bg3)!important;color:var(--text)!important;border-color:var(--border)!important}
-html.light .chip{background:var(--bg3);color:var(--text2)}
-html.light .chip.on{background:var(--green-bg);border-color:var(--green);color:var(--green)}
-html.light .field-input{background:var(--bg3)!important}
-html.light .drawer{background:var(--bg2)!important}
-html.light .prob-bar{background:var(--bg4)}
-html.light .log-entry{background:var(--bg3);border-color:var(--border)}
-html.light .sig-tab{background:var(--bg3)}
-html.light .page{background:var(--bg)!important}
-
-/* Theme toggle button */
-.theme-toggle{width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;flex-shrink:0}
-.theme-toggle:active{transform:scale(.9)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
@@ -322,7 +293,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="dot" id="mDot"></div>
       <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
     </div>
-    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
     <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
   </div>
 </div>
@@ -476,21 +446,11 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Index Expiry <span style="color:var(--text3);font-weight:400">(4 weekly + monthly)</span></label>
-        <select class="field-input" id="cfgIdxExpiry">
-          <option value="W1">Week 1 — nearest weekly</option>
-          <option value="W2">Week 2 — 2nd weekly</option>
-          <option value="W3">Week 3 — 3rd weekly</option>
-          <option value="W4">Week 4 — 4th weekly</option>
-          <option value="MONTHLY">Monthly — last Thu of month</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label class="field-label">Stock Expiry <span style="color:var(--text3);font-weight:400">(monthly contracts only)</span></label>
-        <select class="field-input" id="cfgStkExpiry">
-          <option value="CURRENT">Current Month</option>
-          <option value="NEXT">Next Month</option>
+        <label class="field-label">Expiry</label>
+        <select class="field-input" id="cfgExpiry">
+          <option value="WEEKLY">Current Weekly</option>
+          <option value="NEXT">Next Weekly</option>
+          <option value="MONTHLY">Monthly</option>
         </select>
       </div>
 
@@ -849,14 +809,17 @@ const FNO_STOCKS = [
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const S = {
-  scanning:false, scanInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
+  scanning:false, scanInt:null, mktRefreshInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
   notif:false, connected:false,
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',idxExpiry:'W1',stkExpiry:'CURRENT',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
+  niftyBaseline: null,   // locked at first Nifty price of session for relStrength calc
+  scanCursor: 0,         // round-robin position across selectedStocks
+  _idSeq: parseInt(localStorage.getItem('fno_id_seq') || '0'), // monotonic signal ID
 };
 
 // Load saved server URL
@@ -981,8 +944,7 @@ const WL_ALL = [
   { sym:'VBL',        name:'Varun Beverages',   token:'15459', isIdx:false },
   // ── NBFC ──
   { sym:'CHOLAFIN',   name:'Chola Finance',     token:'685',   isIdx:false },
-  { sym:'BAJAJFINSV', name:'Bajaj Finserv',     token:'16675', isIdx:false },
-  { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
+    { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
   // ── Cement ──
   { sym:'ACC',        name:'ACC',               token:'3',     isIdx:false },
   { sym:'AMBUJACEM',  name:'Ambuja Cement',     token:'1270',  isIdx:false },
@@ -997,12 +959,12 @@ const WL_ALL = [
   { sym:'NYKAA',      name:'Nykaa',             token:'11287', isIdx:false },
   { sym:'DELHIVERY',  name:'Delhivery',         token:'17014', isIdx:false },
   // ── Finance ──
-  { sym:'CDSL',       name:'CDSL',              token:'10604', isIdx:false },
+  { sym:'CDSL',       name:'CDSL',              token:'4749',  isIdx:false },
   { sym:'BSE',        name:'BSE',               token:'543154',isIdx:false },
   { sym:'MCX',        name:'MCX',               token:'5120',  isIdx:false },
-  { sym:'ANGELONE',   name:'Angel One',         token:'3045',  isIdx:false },
+  { sym:'ANGELONE',   name:'Angel One',         token:'543454',isIdx:false },
   // ── Retail ──
-  { sym:'DMART',      name:'DMart',             token:'11543', isIdx:false },
+  { sym:'DMART',      name:'DMart',             token:'3492',  isIdx:false },
   { sym:'TRENT',      name:'Trent',             token:'1964',  isIdx:false },
   // ── Infra ──
   { sym:'IRB',        name:'IRB Infrastructure',token:'19504', isIdx:false },
@@ -1093,33 +1055,6 @@ function toggleWL(sym) {
 // ══════════════════════════════════════════════════════════════════
 // MARKET CLOCK
 // ══════════════════════════════════════════════════════════════════
-// ── THEME TOGGLE ──
-function toggleTheme() {
-  const isLight = document.documentElement.classList.toggle('light');
-  const btn = document.getElementById('themeBtn');
-  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
-  // Update meta theme-color for status bar
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = isLight ? '#e4eaf5' : '#080c14';
-  try { localStorage.setItem('fno_theme', isLight ? 'light' : 'dark'); } catch(e) {}
-}
-// Init theme from saved preference
-(function initTheme() {
-  let saved;
-  try { saved = localStorage.getItem('fno_theme'); } catch(e) {}
-  const preferLight = saved ? saved === 'light' : window.matchMedia('(prefers-color-scheme: light)').matches;
-  if (preferLight) {
-    document.documentElement.classList.add('light');
-    // Set icon after DOM ready
-    window.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('themeBtn');
-      if (btn) btn.textContent = '☀️';
-      const meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.content = '#e4eaf5';
-    });
-  }
-})();
-
 function tickClock() {
   const { nseOpen } = getMarketStatus();
   document.getElementById('mDot').className = 'dot' + (nseOpen ? ' live' : '');
@@ -1203,10 +1138,13 @@ renderStockList();
 // SERVER URL
 // ══════════════════════════════════════════════════════════════════
 function getServer() {
-  const url = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
+  return S.serverUrl || localStorage.getItem('serverUrl') || window.location.origin;
+}
+
+function saveServerUrl(url) {
+  url = url.trim().replace(/\/$/, '');
   S.serverUrl = url;
   localStorage.setItem('serverUrl', url);
-  return url;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1230,6 +1168,8 @@ async function testConnection() {
 }
 
 async function connectAngel() {
+  const urlInput = document.getElementById('serverUrl');
+  if (urlInput?.value) saveServerUrl(urlInput.value);
   const server = getServer();
   const client = document.getElementById('aClient').value.trim();
   const key = document.getElementById('aKey').value.trim();
@@ -1255,12 +1195,14 @@ async function connectAngel() {
     if (d.status === true) {
       S.connected = true;
       S.creds = { client, key, pin, totp };
-      // Save credentials so app auto-reconnects next time
-      localStorage.setItem('ao_creds', JSON.stringify({ client, key, pin, totp }));
+      // Store only non-secret identifiers persistently; PIN/TOTP in sessionStorage only
+      localStorage.setItem('ao_meta', JSON.stringify({ client, key }));
+      sessionStorage.setItem('ao_session', JSON.stringify({ pin, totp }));
       setConnected(true, d.client);
       toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
       addLog(`Connected to Angel One — ${d.client}`, 'ok');
       fetchMarketData();
+      if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
       S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
     } else {
       setConnected(false);
@@ -1321,6 +1263,11 @@ async function fetchMarketData() {
         // Store prev before updating (for % change calc)
         if (S.livePrice[sym] && S.livePrice[sym] > 0) S.livePrev[sym] = prev;
         S.livePrice[sym] = ltp;
+        // Lock Nifty baseline at first price of the session for relStrength calc
+        if (sym === 'NIFTY' && !S.niftyBaseline && ltp > 0) {
+          S.niftyBaseline = ltp;
+          addLog(`Nifty session baseline locked: ${ltp.toLocaleString('en-IN')}`, '');
+        }
       });
       // Update watchlist bar in-place
       updateWatchlistBar();
@@ -1346,9 +1293,11 @@ async function fetchMarketData() {
     }
   } catch(e) { /* silent */ }
 
-  // PCR
-  try {
-    const server = getServer();
+  // PCR — throttled to once per 60 seconds (PCR updates infrequently on exchange)
+  if (!fetchMarketData._pcrLastFetch || Date.now() - fetchMarketData._pcrLastFetch > 60000) {
+    fetchMarketData._pcrLastFetch = Date.now();
+    try {
+      const server = getServer();
     const r = await fetch(server + '/pcr');
     const d = await r.json();
     if (d.status && d.data) {
@@ -1360,7 +1309,8 @@ async function fetchMarketData() {
       if (bankP)  { const v=parseFloat(bankP.putCallRatio||bankP.pcr||0);   updPCR('bank',v);  S.livePCR['BANKNIFTY']=v; }
       if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
     }
-  } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
+    } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
+  } // end PCR throttle
 
   // Update live prices on all signal cards
   updateSignalLivePrices();
@@ -1516,21 +1466,19 @@ function getNewsAdjustedProb(baseProb, type) {
 const OC_CACHE = {};
 const OC_TTL = 30000;
 
-async function fetchOptionChain(sym, spotPrice, expiryOverride) {
-  const expiryKey = expiryOverride || S.config.idxExpiry || 'W1';
-  const cacheKey = sym + '_' + expiryKey;
+async function fetchOptionChain(sym, spotPrice) {
   const now = Date.now();
-  if (OC_CACHE[cacheKey] && (now - OC_CACHE[cacheKey].fetchTime) < OC_TTL) return OC_CACHE[cacheKey].data;
+  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
   try {
     const server = getServer();
     const r = await fetch(server + '/option-chain', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({symbol:sym, spotPrice, expiry: expiryKey, depth:5}),
+      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
     });
     const d = await r.json();
     if (d.status && d.strikes) {
-      OC_CACHE[cacheKey] = {data:d, fetchTime:now};
-      addLog(`OC: ${sym} [${expiryKey}] ATM=${d.atmStrike}`, 'ok');
+      OC_CACHE[sym] = {data:d, fetchTime:now};
+      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
       return d;
     }
   } catch(e) {}
@@ -1813,12 +1761,7 @@ async function generateSignal(symbolObj, isIndex) {
   if (!liveP || liveP <= 0) return null; // no live price → skip entirely
 
   const baseP = liveP;
-  // Correct NSE strike intervals per underlying symbol
-  const STRIKE_STEP = { NIFTY:50, BANKNIFTY:100, FINNIFTY:50, MIDCAP:25, MIDCPNIFTY:25 };
-  const step = STRIKE_STEP[symbolObj.sym] || (
-    baseP > 50000 ? 100 : baseP > 20000 ? 50 : baseP > 5000 ? 50 :
-    baseP > 2000 ? 50 : baseP > 500 ? 10 : 5
-  );
+  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
 
   // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
   let analysis = null;
@@ -1857,96 +1800,38 @@ async function generateSignal(symbolObj, isIndex) {
   // pct change of stock vs pct change of Nifty (both from live prices vs entry)
   let relStrength = null;
   if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
+    const niftyRef = S.niftyBaseline || S.livePrice['NIFTY']; // use session baseline
+    const niftyChg = niftyRef > 0 ? (S.livePrice['NIFTY'] - niftyRef) / niftyRef * 100 : 0;
     // Use EMA20 as proxy for stock's "fair value" baseline when available
     const base = ema20 || baseP;
     const stockChg = (baseP - base) / base * 100;
     relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
-  // ── STEP 6: DERIVATIVES ──
+  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  const oiDelta = Math.random() * 0.55;
-  const ivRank  = 8 + Math.random() * 32;
+  // oiDelta and ivRank: set to null until real option chain OI data is integrated
+  // Using null prevents fabricated scores — scoreRA handles null with zero contribution
+  const oiDelta = null;   // TODO: derive from option chain CE_oi / PE_oi change
+  const ivRank  = null;   // TODO: (currentIV - 52wLow) / (52wHigh - 52wLow) * 100
+
+  // Real daysToExpiry from the chosen option contract (set after option chain fetch below)
+  // We compute a preliminary estimate here for early RA scoring
+  let daysToExp = null;
+  const expiryType = S.config.expiry || 'WEEKLY';
+  const now = new Date();
+  // Estimate next Thursday (weekly expiry) or last Thursday of month (monthly)
+  const dayOfWeek = now.getDay(); // 0=Sun, 4=Thu
+  const daysToThursday = (4 - dayOfWeek + 7) % 7 || 7;
+  if (expiryType === 'WEEKLY') daysToExp = daysToThursday;
+  else if (expiryType === 'NEXT') daysToExp = daysToThursday + 7;
+  else daysToExp = daysToThursday + 14; // rough monthly estimate
 
   // ── STEP 7: NEWS ──
   const newsScore = S_NEWS?.sentimentScore ?? null;
   const geoRisk   = S_NEWS?.geoRisk ?? 0;
 
-  // ── STEP 8: OPTION CHAIN — fetch first to get real expiry date ──
-  const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
-  const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
-  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
-  let realExpiryDate = null; // actual expiry date string from server e.g. '2026-05-28'
-  let daysToExp = 5; // default safe value before we know real expiry
-
-  if (S.connected) {
-    let expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
-    const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
-    if (oc?.strikes?.length) {
-      // Get real expiry date returned by server
-      if (oc.expiryDate) {
-        realExpiryDate = oc.expiryDate;
-        const expMs = new Date(oc.expiryDate).setHours(23,59,59,0);
-        daysToExp = Math.max(0, Math.round((expMs - Date.now()) / 86400000));
-      }
-
-      // ── AUTO-ADVANCE: stocks only — near expiry premiums are inflated ──
-      // Indices: NEVER auto-change expiry — user selected it intentionally,
-      // and expiry-day trading can be profitable for indices (gamma scalping).
-      if (!isIndex && daysToExp <= 3) {
-        // Stock within 3 calendar days of monthly expiry → switch to NEXT month
-        addLog(`⚠ ${symbolObj.sym} expiry in ${daysToExp}d — switching to NEXT month`, 'warn');
-        const ocNext = await fetchOptionChain(angelSym, baseP, 'NEXT');
-        if (ocNext?.strikes?.length) {
-          if (ocNext.expiryDate) {
-            realExpiryDate = ocNext.expiryDate;
-            const expMs2 = new Date(ocNext.expiryDate).setHours(23,59,59,0);
-            daysToExp = Math.max(0, Math.round((expMs2 - Date.now()) / 86400000));
-          }
-          const atm2 = ocNext.strikes.find(r => r.isATM) || ocNext.strikes[Math.floor(ocNext.strikes.length/2)];
-          if (atm2) {
-            strike = atm2.strike;
-            const ltp2 = type === 'CE' ? atm2.CE_ltp : atm2.PE_ltp;
-            optionToken = type === 'CE' ? atm2.CE_token : atm2.PE_token;
-            if (ltp2 && ltp2 > 0) { premium = ltp2; usedReal = true; }
-          }
-        }
-        if (!usedReal) return null; // next month also unavailable → skip
-      } else {
-        // Normal path — indices always use selected expiry, stocks use current month
-        const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
-        if (atm) {
-          strike = atm.strike;
-          const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
-          optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
-          if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
-        }
-      }
-    }
-  }
-
-  // Index fallback — realistic ATM premium estimate when OC unavailable
-  if (!usedReal) {
-    if (isIndex) {
-      // Realistic ATM option premium ≈ spot × IV × sqrt(DTE/365) / sqrt(2π)
-      // For NIFTY: IV ~15%, DTE ~5d → 24000 × 0.15 × sqrt(5/365) / 2.507 ≈ 150
-      // For BANKNIFTY: IV ~18%, DTE ~5d → 52000 × 0.18 × sqrt(5/365) / 2.507 ≈ 350
-      const ivEst = isIndex ? 0.15 : 0.20; // rough IV estimate
-      const dteEst = Math.max(1, daysToExp || 5);
-      const atmPremEst = Math.round(baseP * ivEst * Math.sqrt(dteEst / 365) / 2.507);
-      // Slightly OTM = ATM premium × 0.7
-      const offsets = [0, 0, step, -step];
-      const off = offsets[Math.floor(Math.random() * offsets.length)];
-      strike  = Math.round((baseP + off) / step) * step;
-      const otmFactor = off === 0 ? 1 : 0.70;
-      premium = Math.max(20, Math.round(atmPremEst * otmFactor));
-    } else {
-      return null; // stocks: no real premium → skip
-    }
-  }
-
-  // ── RA PIPELINE — now with real daysToExp ──
+  // ── STEP 8: RUN RA PIPELINE ──
   const ra = scoreRA({
     type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
     ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
@@ -1957,6 +1842,38 @@ async function generateSignal(symbolObj, isIndex) {
 
   if (ra.grade === 'REJECT') return null;
   if (ra.prob < S.config.minProb) return null;
+
+  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
+  const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
+  const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
+  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
+
+  if (S.connected) {
+    const oc = await fetchOptionChain(angelSym, baseP);
+    if (oc?.strikes?.length) {
+      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+      if (atm) {
+        strike = atm.strike;
+        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+        optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
+        if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
+      }
+    }
+  }
+
+  // Index fallback — ATM structural estimate only
+  if (!usedReal) {
+    if (isIndex) {
+      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
+      const offsets = [0, 0, step, -step]; // bias towards ATM
+      const off = offsets[Math.floor(Math.random()*offsets.length)];
+      strike  = Math.round((baseP + off)/step)*step;
+      const otm = Math.abs(off)/baseP;
+      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
+    } else {
+      return null; // stocks: no real premium → skip
+    }
+  }
 
   if (premium * lot > S.config.maxPrem) return null;
 
@@ -1970,7 +1887,9 @@ async function generateSignal(symbolObj, isIndex) {
     slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
   }
   const slPct = S.config.slPct / 100;
-  const sl    = Math.max(1, parseFloat((premium * (1 - slPct)).toFixed(2)));
+  const rawSL = parseFloat((premium * (1 - slPct)).toFixed(2));
+  const minSL = parseFloat((premium * 0.80).toFixed(2)); // never tighter than 20% of premium
+  const sl    = Math.max(1, Math.min(rawSL, minSL)); // floor at 20% drawdown, min ₹1
   const riskPts   = premium - sl;
 
   // Enforce RR ≥ 1:2
@@ -1994,24 +1913,12 @@ async function generateSignal(symbolObj, isIndex) {
   if (existing.length >= 2) return null; // max 2 per symbol+type
 
   return {
-    id: Date.now() + Math.random(),
+    id: (S._idSeq = (S._idSeq || 0) + 1, localStorage.setItem('fno_id_seq', S._idSeq), S._idSeq),
     sym:   symbolObj.sym,
     name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
     strike: `${strike} ${type}`,
-    expiry: (() => {
-      // Show actual expiry date if we have it, else fall back to label
-      if (realExpiryDate) {
-        const d = new Date(realExpiryDate);
-        const dd = String(d.getUTCDate()).padStart(2,'0');
-        const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
-        return `${dd} ${mon} ${d.getUTCFullYear()}`;
-      }
-      return isIndex
-        ? ({ W1:'Week 1', W2:'Week 2', W3:'Week 3', W4:'Week 4', MONTHLY:'Monthly' }[S.config.idxExpiry] || 'Weekly')
-        : (S.config.stkExpiry === 'NEXT' ? 'Next Month' : 'Current Month');
-    })(),
-    daysToExpiry: daysToExp,
+    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
     premium, target, sl, prob: ra.prob, rr,
     lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
@@ -2180,9 +2087,7 @@ function saveConfig() {
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
-  S.config.idxExpiry = document.getElementById('cfgIdxExpiry').value;
-  S.config.stkExpiry = document.getElementById('cfgStkExpiry').value;
-  S.config.expiry = S.config.idxExpiry; // legacy compat
+  S.config.expiry = document.getElementById('cfgExpiry').value;
   S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
     document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
   );
@@ -2233,22 +2138,41 @@ async function runScan() {
     if (!S.config.indices.includes(idx.sym)) continue;
     const sig = await generateSignal(idx, true);
     if (sig) {
-      // Dedup: skip if same sym+strike+type already in last 20 signals
-      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
+      // Dedup: skip if same sym+strike+type already exists anywhere in signal list
+      const isDup = S.signals.some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
       if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
     }
   }
 
   const stockArr = [...S.selectedStocks];
-  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 60));
-  for (const sym of batch) {
-    const obj = FNO_STOCKS.find(s=>s.sym===sym);
-    if (!obj) continue;
-    const sig = await generateSignal(obj, false);
-    if (sig) {
-      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
-      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+  const BATCH_SIZE = Math.min(stockArr.length, 60);
+  // Round-robin rotation — ensures every stock gets scanned fairly over time
+  S.scanCursor = S.scanCursor || 0;
+  const rotated = [...stockArr.slice(S.scanCursor), ...stockArr.slice(0, S.scanCursor)];
+  const batch = rotated.slice(0, BATCH_SIZE);
+  S.scanCursor = (S.scanCursor + BATCH_SIZE) % Math.max(stockArr.length, 1);
+
+  // Parallel scan with concurrency cap of 5 to avoid overwhelming the API
+  async function runConcurrent(items, limit) {
+    const out = [];
+    for (let i = 0; i < items.length; i += limit) {
+      const chunk = items.slice(i, i + limit);
+      const settled = await Promise.allSettled(
+        chunk.map(sym => {
+          const obj = FNO_STOCKS.find(s => s.sym === sym);
+          return obj ? generateSignal(obj, false) : Promise.resolve(null);
+        })
+      );
+      out.push(...settled.map(r => r.status === 'fulfilled' ? r.value : null));
     }
+    return out;
+  }
+
+  const stockResults = await runConcurrent(batch, 5);
+  for (const sig of stockResults) {
+    if (!sig) continue;
+    const isDup = S.signals.some(e => e.sym === sig.sym && e.strike === sig.strike && e.type === sig.type);
+    if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
   }
 
   S.signals = S.signals.slice(0, 100);
@@ -2397,9 +2321,10 @@ function getLogoUrl(sym) {
 
 // Helper: check if signal is SL-hit (livePremium ≤ sl × 0.90)
 function isSLHit(sig) {
-  const livePrem = (sig.livePremium && sig.livePremium > 0) ? sig.livePremium : 0;
-  if (!livePrem || !sig.sl) return false;
-  return livePrem <= sig.sl * 0.90;
+  const p = sig.livePremium;
+  if (p === 0) return true;           // expired or zero-bid — treat as closed
+  if (!p || p < 0 || !sig.sl) return false;
+  return p <= sig.sl * 0.90;
 }
 
 function renderSignals() {
@@ -2474,7 +2399,6 @@ function renderSignals() {
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
-
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
         <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
@@ -2510,17 +2434,13 @@ function renderSignals() {
         </div>
       </div>
       <div class="sig-tags">
-        <span class="sig-tag" style="color:${
-          s.daysToExpiry<=3?'var(--red)':s.daysToExpiry<=7?'var(--amber)':'var(--text3)'
-        };font-weight:${s.daysToExpiry<=3?'700':'400'}">📅 ${s.expiry}${
-          s.daysToExpiry!=null?' · '+s.daysToExpiry+'d':''
-        }${s.daysToExpiry<=3?' ⚠':''}</span>
+        <span class="sig-tag">${s.expiry}</span>
         ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
         <span class="sig-tag">IV ${s.ivRank}</span>
         ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
         ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
         ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''}${s.relStrength?.toFixed(1)}</span>`:''}
-        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)}</span>
+        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
@@ -2542,7 +2462,7 @@ function openDrawer(idStr) {
       <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
       <div class="drawer-title">${sig.sym}</div>
     </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry}${sig.daysToExpiry!=null?' ('+sig.daysToExpiry+'d)':''} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
 
     <div class="drawer-grid">
       <div class="drawer-cell">
@@ -2599,11 +2519,15 @@ document.getElementById('drawerSheet').addEventListener('touchend', e => {
 // NOTIFICATIONS
 // ══════════════════════════════════════════════════════════════════
 function forgetCreds() {
+  // Clear all credential storage (both new split format and legacy)
+  localStorage.removeItem('ao_meta');
   localStorage.removeItem('ao_creds');
-  document.getElementById('aClient').value = '';
-  document.getElementById('aKey').value    = '';
-  document.getElementById('aPin').value    = '';
-  document.getElementById('aTotp').value   = '';
+  sessionStorage.removeItem('ao_session');
+  const el = (id) => document.getElementById(id);
+  if (el('aClient')) el('aClient').value = '';
+  if (el('aKey'))    el('aKey').value    = '';
+  if (el('aPin'))    el('aPin').value    = '';
+  if (el('aTotp'))   el('aTotp').value   = '';
   S.connected = false;
   S.creds = { client:'', key:'', pin:'', totp:'' };
   setConnected(false);
@@ -2666,7 +2590,8 @@ function addLog(msg, cls) {
   row.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${cls||''}">${msg}</span>`;
   const body = document.getElementById('logBody');
   body.prepend(row);
-  if (body.children.length > 100) body.lastElementChild.remove();
+  // Cap log DOM to 200 rows to prevent memory/layout lag after long sessions
+  while (body.children.length > 200) body.lastElementChild.remove();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2704,16 +2629,37 @@ if ('serviceWorker' in navigator) {
 addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
 renderWatchlistBar();
 
-// Restore signals from last session
+// Restore signals from last session — today's only
 try {
   const saved = localStorage.getItem('fno_signals');
   if (saved) {
-    S.signals = JSON.parse(saved);
-    document.getElementById('mSigs').textContent = S.signals.length;
-    renderSignals();
-    addLog(`Restored ${S.signals.length} signals from last session`, 'ok');
+    const today = new Date().toDateString();
+    const allSigs = JSON.parse(saved);
+    S.signals = allSigs.filter(sig => {
+      // Drop signals from previous trading days
+      const sigDate = new Date(sig.ts || 0).toDateString();
+      return sigDate === today;
+    }).map(sig => {
+      // Clean up transient runtime properties that shouldn't persist
+      delete sig._prevSLHit;
+      delete sig._priceStale;
+      return sig;
+    });
+    const dropped = allSigs.length - S.signals.length;
+    if (dropped > 0) {
+      localStorage.setItem('fno_signals', JSON.stringify(S.signals));
+      addLog(`Cleared ${dropped} stale signal(s) from previous session`, 'warn');
+    }
+    if (S.signals.length) {
+      document.getElementById('mSigs').textContent = S.signals.length;
+      renderSignals();
+      addLog(`Restored ${S.signals.length} signal(s) from today's session`, 'ok');
+    }
   }
-} catch(e) {}
+} catch(e) {
+  S.signals = [];
+  localStorage.removeItem('fno_signals');
+}
 
 function clearSignals() {
   S.signals = [];
@@ -2729,37 +2675,56 @@ function clearSignals() {
 }
 
 (async function autoLogin() {
-  const saved = localStorage.getItem('ao_creds');
-  if (!saved) {
+  const meta    = (() => { try { return JSON.parse(localStorage.getItem('ao_meta') || 'null'); } catch { return null; } })();
+  const session = (() => { try { return JSON.parse(sessionStorage.getItem('ao_session') || 'null'); } catch { return null; } })();
+
+  // Also support legacy ao_creds for backward compatibility
+  const legacy  = (() => { try { return JSON.parse(localStorage.getItem('ao_creds') || 'null'); } catch { return null; } })();
+
+  const creds = meta && session
+    ? { client: meta.client, key: meta.key, pin: session.pin, totp: session.totp }
+    : legacy
+    ? { client: legacy.client, key: legacy.key, pin: legacy.pin, totp: legacy.totp }
+    : null;
+
+  if (!creds?.client || !creds?.key || !creds?.pin) {
     addLog('Enter your Angel One credentials in Setup tab', '');
     return;
   }
+
+  // Migrate legacy credentials to split storage
+  if (legacy && !meta) {
+    localStorage.setItem('ao_meta', JSON.stringify({ client: creds.client, key: creds.key }));
+    sessionStorage.setItem('ao_session', JSON.stringify({ pin: creds.pin, totp: creds.totp }));
+    localStorage.removeItem('ao_creds'); // remove insecure plaintext store
+  }
+
+  // Fill the form fields with saved (non-secret) values
+  const el = (id) => document.getElementById(id);
+  if (el('aClient')) el('aClient').value = creds.client;
+  if (el('aKey'))    el('aKey').value    = creds.key;
+
+  addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
+  if (el('apiStat')) el('apiStat').textContent = 'Auto-connecting...';
+
+  await new Promise(r => setTimeout(r, 1200));
+
+  const server = getServer();
+  let resp;
   try {
-    const creds = JSON.parse(saved);
-    // Fill the form fields with saved values
-    document.getElementById('aClient').value = creds.client || '';
-    document.getElementById('aKey').value    = creds.key    || '';
-    document.getElementById('aPin').value    = creds.pin    || '';
-    document.getElementById('aTotp').value   = creds.totp   || '';
-
-    addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
-    document.getElementById('apiStat').textContent = 'Auto-connecting...';
-
-    // Small delay so UI renders first
-    await new Promise(r => setTimeout(r, 1200));
-
-    const server = getServer();
-    const resp = await fetch(server + '/login', {
+    resp = await fetch(server + '/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        clientCode: creds.client,
-        password:   creds.pin,
-        apiKey:     creds.key,
-        totpSecret: creds.totp,
-      }),
-      signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({ clientCode: creds.client, password: creds.pin, apiKey: creds.key, totpSecret: creds.totp }),
+      signal: AbortSignal.timeout(20000),
     });
+  } catch(fetchErr) {
+    addLog(`Auto-login: server unreachable (${fetchErr.message}) — connect manually`, 'warn');
+    toast('warn', '⚠ Offline', 'Server unreachable. Check server URL in Setup tab.');
+    return;
+  }
+
+  try {
     const d = await resp.json();
     if (d.status === true) {
       S.connected = true;
@@ -2768,6 +2733,7 @@ function clearSignals() {
       toast('ok', '✅ Auto-connected!', `Welcome back ${d.client} — session restored`);
       addLog(`Auto-login success — ${d.client}`, 'ok');
       fetchMarketData();
+      if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
       S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
     } else {
       addLog(`Auto-login failed: ${d.message} — tap Setup to reconnect`, 'warn');

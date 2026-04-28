@@ -18,9 +18,30 @@ const PORT = process.env.PORT || 3001;
 // ─────────────────────────────────────────────────────────────────────
 // MIDDLEWARE
 // ─────────────────────────────────────────────────────────────────────
-app.use(cors({ origin: '*' }));
+// Restrict CORS to known origins (not wildcard in production)
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3001',
+  'http://localhost:3000',
+].filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.length === 0),
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
+
+// Rate-limit login endpoint — max 10 attempts per 15 minutes
+const loginLimiter = {
+  _store: new Map(),
+  check(ip) {
+    const now = Date.now();
+    const entry = this._store.get(ip) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+    if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 15 * 60 * 1000; }
+    entry.count++;
+    this._store.set(ip, entry);
+    return entry.count <= 10;
+  },
+};
 
 // ─────────────────────────────────────────────────────────────────────
 // SESSION STORAGE
@@ -36,6 +57,41 @@ const SESSION = {
 
 function isAuthenticated() {
   return SESSION.jwtToken && Date.now() < SESSION.expiresAt;
+}
+
+// Parse real expiry from JWT payload instead of hardcoding 8h
+function getJWTExpiry(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
+    return payload.exp ? payload.exp * 1000 : Date.now() + 8 * 3600000;
+  } catch { return Date.now() + 8 * 3600000; }
+}
+
+// Instrument master with error recovery — shared across all routes
+async function ensureInstruments() {
+  if (SESSION._instruments && (Date.now() - (SESSION._instrFetchTime || 0)) < 4 * 3600 * 1000) {
+    return SESSION._instruments;
+  }
+  if (SESSION._instrFetchFailed && Date.now() - (SESSION._instrFailTime || 0) < 5 * 60 * 1000) {
+    throw new Error('Instrument master unavailable — retry in 5 minutes');
+  }
+  try {
+    log('Downloading instrument master...', 'INFO');
+    const resp = await axios.get(
+      'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
+      { timeout: 30000 }
+    );
+    SESSION._instruments = resp.data;
+    SESSION._instrFetchTime = Date.now();
+    SESSION._instrFetchFailed = false;
+    log(`Instrument master loaded — ${SESSION._instruments.length} instruments`, 'OK');
+    return SESSION._instruments;
+  } catch (err) {
+    SESSION._instrFetchFailed = true;
+    SESSION._instrFailTime = Date.now();
+    log(`Instrument master fetch failed: ${err.message}`, 'ERR');
+    throw err;
+  }
 }
 
 function log(msg, level = 'INFO') {
@@ -110,6 +166,18 @@ app.get('/health', (req, res) => {
 // ROUTE: LOGIN
 // ─────────────────────────────────────────────────────────────────────
 app.post('/login', async (req, res) => {
+  // Rate limit by IP
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  if (!loginLimiter.check(ip)) {
+    return res.status(429).json({ status: false, message: 'Too many login attempts — wait 15 minutes' });
+  }
+
+  // Return existing session if still valid
+  if (isAuthenticated()) {
+    return res.json({ status: true, message: 'Already authenticated', client: SESSION.clientCode,
+      tokenExpiry: new Date(SESSION.expiresAt).toLocaleTimeString('en-IN') });
+  }
+
   try {
     const { clientCode, password, apiKey, totpSecret } = req.body;
 
@@ -158,7 +226,7 @@ app.post('/login', async (req, res) => {
       SESSION.jwtToken = data.data.jwtToken;
       SESSION.refreshToken = data.data.refreshToken;
       SESSION.feedToken = data.data.feedToken;
-      SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000); // 8 hours
+      SESSION.expiresAt = getJWTExpiry(data.data.jwtToken); // real JWT expiry
 
       log(`✅ Login successful — ${clientCode}`, 'OK');
       log(`   JWT: ${SESSION.jwtToken.substring(0, 30)}...`);
@@ -253,9 +321,9 @@ app.post('/market-bias', async (req, res) => {
     prev.setDate(prev.getDate() - (prev.getDay() === 1 ? 3 : prev.getDay() === 0 ? 2 : 1));
     const prevDay = prev.toISOString().slice(0, 10);
 
-    // Fetch 15m candles for last 10 days (enough for EMA50)
+    // Fetch 15m candles for last 5 days (sufficient for EMA50 with 26 candles/day)
     const fromDate = new Date(ist);
-    fromDate.setDate(fromDate.getDate() - 14);
+    fromDate.setDate(fromDate.getDate() - 5);
     const from = fromDate.toISOString().slice(0, 10) + ' 09:15';
     const to   = today + ' 15:30';
 
@@ -301,8 +369,10 @@ app.post('/market-bias', async (req, res) => {
     const pdh = prevCandles.length ? Math.max(...prevCandles.map(c => parseFloat(c[2]))) : null;
     const pdl = prevCandles.length ? Math.min(...prevCandles.map(c => parseFloat(c[3]))) : null;
 
-    // ORB (Opening Range Breakout) — first 30 min of today
-    const todayCandles = raw.filter(c => c[0].slice(0,10) === today);
+    // ORB (Opening Range Breakout) — first 30 min of today, sorted by time
+    const todayCandles = raw
+      .filter(c => c[0].slice(0,10) === today)
+      .sort((a, b) => a[0].localeCompare(b[0])); // ensure chronological order
     const orbCandles = todayCandles.slice(0, 2); // first 2 x 15m = 30 min
     const orb_high = orbCandles.length ? Math.max(...orbCandles.map(c => parseFloat(c[2]))) : null;
     const orb_low  = orbCandles.length ? Math.min(...orbCandles.map(c => parseFloat(c[3]))) : null;
@@ -329,7 +399,7 @@ app.post('/market-bias', async (req, res) => {
       return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2));
     }
 
-    const rsi = rsi14(closes);
+    const rsi = rsi14(closes.slice(-50)); // anchor RSI to recent 50 candles
 
     // VWAP (today)
     let vwapNum = 0, vwapDen = 0;
@@ -417,6 +487,94 @@ app.get('/fii-dii', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// SHARED LOGIC — called by both route handlers and /signal-analysis
+// Avoids localhost self-calls that fail in containerised deployments
+// ─────────────────────────────────────────────────────────────────────
+async function fetchMarketBiasData(symbolToken, exchange = 'NSE') {
+  const now   = new Date();
+  const ist   = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const today = ist.toISOString().slice(0, 10);
+  const prev  = new Date(ist);
+  prev.setDate(prev.getDate() - (prev.getDay() === 1 ? 3 : prev.getDay() === 0 ? 2 : 1));
+  const prevDay = prev.toISOString().slice(0, 10);
+  const fromDate = new Date(ist);
+  fromDate.setDate(fromDate.getDate() - 5);
+  const from = fromDate.toISOString().slice(0, 10) + ' 09:15';
+  const to   = today + ' 15:30';
+  const candleResp = await axios.post(
+    `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
+    { exchange, symboltoken: symbolToken, interval: 'FIFTEEN_MINUTE', fromdate: from, todate: to },
+    { headers: getHeaders(true), timeout: 20000 }
+  );
+  const raw = candleResp.data?.data || [];
+  if (raw.length < 10) return { status: false, message: 'Insufficient candle data' };
+  const closes = raw.map(c => parseFloat(c[4]));
+  const ltp    = closes[closes.length - 1];
+  function ema(data, period) {
+    const k = 2 / (period + 1);
+    let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    for (let i = period; i < data.length; i++) e = data[i] * k + e * (1 - k);
+    return parseFloat(e.toFixed(2));
+  }
+  const ema20 = closes.length >= 20 ? ema(closes, 20) : null;
+  const ema50 = closes.length >= 50 ? ema(closes, 50) : null;
+  let bias = 'NEUTRAL';
+  if (ema20 && ema50) {
+    if (ltp > ema20 && ema20 > ema50) bias = 'BULLISH';
+    else if (ltp < ema20 && ema20 < ema50) bias = 'BEARISH';
+  } else if (ema20) {
+    bias = ltp > ema20 ? 'BULLISH' : 'BEARISH';
+  }
+  const prevCandles = raw.filter(c => c[0].slice(0,10) === prevDay);
+  const todayCandles = raw.filter(c => c[0].slice(0,10) === today).sort((a,b) => a[0].localeCompare(b[0]));
+  const pdh = prevCandles.length ? Math.max(...prevCandles.map(c => parseFloat(c[2]))) : null;
+  const pdl = prevCandles.length ? Math.min(...prevCandles.map(c => parseFloat(c[3]))) : null;
+  const orbCandles = todayCandles.slice(0, 2);
+  const orb_high = orbCandles.length ? Math.max(...orbCandles.map(c => parseFloat(c[2]))) : null;
+  const orb_low  = orbCandles.length ? Math.min(...orbCandles.map(c => parseFloat(c[3]))) : null;
+  const vols = raw.map(c => parseFloat(c[5]));
+  const todayVol = todayCandles.reduce((s,c) => s + parseFloat(c[5]), 0);
+  const avgDayVol = vols.reduce((a,b) => a+b, 0) / Math.max(vols.length,1) * (todayCandles.length || 1);
+  const volRatio = avgDayVol > 0 ? parseFloat((todayVol / avgDayVol).toFixed(2)) : 1;
+  const rsiCloses = closes.slice(-50);
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= 14; i++) { const d = rsiCloses[i]-rsiCloses[i-1]; if(d>0) gains+=d; else losses-=d; }
+  let ag=gains/14, al=losses/14;
+  for (let i=15; i<rsiCloses.length; i++) { const d=rsiCloses[i]-rsiCloses[i-1]; ag=(ag*13+Math.max(d,0))/14; al=(al*13+Math.max(-d,0))/14; }
+  const rsi = al===0 ? 100 : parseFloat((100-100/(1+ag/al)).toFixed(2));
+  let vwapNum=0, vwapDen=0;
+  todayCandles.forEach(c => { const tp=(parseFloat(c[2])+parseFloat(c[3])+parseFloat(c[4]))/3; const vol=parseFloat(c[5]); vwapNum+=tp*vol; vwapDen+=vol; });
+  const vwap = vwapDen > 0 ? parseFloat((vwapNum/vwapDen).toFixed(2)) : null;
+  return { status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap: vwap ? ltp>vwap : null, pdh, pdl, orb_high, orb_low, volRatio, candleCount: raw.length };
+}
+
+async function fetchFiiDiiData() {
+  if (FII_DII_CACHE.data && (Date.now() - FII_DII_CACHE.fetchTime) < 30 * 60 * 1000) {
+    return FII_DII_CACHE.data;
+  }
+  try {
+    const r = await axios.get('https://www.nseindia.com/api/fiidiiTradeReact', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Accept': 'application/json', 'Referer': 'https://www.nseindia.com/' },
+      timeout: 10000
+    });
+    const raw = r.data || [];
+    const today = raw.find(d => d.category === 'FII/FPI *') || raw[0];
+    const dii   = raw.find(d => d.category === 'DII') || raw[1];
+    const result = {
+      status: true,
+      fiiNet: parseFloat(today?.netValue || 0),
+      diiNet: parseFloat(dii?.netValue   || 0),
+      fiiBuy: parseFloat(today?.buyValue || 0), fiiSell: parseFloat(today?.sellValue || 0),
+      diiBuy: parseFloat(dii?.buyValue   || 0), diiSell: parseFloat(dii?.sellValue   || 0),
+    };
+    result.instBias = result.fiiNet > 500 ? 'BULLISH' : result.fiiNet < -500 ? 'BEARISH' : result.diiNet > 500 ? 'BULLISH' : result.diiNet < -500 ? 'BEARISH' : 'NEUTRAL';
+    FII_DII_CACHE.data = result;
+    FII_DII_CACHE.fetchTime = Date.now();
+    return result;
+  } catch { return { status: true, fiiNet: 0, diiNet: 0, instBias: 'NEUTRAL' }; }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // ROUTE: FULL SIGNAL ANALYSIS — comprehensive RA-style check
 // Body: { symbolToken, sym, exchange, isIndex, spotPrice, type }
 // Returns all signal conditions + final verdict
@@ -427,13 +585,14 @@ app.post('/signal-analysis', async (req, res) => {
   const { symbolToken, sym, exchange = 'NSE', isIndex = false, spotPrice, type } = req.body;
 
   try {
-    const [biasResp, fiiResp] = await Promise.allSettled([
-      axios.post(`http://localhost:${PORT}/market-bias`, { symbolToken, exchange }, { headers: { 'Content-Type': 'application/json' } }),
-      axios.get(`http://localhost:${PORT}/fii-dii`),
+    // Call shared logic functions directly — avoids localhost self-calls that fail in containers
+    const [biasResult, fiiResult] = await Promise.allSettled([
+      fetchMarketBiasData(symbolToken, exchange),
+      fetchFiiDiiData(),
     ]);
 
-    const bias   = biasResp.status === 'fulfilled'   ? biasResp.value.data   : { status: false };
-    const fii    = fiiResp.status === 'fulfilled'    ? fiiResp.value.data    : { instBias: 'NEUTRAL' };
+    const bias = biasResult.status === 'fulfilled' ? biasResult.value : { status: false };
+    const fii  = fiiResult.status  === 'fulfilled' ? fiiResult.value  : { instBias: 'NEUTRAL' };
 
     const result = {
       status: true,
@@ -513,108 +672,6 @@ app.get('/gainers', async (req, res) => {
 // ROUTE: MCX COMMODITY LIVE PRICES
 // Returns live LTP for Gold, Silver, CrudeOil, NaturalGas, Copper, Zinc
 // ─────────────────────────────────────────────────────────────────────
-app.get('/mcx', async (req, res) => {
-  if (!isAuthenticated()) {
-    return res.status(401).json({ status: false, message: 'Not authenticated' });
-  }
-
-  try {
-    // Ensure instrument master is loaded
-    if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
-      log('Downloading instrument master for MCX...', 'INFO');
-      const instrResp = await axios.get(
-        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
-        { timeout: 30000 }
-      );
-      SESSION._instruments = instrResp.data;
-      SESSION._instrFetchTime = Date.now();
-    }
-
-    const instruments = SESSION._instruments;
-    const now = new Date();
-
-    // Key MCX commodities to track
-    const MCX_COMMODITIES = [
-      { name: 'GOLD',       sym: 'GOLD',       unit: '10g'  },
-      { name: 'SILVER',     sym: 'SILVER',     unit: 'kg'   },
-      { name: 'CRUDEOIL',   sym: 'CRUDEOIL',   unit: 'bbl'  },
-      { name: 'NATURALGAS', sym: 'NATURALGAS', unit: 'mmBtu'},
-      { name: 'COPPER',     sym: 'COPPER',     unit: 'kg'   },
-      { name: 'ZINC',       sym: 'ZINC',       unit: 'kg'   },
-      { name: 'ALUMINIUM',  sym: 'ALUMINIUM',  unit: 'kg'   },
-      { name: 'LEAD',       sym: 'LEAD',       unit: 'kg'   },
-      { name: 'NICKEL',     sym: 'NICKEL',     unit: 'kg'   },
-      { name: 'GOLDM',      sym: 'GOLDM',      unit: '100g' },
-      { name: 'SILVERM',    sym: 'SILVERM',    unit: 'kg'   },
-    ];
-
-    // Find nearest expiry MCX futures for each commodity
-    const tokens = [];
-    const tokenMap = {};
-
-    for (const comm of MCX_COMMODITIES) {
-      const matches = instruments.filter(i =>
-        i.exch_seg === 'MCX' &&
-        i.name === comm.sym &&
-        i.instrumenttype === 'FUTCOM' &&
-        new Date(i.expiry) >= now
-      ).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-
-      if (matches.length > 0) {
-        const nearest = matches[0];
-        tokens.push(nearest.token);
-        tokenMap[nearest.token] = { ...comm, expiry: nearest.expiry, tradingSymbol: nearest.symbol };
-      }
-    }
-
-    if (!tokens.length) {
-      return res.json({ status: false, message: 'No MCX instruments found' });
-    }
-
-    // Fetch live LTPs
-    const quoteResp = await axios.post(
-      `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
-      { mode: 'FULL', exchangeTokens: { MCX: tokens } },
-      { headers: getHeaders(true), timeout: 15000 }
-    );
-
-    const qData = quoteResp.data;
-    if (!qData.status || !qData.data?.fetched?.length) {
-      return res.json({ status: false, message: 'MCX quote returned no data' });
-    }
-
-    const result = qData.data.fetched.map(q => {
-      const info = tokenMap[String(q.symbolToken)] || {};
-      const ltp  = parseFloat(q.ltp || 0);
-      const open = parseFloat(q.open || ltp);
-      const chg  = open > 0 ? ((ltp - open) / open * 100) : 0;
-      return {
-        name:          info.name || q.tradingSymbol,
-        sym:           info.sym  || q.tradingSymbol,
-        unit:          info.unit || '',
-        tradingSymbol: info.tradingSymbol || q.tradingSymbol,
-        expiry:        info.expiry || '',
-        ltp,
-        open:          parseFloat(q.open  || 0),
-        high:          parseFloat(q.high  || 0),
-        low:           parseFloat(q.low   || 0),
-        close:         parseFloat(q.close || 0),
-        chgPct:        parseFloat(chg.toFixed(2)),
-        volume:        parseInt(q.tradeVolume || q.volume || 0),
-        token:         String(q.symbolToken),
-      };
-    });
-
-    log(`✅ MCX: ${result.length} commodities fetched`, 'OK');
-    res.json({ status: true, data: result });
-
-  } catch (error) {
-    const msg = error.response?.data?.message || error.message;
-    log(`MCX error: ${msg}`, 'WARN');
-    res.status(500).json({ status: false, message: msg });
-  }
-});
-
 // ─────────────────────────────────────────────────────────────────────
 // ROUTE: PUT-CALL RATIO
 // ─────────────────────────────────────────────────────────────────────
@@ -652,18 +709,7 @@ app.post('/option-ltp', async (req, res) => {
 
   try {
     // ── Step 1: Download Angel One NFO instrument master (cached in memory) ──
-    if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
-      log('Downloading NFO instrument master...', 'INFO');
-      const instrResp = await axios.get(
-        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
-        { timeout: 30000 }
-      );
-      SESSION._instruments = instrResp.data;
-      SESSION._instrFetchTime = Date.now();
-      log(`Instrument master loaded — ${SESSION._instruments.length} instruments`, 'OK');
-    }
-
-    const instruments = SESSION._instruments;
+    const instruments = await ensureInstruments();
 
     // ── Step 2: Find matching NFO option token ──
     // Angel One trading symbol format: NIFTY24JUL24300CE or RELIANCE24JUL1280CE
@@ -699,50 +745,30 @@ app.post('/option-ltp', async (req, res) => {
       return da - db;
     });
 
-    // Determine if this is an index or stock symbol
-    const INDEX_SYMS_LTP = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
-    const isIndexSym = INDEX_SYMS_LTP.includes(sym);
-
-    // Date-only comparison to keep expiry-day contracts (Angel stores expiry as midnight UTC)
-    const todayOnly = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-    const futureAll = sortedMatches.filter(i => new Date(i.expiry) >= todayOnly);
-
-    // Group by calendar month, keep last expiry of each month (= true monthly contract)
-    const getMonthlyList = (list) => {
-      const byMonth = {};
-      list.forEach(i => {
-        const d = new Date(i.expiry);
-        const key = d.getFullYear() + '-' + String(d.getMonth()).padStart(2,'0');
-        if (!byMonth[key] || d > new Date(byMonth[key].expiry)) byMonth[key] = i;
-      });
-      return Object.values(byMonth).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-    };
-
     let chosen;
-    if (!isIndexSym) {
-      // STOCKS: only monthly contracts on NSE
-      const monthlyList = getMonthlyList(futureAll);
-      if (expiry === 'NEXT') {
-        // Skip current month, return next month's expiry
-        chosen = monthlyList[1] || monthlyList[0] || sortedMatches[0];
-      } else {
-        // CURRENT: nearest upcoming monthly expiry
-        chosen = monthlyList[0] || sortedMatches[0];
-      }
-    } else if (expiry === 'MONTHLY') {
-      const monthlyList = getMonthlyList(futureAll);
-      chosen = monthlyList[0] || sortedMatches[0];
+    if (expiry === 'MONTHLY') {
+      // Pick last expiry of the month
+      const thisMonth = now.getMonth();
+      const monthlyMatches = sortedMatches.filter(i => {
+        const d = new Date(i.expiry);
+        return d.getMonth() === thisMonth && d >= now;
+      });
+      chosen = monthlyMatches[monthlyMatches.length - 1] || sortedMatches[0];
+    } else if (expiry === 'NEXT') {
+      // Skip first expiry, pick second
+      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
+      chosen = futureMatches[1] || futureMatches[0] || sortedMatches[0];
     } else {
-      // W1/W2/W3/W4 — Nth weekly contract for index
-      const wkIdx = { W1: 0, W2: 1, W3: 2, W4: 3 }[expiry] ?? 0;
-      chosen = futureAll[wkIdx] || futureAll[futureAll.length - 1] || sortedMatches[0];
+      // WEEKLY — pick nearest future expiry
+      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
+      chosen = futureMatches[0] || sortedMatches[0];
     }
 
     if (!chosen) {
       return res.json({ status: false, message: `No valid expiry found for ${sym} ${strike} ${optType}` });
     }
 
-    log(`Option token: ${chosen.symbol} expiry=${chosen.expiry} (requested=${expiry}, isIndex=${isIndexSym})`, 'INFO');
+    log(`Option token: ${chosen.symbol} (token ${chosen.token})`, 'INFO');
 
     // ── Step 3: Fetch live LTP for this option token via NFO quote ──
     const quoteResp = await axios.post(
@@ -790,27 +816,14 @@ app.post('/option-chain', async (req, res) => {
   }
 
   try {
-    // Ensure instrument master is loaded
-    if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
-      log('Downloading NFO instrument master...', 'INFO');
-      const instrResp = await axios.get(
-        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
-        { timeout: 30000 }
-      );
-      SESSION._instruments = instrResp.data;
-      SESSION._instrFetchTime = Date.now();
-    }
-
-    const instruments = SESSION._instruments;
+    // Ensure instrument master is loaded (with error recovery)
+    const instruments = await ensureInstruments();
     const sym = symbol.toUpperCase();
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
-    // Compute ATM strike — use correct NSE strike intervals per underlying
-    const STRIKE_STEP = {
-      NIFTY: 50, BANKNIFTY: 100, FINNIFTY: 50, MIDCPNIFTY: 25, SENSEX: 100,
-    };
-    const step = STRIKE_STEP[sym] || (spot > 50000 ? 100 : spot > 20000 ? 50 : spot > 5000 ? 50 : spot > 2000 ? 50 : spot > 500 ? 10 : 5);
+    // Compute ATM strike
+    const step = spot > 10000 ? 500 : spot > 5000 ? 200 : spot > 2000 ? 100 : spot > 500 ? 50 : 10;
     const atmStrike = Math.round(spot / step) * step;
 
     // Build list of strikes to query (ATM ± depth)
@@ -827,55 +840,15 @@ app.post('/option-chain', async (req, res) => {
       return true;
     });
 
-    // ── Helpers ──
-    // isStockSymbol: stocks have only monthly expiry; indices have weekly
-    const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','SENSEX'];
-    const isIndex = INDEX_SYMS.includes(sym);
-
-    // BUG FIX: Compare date-only (strip time) so expiry-day contracts aren't filtered out.
-    // Angel stores expiry as 'YYYY-MM-DD' which parses as midnight UTC.
-    // At IST market open (03:45 UTC) midnight UTC < now → wrongly excluded.
-    const todayDateOnly = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-
-    // Group a sorted list by calendar month-year, keeping the LAST expiry of each month.
-    // That last expiry = the true monthly settlement date (last Thu of month).
-    const getMonthlyExpiries = (sorted) => {
-      const byMonth = {};
-      sorted.forEach(i => {
-        const key = i._exp.getFullYear() + '-' + String(i._exp.getMonth()).padStart(2,'0');
-        if (!byMonth[key] || i._exp > byMonth[key]._exp) byMonth[key] = i;
-      });
-      return Object.values(byMonth).sort((a, b) => a._exp - b._exp);
-    };
-
-    // Pick best expiry based on symbol type + requested expiry config.
-    // expiry values for indices : W1 | W2 | W3 | W4 | MONTHLY
-    // expiry values for stocks  : CURRENT | NEXT
+    // Pick best expiry
     const pickExpiry = (optList) => {
       const sorted = optList
         .map(i => ({ ...i, _exp: new Date(i.expiry) }))
-        .filter(i => i._exp >= todayDateOnly)   // date-only comparison — keeps expiry-day contracts
-        .sort((a, b) => a._exp - b._exp);
-      if (!sorted.length) return null;
-
-      if (!isIndex) {
-        // STOCKS — only monthly contracts exist on NSE
-        const monthlyList = getMonthlyExpiries(sorted);
-        if (expiry === 'NEXT') {
-          // NEXT month: skip current month's expiry, return following month's
-          return monthlyList[1] || monthlyList[0] || sorted[0];
-        }
-        // CURRENT: nearest upcoming monthly expiry
-        return monthlyList[0] || sorted[0];
-      }
-
-      // INDICES — weekly + monthly contracts
-      if (expiry === 'MONTHLY') {
-        return getMonthlyExpiries(sorted)[0] || sorted[0];
-      }
-      // W1/W2/W3/W4 — pick the Nth contract in the sorted weekly list
-      const wkIdx = { W1: 0, W2: 1, W3: 2, W4: 3 }[expiry] ?? 0;
-      return sorted[wkIdx] || sorted[sorted.length - 1];
+        .filter(i => i._exp >= now)
+        .sort((a,b) => a._exp - b._exp);
+      if (expiry === 'MONTHLY') return sorted.filter(i => i._exp.getMonth() === now.getMonth()).pop();
+      if (expiry === 'NEXT') return sorted[1];
+      return sorted[0]; // WEEKLY = nearest
     };
 
     // Collect tokens for all strikes CE+PE
@@ -934,27 +907,8 @@ app.post('/option-chain', async (req, res) => {
       };
     });
 
-    // Determine the actual expiry date being used (from first ATM strike CE or PE instrument)
-    const atmEntry = strikeMap[atmStrike];
-    const expiryDateUsed = (() => {
-      // Find any instrument chosen for ATM to get its real expiry date
-      for (const strike of strikeList) {
-        const entry = strikeMap[strike];
-        if (entry?.CE_sym || entry?.PE_sym) {
-          // Re-pick to get the full instrument with expiry date
-          const sampleList = allOptions.filter(i =>
-            parseFloat(i.strike) === strike * 100 &&
-            i.symbol && (i.symbol.toUpperCase().endsWith('CE') || i.symbol.toUpperCase().endsWith('PE'))
-          );
-          const picked = pickExpiry(sampleList);
-          if (picked?.expiry) return picked.expiry;
-        }
-      }
-      return null;
-    })();
-
-    log(`✅ Option chain for ${sym} [expiry=${expiry}] expiryDate=${expiryDateUsed}: ${result.length} strikes, using contracts up to ${isIndex ? expiry : (expiry==='NEXT'?'next month':'current month')}`, 'OK');
-    return res.json({ status: true, symbol: sym, spotPrice: spot, atmStrike, expiryDate: expiryDateUsed, strikes: result });
+    log(`✅ Option chain for ${sym}: ${result.length} strikes fetched`, 'OK');
+    return res.json({ status: true, symbol: sym, spotPrice: spot, atmStrike, strikes: result });
 
   } catch (error) {
     const msg = error.response?.data?.message || error.message;
@@ -1122,34 +1076,27 @@ const MCX_SYMBOLS = ['GOLD', 'SILVER', 'CRUDEOIL', 'NATURALGAS', 'COPPER', 'ALUM
 
 async function getMCXTokens() {
   // Load instrument master if not already loaded
-  if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
-    try {
-      log('Downloading instrument master for MCX tokens...', 'INFO');
-      const r = await axios.get('https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json', { timeout: 30000 });
-      SESSION._instruments = r.data;
-      SESSION._instrFetchTime = Date.now();
-    } catch(e) {
-      log('Instrument master download failed: ' + e.message, 'WARN');
-      return {};
+  try {
+    const instruments = await ensureInstruments();
+    const now = new Date();
+    const tokens = {};
+    for (const sym of MCX_SYMBOLS) {
+      const matches = instruments.filter(i =>
+        i.exch_seg === 'MCX' &&
+        i.name && i.name.toUpperCase() === sym &&
+        i.instrumenttype === 'FUTCOM' &&
+        i.expiry && new Date(i.expiry) >= now
+      ).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+      if (matches.length > 0) {
+        tokens[sym] = matches[0].token;
+        log(`MCX ${sym}: token ${matches[0].token} exp ${matches[0].expiry}`, 'INFO');
+      }
     }
+    return tokens;
+  } catch(e) {
+    log('getMCXTokens failed: ' + e.message, 'WARN');
+    return {};
   }
-  const now = new Date();
-  const tokens = {};
-  for (const sym of MCX_SYMBOLS) {
-    // Find MCX futures for this commodity — pick nearest expiry
-    const matches = SESSION._instruments.filter(i =>
-      i.exch_seg === 'MCX' &&
-      i.name && i.name.toUpperCase() === sym &&
-      i.instrumenttype === 'FUTCOM' &&
-      i.expiry && new Date(i.expiry) >= now
-    ).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-    if (matches.length > 0) {
-      tokens[sym] = matches[0].token;
-      log(`MCX ${sym}: token ${matches[0].token} exp ${matches[0].expiry}`, 'INFO');
-    }
-  }
-  return tokens;
-}
 
 app.get('/mcx', async (req, res) => {
   if (!isAuthenticated()) {
