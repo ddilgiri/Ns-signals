@@ -1195,11 +1195,10 @@ async function connectAngel() {
     if (d.status === true) {
       S.connected = true;
       S.creds = { client, key, pin, totp };
-      // Store only non-secret identifiers persistently; PIN/TOTP in sessionStorage only
-      localStorage.setItem('ao_meta', JSON.stringify({ client, key }));
-      sessionStorage.setItem('ao_session', JSON.stringify({ pin, totp }));
+      // Persist ALL credentials (obfuscated) so app never asks again
+      saveCreds({ client, key, pin, totp });
       setConnected(true, d.client);
-      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
+      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nCredentials saved — won't ask again`);
       addLog(`Connected to Angel One — ${d.client}`, 'ok');
       fetchMarketData();
       if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
@@ -2519,10 +2518,7 @@ document.getElementById('drawerSheet').addEventListener('touchend', e => {
 // NOTIFICATIONS
 // ══════════════════════════════════════════════════════════════════
 function forgetCreds() {
-  // Clear all credential storage (both new split format and legacy)
-  localStorage.removeItem('ao_meta');
-  localStorage.removeItem('ao_creds');
-  sessionStorage.removeItem('ao_session');
+  clearCreds();
   const el = (id) => document.getElementById(id);
   if (el('aClient')) el('aClient').value = '';
   if (el('aKey'))    el('aKey').value    = '';
@@ -2531,7 +2527,7 @@ function forgetCreds() {
   S.connected = false;
   S.creds = { client:'', key:'', pin:'', totp:'' };
   setConnected(false);
-  toast('ok', '🗑 Credentials Cleared', 'Saved login removed from this device');
+  toast('ok', '🗑 Credentials Cleared', 'Saved login removed — enter details to reconnect');
   addLog('Saved credentials cleared', 'warn');
 }
 
@@ -2674,40 +2670,69 @@ function clearSignals() {
   addLog('Signals cleared manually', 'warn');
 }
 
+// ── CREDENTIAL HELPERS ──────────────────────────────────────────────
+// Simple XOR obfuscation — not cryptographic, but prevents plain-text
+// credentials sitting readable in localStorage dev tools at a glance.
+const _CKEY = 'fno' + (navigator.userAgent.length % 97);
+function _enc(s) {
+  return btoa(s.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^_CKEY.charCodeAt(i%_CKEY.length))).join(''));
+}
+function _dec(s) {
+  try { const b=atob(s); return b.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^_CKEY.charCodeAt(i%_CKEY.length))).join(''); } catch{return '';}
+}
+function saveCreds(c) {
+  localStorage.setItem('ao_v5', JSON.stringify({
+    client: c.client,
+    key:    _enc(c.key),
+    pin:    _enc(c.pin),
+    totp:   _enc(c.totp || ''),
+  }));
+}
+function loadCreds() {
+  // Try new format first
+  const v5 = (() => { try { return JSON.parse(localStorage.getItem('ao_v5') || 'null'); } catch { return null; } })();
+  if (v5?.client) return { client: v5.client, key: _dec(v5.key), pin: _dec(v5.pin), totp: _dec(v5.totp) };
+  // Legacy ao_meta + ao_session
+  const meta = (() => { try { return JSON.parse(localStorage.getItem('ao_meta') || 'null'); } catch { return null; } })();
+  const sess = (() => { try { return JSON.parse(sessionStorage.getItem('ao_session') || 'null'); } catch { return null; } })();
+  if (meta?.client && sess?.pin) return { client: meta.client, key: meta.key, pin: sess.pin, totp: sess.totp || '' };
+  // Legacy ao_creds (plaintext)
+  const leg = (() => { try { return JSON.parse(localStorage.getItem('ao_creds') || 'null'); } catch { return null; } })();
+  if (leg?.client) return { client: leg.client, key: leg.key, pin: leg.pin, totp: leg.totp || '' };
+  return null;
+}
+function clearCreds() {
+  ['ao_v5','ao_meta','ao_creds'].forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('ao_session');
+}
+
 (async function autoLogin() {
-  const meta    = (() => { try { return JSON.parse(localStorage.getItem('ao_meta') || 'null'); } catch { return null; } })();
-  const session = (() => { try { return JSON.parse(sessionStorage.getItem('ao_session') || 'null'); } catch { return null; } })();
-
-  // Also support legacy ao_creds for backward compatibility
-  const legacy  = (() => { try { return JSON.parse(localStorage.getItem('ao_creds') || 'null'); } catch { return null; } })();
-
-  const creds = meta && session
-    ? { client: meta.client, key: meta.key, pin: session.pin, totp: session.totp }
-    : legacy
-    ? { client: legacy.client, key: legacy.key, pin: legacy.pin, totp: legacy.totp }
-    : null;
+  const creds = loadCreds();
 
   if (!creds?.client || !creds?.key || !creds?.pin) {
-    addLog('Enter your Angel One credentials in Setup tab', '');
+    addLog('Enter your Angel One credentials in Setup tab to connect', '');
     return;
   }
 
-  // Migrate legacy credentials to split storage
-  if (legacy && !meta) {
-    localStorage.setItem('ao_meta', JSON.stringify({ client: creds.client, key: creds.key }));
-    sessionStorage.setItem('ao_session', JSON.stringify({ pin: creds.pin, totp: creds.totp }));
-    localStorage.removeItem('ao_creds'); // remove insecure plaintext store
+  // Migrate legacy formats to v5 immediately
+  if (!localStorage.getItem('ao_v5')) {
+    saveCreds(creds);
+    localStorage.removeItem('ao_meta');
+    localStorage.removeItem('ao_creds');
+    sessionStorage.removeItem('ao_session');
   }
 
-  // Fill the form fields with saved (non-secret) values
+  // Fill ALL form fields so the user sees them pre-populated
   const el = (id) => document.getElementById(id);
   if (el('aClient')) el('aClient').value = creds.client;
   if (el('aKey'))    el('aKey').value    = creds.key;
+  if (el('aPin'))    el('aPin').value    = creds.pin;
+  if (el('aTotp'))   el('aTotp').value   = creds.totp || '';
 
-  addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
+  addLog(`Credentials loaded — auto-connecting ${creds.client}...`, '');
   if (el('apiStat')) el('apiStat').textContent = 'Auto-connecting...';
 
-  await new Promise(r => setTimeout(r, 1200));
+  await new Promise(r => setTimeout(r, 800));
 
   const server = getServer();
   let resp;
@@ -2720,7 +2745,7 @@ function clearSignals() {
     });
   } catch(fetchErr) {
     addLog(`Auto-login: server unreachable (${fetchErr.message}) — connect manually`, 'warn');
-    toast('warn', '⚠ Offline', 'Server unreachable. Check server URL in Setup tab.');
+    toast('warn', '⚠ Offline', 'Server unreachable.\nCheck URL in Setup and tap Connect.');
     return;
   }
 
@@ -2730,17 +2755,17 @@ function clearSignals() {
       S.connected = true;
       S.creds = creds;
       setConnected(true, d.client);
-      toast('ok', '✅ Auto-connected!', `Welcome back ${d.client} — session restored`);
+      toast('ok', '✅ Auto-connected!', `Welcome back, ${d.client}`);
       addLog(`Auto-login success — ${d.client}`, 'ok');
       fetchMarketData();
       if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
       S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
     } else {
-      addLog(`Auto-login failed: ${d.message} — tap Setup to reconnect`, 'warn');
-      toast('warn', '⚠ Auto-login failed', d.message + '\nGo to Setup tab to reconnect');
+      addLog(`Auto-login failed: ${d.message} — tap Connect in Setup`, 'warn');
+      toast('warn', '⚠ Login Failed', d.message + '\nTap Connect in Setup tab.');
     }
   } catch(e) {
-    addLog('Auto-login error: ' + e.message, 'warn');
+    addLog('Auto-login parse error: ' + e.message, 'warn');
   }
 })();
 
