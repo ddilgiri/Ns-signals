@@ -1881,28 +1881,47 @@ async function generateSignal(symbolObj, isIndex) {
   let daysToExp = 5; // default safe value before we know real expiry
 
   if (S.connected) {
-    const expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
+    let expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
     const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
     if (oc?.strikes?.length) {
       // Get real expiry date returned by server
       if (oc.expiryDate) {
         realExpiryDate = oc.expiryDate;
-        const expMs = new Date(oc.expiryDate).setHours(23,59,59,0); // end of expiry day IST
+        const expMs = new Date(oc.expiryDate).setHours(23,59,59,0);
         daysToExp = Math.max(0, Math.round((expMs - Date.now()) / 86400000));
       }
 
-      // ── HARD BLOCK: stocks within 2 days of expiry have inflated premiums ──
+      // ── AUTO-ADVANCE: stocks only — near expiry premiums are inflated ──
+      // Indices: NEVER auto-change expiry — user selected it intentionally,
+      // and expiry-day trading can be profitable for indices (gamma scalping).
       if (!isIndex && daysToExp <= 3) {
-        addLog(`⚠ ${symbolObj.sym} skipped — expiry in ${daysToExp}d (premium inflated near expiry)`, 'warn');
-        return null;
-      }
-
-      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
-      if (atm) {
-        strike = atm.strike;
-        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
-        optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
-        if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
+        // Stock within 3 calendar days of monthly expiry → switch to NEXT month
+        addLog(`⚠ ${symbolObj.sym} expiry in ${daysToExp}d — switching to NEXT month`, 'warn');
+        const ocNext = await fetchOptionChain(angelSym, baseP, 'NEXT');
+        if (ocNext?.strikes?.length) {
+          if (ocNext.expiryDate) {
+            realExpiryDate = ocNext.expiryDate;
+            const expMs2 = new Date(ocNext.expiryDate).setHours(23,59,59,0);
+            daysToExp = Math.max(0, Math.round((expMs2 - Date.now()) / 86400000));
+          }
+          const atm2 = ocNext.strikes.find(r => r.isATM) || ocNext.strikes[Math.floor(ocNext.strikes.length/2)];
+          if (atm2) {
+            strike = atm2.strike;
+            const ltp2 = type === 'CE' ? atm2.CE_ltp : atm2.PE_ltp;
+            optionToken = type === 'CE' ? atm2.CE_token : atm2.PE_token;
+            if (ltp2 && ltp2 > 0) { premium = ltp2; usedReal = true; }
+          }
+        }
+        if (!usedReal) return null; // next month also unavailable → skip
+      } else {
+        // Normal path — indices always use selected expiry, stocks use current month
+        const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+        if (atm) {
+          strike = atm.strike;
+          const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+          optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
+          if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
+        }
       }
     }
   }
@@ -2455,23 +2474,7 @@ function renderSignals() {
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
-      <!-- Expiry badge — prominent, always visible -->
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;background:${
-          s.daysToExpiry<=2?'#ff3d5a18':s.daysToExpiry<=5?'#f59e0b18':'var(--bg4)'
-        };border:1px solid ${
-          s.daysToExpiry<=2?'#ff3d5a50':s.daysToExpiry<=5?'#f59e0b50':'var(--border)'
-        }">
-          <span style="font-size:9px">📅</span>
-          <span style="font-size:10px;font-family:var(--font-mono);font-weight:700;color:${
-            s.daysToExpiry<=2?'var(--red)':s.daysToExpiry<=5?'var(--amber)':'var(--text)'
-          }">${s.expiry}</span>
-          ${s.daysToExpiry!=null?`<span style="font-size:9px;font-family:var(--font-mono);color:${
-            s.daysToExpiry<=2?'var(--red)':s.daysToExpiry<=5?'var(--amber)':'var(--text3)'
-          };border-left:1px solid var(--border);padding-left:5px;margin-left:2px">${s.daysToExpiry}d left</span>`:''}
-        </div>
-        ${s.daysToExpiry<=2?`<span style="font-size:9px;font-family:var(--font-mono);color:var(--red);font-weight:700">⚠ EXPIRY SOON</span>`:''}
-      </div>
+
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
         <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
@@ -2511,13 +2514,13 @@ function renderSignals() {
           s.daysToExpiry<=3?'var(--red)':s.daysToExpiry<=7?'var(--amber)':'var(--text3)'
         };font-weight:${s.daysToExpiry<=3?'700':'400'}">📅 ${s.expiry}${
           s.daysToExpiry!=null?' · '+s.daysToExpiry+'d':''
-        }</span>
+        }${s.daysToExpiry<=3?' ⚠':''}</span>
         ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
         <span class="sig-tag">IV ${s.ivRank}</span>
         ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
         ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
         ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''}${s.relStrength?.toFixed(1)}</span>`:''}
-        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
+        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
