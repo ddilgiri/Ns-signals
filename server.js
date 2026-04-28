@@ -1097,6 +1097,7 @@ async function getMCXTokens() {
     log('getMCXTokens failed: ' + e.message, 'WARN');
     return {};
   }
+}
 
 app.get('/mcx', async (req, res) => {
   if (!isAuthenticated()) {
