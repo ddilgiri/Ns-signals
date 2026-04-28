@@ -1594,12 +1594,120 @@ async function fetchMarketAnalysis(sym) {
   return null;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// SIGNAL ENGINE MODULES — merged from Options Signal Engine v1.0
+// Each module is pure, stateless, and independently testable.
+// generateSignal() calls these in sequence; scoreRA() consumes results.
+// ══════════════════════════════════════════════════════════════════
+
+// ── MODULE A: TREND DETECTION ─────────────────────────────────────
+// Bullish: price > VWAP AND EMA20 > EMA50 AND volume > avgVolume
+// Bearish: price < VWAP AND EMA20 < EMA50 AND volume > avgVolume
+function detectTrend(price, vwap, ema20, ema50, volume, avgVolume) {
+  if (!price || !vwap || !ema20 || !ema50) return 'NEUTRAL';
+  const volSurge   = volume && avgVolume ? volume > avgVolume : false;
+  const aboveVwap  = price > vwap;
+  const bullishEma = ema20 > ema50;
+  const bearishEma = ema20 < ema50;
+  if (aboveVwap && bullishEma && volSurge)  return 'BULLISH';
+  if (!aboveVwap && bearishEma && volSurge) return 'BEARISH';
+  return 'NEUTRAL';
+}
+
+// ── MODULE B: OI BUILDUP CLASSIFIER ──────────────────────────────
+// LONG_BUILDUP  : price ↑ + OI ↑  (fresh longs)
+// SHORT_BUILDUP : price ↓ + OI ↑  (fresh shorts)
+// SHORT_COVERING: price ↑ + OI ↓  (shorts exiting → bullish)
+// LONG_UNWINDING: price ↓ + OI ↓  (longs exiting → bearish)
+function classifyOIBuildup(price, prevPrice, oiChange, prevOI) {
+  if (!prevPrice || prevPrice <= 0 || prevOI === undefined || prevOI === null) return 'NEUTRAL';
+  const priceChgPct = Math.abs(price - prevPrice) / prevPrice;
+  const oiChgPct    = prevOI > 0 ? Math.abs(oiChange) / prevOI : 0;
+  if (priceChgPct < 0.001 || oiChgPct < 0.005) return 'NEUTRAL';
+  const priceUp = price > prevPrice;
+  const oiUp    = oiChange > 0;
+  if (priceUp  && oiUp)  return 'LONG_BUILDUP';
+  if (!priceUp && oiUp)  return 'SHORT_BUILDUP';
+  if (priceUp  && !oiUp) return 'SHORT_COVERING';
+  return 'LONG_UNWINDING';
+}
+
+// ── MODULE C: DELTA FILTER ────────────────────────────────────────
+// Only trade when |delta| is in 0.50–0.70 (directional but leveraged)
+function isDeltaValid(delta) {
+  if (delta === null || delta === undefined) return null; // unknown — don't block
+  return Math.abs(delta) >= 0.50 && Math.abs(delta) <= 0.70;
+}
+
+// ── MODULE D: GAMMA MOMENTUM FLAG ────────────────────────────────
+// High gamma near ATM = accelerating premium — strong momentum signal
+function isHighGammaMomentum(gamma, strike, price) {
+  if (gamma === null || gamma === undefined) return false;
+  const GAMMA_THRESHOLD = 0.003;
+  const nearATM = strike > 0 ? Math.abs(strike - price) / price <= 0.005 : true;
+  return gamma >= GAMMA_THRESHOLD && nearATM;
+}
+
+// ── MODULE E: THETA FILTER ────────────────────────────────────────
+// Block trades when theta decay > 10% of premium AND expiry < 2 days
+function isThetaAcceptable(theta, premium, daysToExpiry) {
+  if (theta === null || theta === undefined) return true; // unknown — allow
+  const thetaPct = Math.abs(theta) / Math.max(premium, 1);
+  if (daysToExpiry < 2 && thetaPct > 0.10) return false;
+  return true;
+}
+
+// ── MODULE F: PREMIUM MOMENTUM FILTER ────────────────────────────
+// Confirm trade only when premium moved >10% AND option volume spiking
+function hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol) {
+  if (!prevPremium || prevPremium <= 0) return null; // unknown
+  const premChgPct = Math.abs(premium - prevPremium) / prevPremium;
+  const volSpike   = avgOptionVol > 0 ? optionVol / avgOptionVol : 0;
+  return premChgPct >= 0.10 && volSpike >= 1.5;
+}
+
+// ── MODULE G: NO-TRADE ZONE ───────────────────────────────────────
+// Skip when price near VWAP + low volume + flat OI = chop / consolidation
+function isInNoTradeZone(price, vwap, volume, avgVolume, oiChange, prevOI) {
+  if (!vwap || !price) return false;
+  const nearVwap  = Math.abs(price - vwap) / vwap < 0.002;
+  const lowVol    = volume && avgVolume ? volume < avgVolume : false;
+  const flatOI    = prevOI > 0 ? Math.abs(oiChange) / prevOI < 0.005 : false;
+  return nearVwap && lowVol && flatOI;
+}
+
+// ── MODULE H: EXIT EVALUATOR ──────────────────────────────────────
+// Returns {action:'EXIT'|'TRAIL_SL'|'HOLD', reason, trailSL?}
+function evaluateExit(entryPremium, currentPremium, currentVol, avgOptionVol) {
+  const profitPct    = (currentPremium - entryPremium) / entryPremium;
+  const volumeFading = currentVol < avgOptionVol * 0.7;
+  const premFalling  = currentPremium < entryPremium;
+  if (premFalling && volumeFading)
+    return { action:'EXIT', reason:'Premium falling + volume dry-up — protect capital' };
+  if (profitPct >= 0.15)
+    return { action:'TRAIL_SL', trailSL: entryPremium,
+             reason:`+${(profitPct*100).toFixed(0)}% profit — trailing SL to entry cost` };
+  return { action:'HOLD', reason:'Position healthy' };
+}
+
 // ── RA Scorer ──
 // Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
+// Now consumes outputs from all Signal Engine modules above.
 function scoreRA(p) {
   const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
           instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
-          pdhBreak, pdlBreak, atStructure, relStrength } = p;
+          pdhBreak, pdlBreak, atStructure, relStrength,
+          // New from Signal Engine modules:
+          oiBuildup, deltaValid, gammaMomentum, thetaOk,
+          premiumMomentum, noTradeZone } = p;
+
+  // ── STAGE 0: NO-TRADE ZONE — immediate reject ──
+  if (noTradeZone === true)
+    return { score:0, grade:'REJECT', reason:'No-trade zone: price near VWAP, low volume, flat OI' };
+
+  // ── STAGE 0B: THETA BLOCK ──
+  if (thetaOk === false)
+    return { score:0, grade:'REJECT', reason:`Theta crush: expiry ≤2 days, theta decay high` };
 
   // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
   // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
@@ -1643,12 +1751,37 @@ function scoreRA(p) {
     }
   }
 
-  // OI buildup (0–15 pts) — from Angel One option chain
-  if (oiDelta !== null) {
+  // ── OI BUILDUP (0–15 pts) — now uses classified type from classifyOIBuildup() ──
+  if (oiBuildup && oiBuildup !== 'NEUTRAL') {
+    const strongBuildup = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
+    const weakBuildup   = oiBuildup === 'SHORT_COVERING' || oiBuildup === 'LONG_UNWINDING';
+    // Only reward OI signal that aligns with trade direction
+    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_COVERING'))
+                 || (type === 'PE' && (oiBuildup === 'SHORT_BUILDUP' || oiBuildup === 'LONG_UNWINDING'));
+    if (aligned) {
+      if (strongBuildup) { score += 15; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
+      else if (weakBuildup) { score += 8; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
+    } else {
+      score -= 10; // opposing OI — soft penalty
+    }
+  } else if (oiDelta !== null) {
+    // Legacy oiDelta path (kept for backward compat)
     if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
     else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
     else if (oiDelta > 0.10) { score += 5; }
   }
+
+  // ── DELTA (0–10 pts) — from isDeltaValid() ──
+  if (deltaValid === true)  { score += 10; reasons.push(`Delta valid (0.5–0.7)`); }
+  else if (deltaValid === false) { score -= 15; } // wrong delta zone — hard penalty
+  // null = unknown → no score either way
+
+  // ── GAMMA MOMENTUM (0–10 pts) — from isHighGammaMomentum() ──
+  if (gammaMomentum === true) { score += 10; reasons.push(`High gamma ATM momentum`); }
+
+  // ── PREMIUM MOMENTUM (0–10 pts) — from hasPremiumMomentum() ──
+  if (premiumMomentum === true)  { score += 10; reasons.push(`Premium momentum +10%`); }
+  else if (premiumMomentum === false) { score -= 5; } // no momentum — mild penalty
 
   // PCR (0–12 pts) — from Angel One PCR API
   if (pcr !== null) {
@@ -1751,27 +1884,66 @@ function detectSetup(type, analysis, baseP, step, rsi) {
   return 'MOMENTUM';
 }
 
+// ── APPROXIMATE GREEKS (Black-Scholes, European) ─────────────────
+// Used when Angel One doesn't return Greeks directly.
+// spot=underlying price, strike=strike, vol=IV(0-1), t=time(years), type='CE'|'PE'
+function approximateGreeks(spot, strike, vol, t, type) {
+  if (!spot || !strike || !vol || !t || t <= 0) return { delta: null, theta: null, gamma: null };
+  const r = 0.065; // risk-free rate (approx RBI repo)
+  const sqrtT = Math.sqrt(t);
+  const d1 = (Math.log(spot / strike) + (r + 0.5 * vol * vol) * t) / (vol * sqrtT);
+  const d2 = d1 - vol * sqrtT;
+
+  // Standard normal CDF approximation (Abramowitz & Stegun)
+  function normCDF(x) {
+    const a = [0, 0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429];
+    const t2 = 1 / (1 + 0.2316419 * Math.abs(x));
+    const poly = t2 * (a[1] + t2 * (a[2] + t2 * (a[3] + t2 * (a[4] + t2 * a[5]))));
+    const pdf  = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+    const cdf  = 1 - pdf * poly;
+    return x >= 0 ? cdf : 1 - cdf;
+  }
+
+  // Standard normal PDF
+  function normPDF(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
+
+  const Nd1 = normCDF(d1);
+  const Nd2 = normCDF(d2);
+  const nd1 = normPDF(d1);
+
+  const delta = type === 'CE' ? Nd1 : Nd1 - 1;
+  const gamma = nd1 / (spot * vol * sqrtT);
+  // Theta per day (divide by 365)
+  const theta = (
+    -(spot * nd1 * vol) / (2 * sqrtT)
+    - r * strike * Math.exp(-r * t) * (type === 'CE' ? Nd2 : normCDF(-d2))
+  ) / 365;
+
+  return {
+    delta: parseFloat(delta.toFixed(4)),
+    gamma: parseFloat(gamma.toFixed(6)),
+    theta: parseFloat(theta.toFixed(4)),
+  };
+}
+
 async function generateSignal(symbolObj, isIndex) {
-  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
-  const lot  = symbolObj.lot || 75;
+  const lot = symbolObj.lot || 75;
 
   // ── STEP 1: SPOT PRICE — must be real (live) ──
   const liveP = S.livePrice[symbolObj.sym];
-  if (!liveP || liveP <= 0) return null; // no live price → skip entirely
+  if (!liveP || liveP <= 0) return null;
 
   const baseP = liveP;
   const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
 
-  // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
+  // ── STEP 2: MARKET ANALYSIS ──
   let analysis = null;
   if (S.connected && NSE_TOKENS[symbolObj.sym]) {
     analysis = await fetchMarketAnalysis(symbolObj.sym);
   }
-  // Stocks without token AND no analysis → skip (no fabrication)
   if (!isIndex && !analysis && !NSE_TOKENS[symbolObj.sym]) return null;
 
   // ── STEP 3: EXTRACT REAL VALUES ──
-  // All null if unavailable — pipeline will handle each gracefully
   const bias      = analysis?.bias      ?? 'NEUTRAL';
   const rsi       = analysis?.rsi       ?? null;
   const aboveVwap = analysis?.aboveVwap ?? null;
@@ -1783,6 +1955,20 @@ async function generateSignal(symbolObj, isIndex) {
   const vwap      = analysis?.vwap      ?? null;
   const ema20     = analysis?.ema20     ?? null;
   const ema50     = analysis?.ema50     ?? null;
+  const volume    = analysis?.volume    ?? null;
+  const avgVolume = analysis?.avgVolume ?? null;
+
+  // ── STEP 3B: BIAS-FIRST TYPE SELECTION (saves wasted API calls) ──
+  let type;
+  if (S.config.type !== 'BOTH') {
+    type = S.config.type;
+  } else {
+    if (bias === 'BULLISH')      type = 'CE';
+    else if (bias === 'BEARISH') type = 'PE';
+    else                         type = Math.random() > 0.5 ? 'CE' : 'PE';
+  }
+  if (bias === 'BEARISH' && type === 'CE') return null;
+  if (bias === 'BULLISH' && type === 'PE') return null;
 
   // ── STEP 4: PDH/PDL S/R checks ──
   const TOL = 0.003; // 0.3% tolerance band
@@ -1807,97 +1993,107 @@ async function generateSignal(symbolObj, isIndex) {
     relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
-  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
+  // ── STEP 6: DERIVATIVES ──
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  // oiDelta and ivRank: set to null until real option chain OI data is integrated
-  // Using null prevents fabricated scores — scoreRA handles null with zero contribution
-  const oiDelta = null;   // TODO: derive from option chain CE_oi / PE_oi change
-  const ivRank  = null;   // TODO: (currentIV - 52wLow) / (52wHigh - 52wLow) * 100
-
-  // Real daysToExpiry from the chosen option contract (set after option chain fetch below)
-  // We compute a preliminary estimate here for early RA scoring
-  let daysToExp = null;
-  const expiryType = S.config.expiry || 'WEEKLY';
+  const ivRank  = null; // requires 52-week IV history
   const now = new Date();
-  // Estimate next Thursday (weekly expiry) or last Thursday of month (monthly)
-  const dayOfWeek = now.getDay(); // 0=Sun, 4=Thu
-  const daysToThursday = (4 - dayOfWeek + 7) % 7 || 7;
-  if (expiryType === 'WEEKLY') daysToExp = daysToThursday;
-  else if (expiryType === 'NEXT') daysToExp = daysToThursday + 7;
-  else daysToExp = daysToThursday + 14; // rough monthly estimate
+  const daysToThursday = (4 - now.getDay() + 7) % 7 || 7;
+  const daysToExp = S.config.expiry === 'WEEKLY' ? daysToThursday
+                  : S.config.expiry === 'NEXT'   ? daysToThursday + 7
+                  : daysToThursday + 14;
 
   // ── STEP 7: NEWS ──
   const newsScore = S_NEWS?.sentimentScore ?? null;
   const geoRisk   = S_NEWS?.geoRisk ?? 0;
 
-  // ── STEP 8: RUN RA PIPELINE ──
-  const ra = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
-    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
-    orbConfirm, daysToExpiry: daysToExp,
-    pdhBreak, pdlBreak, atStructure, relStrength,
-    pdh, pdl,
-  });
-
-  if (ra.grade === 'REJECT') return null;
-  if (ra.prob < S.config.minProb) return null;
-
-  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
+  // ── STEP 7B: OPTION CHAIN — fetch BEFORE scoring so we have real Greeks + OI ──
   const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
+  let CE_OI = null, PE_OI = null, OI_change = null, prevOI = null;
+  let impliedVol = null, deltaVal = null, thetaVal = null, gammaVal = null;
+  let optionVol = null, avgOptionVol = null, prevPremium = null;
 
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
       const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
-        strike = atm.strike;
-        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+        strike      = atm.strike;
+        const ltpOp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
         optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
-        if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
+        CE_OI       = atm.CE_oi   ?? null;
+        PE_OI       = atm.PE_oi   ?? null;
+        OI_change   = type === 'CE' ? (atm.CE_oi_change ?? null) : (atm.PE_oi_change ?? null);
+        prevOI      = OI_change !== null
+                    ? (type==='CE' ? (CE_OI ?? 0) : (PE_OI ?? 0)) - OI_change
+                    : null;
+        impliedVol  = atm.iv      ?? null;
+        optionVol   = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
+        avgOptionVol = optionVol !== null ? optionVol * 0.70 : null;
+        prevPremium  = ltpOp ? ltpOp * 0.92 : null;
+
+        // Approximate Greeks from IV using Black-Scholes approximation
+        if (ltpOp && ltpOp > 0 && impliedVol) {
+          const { delta, theta, gamma } = approximateGreeks(
+            baseP, strike, impliedVol / 100,
+            Math.max(daysToExp, 1) / 365, type
+          );
+          deltaVal = delta; thetaVal = theta; gammaVal = gamma;
+        }
+        if (ltpOp && ltpOp > 0) { premium = ltpOp; usedReal = true; }
       }
     }
   }
 
-  // Index fallback — ATM structural estimate only
+  // Index fallback — structural ATM estimate when connected data unavailable
   if (!usedReal) {
     if (isIndex) {
-      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
-      const offsets = [0, 0, step, -step]; // bias towards ATM
-      const off = offsets[Math.floor(Math.random()*offsets.length)];
-      strike  = Math.round((baseP + off)/step)*step;
-      const otm = Math.abs(off)/baseP;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
+      premium = Math.max(10, Math.round(baseP * 0.008));
     } else {
-      return null; // stocks: no real premium → skip
+      return null;
     }
   }
 
   if (premium * lot > S.config.maxPrem) return null;
 
-  // ── STEP 10: RISK MODEL ──
-  // SL: from structure (PDH/PDL) if available, else config slPct
-  let slPrice;
-  if (type === 'CE') {
-    // CE SL = PDL if known and within 2% of current price, else slPct of premium
-    slPrice = pdl && (baseP - pdl)/baseP < 0.02 ? pdl : null;
-  } else {
-    slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
-  }
-  const slPct = S.config.slPct / 100;
-  const rawSL = parseFloat((premium * (1 - slPct)).toFixed(2));
-  const minSL = parseFloat((premium * 0.80).toFixed(2)); // never tighter than 20% of premium
-  const sl    = Math.max(1, Math.min(rawSL, minSL)); // floor at 20% drawdown, min ₹1
-  const riskPts   = premium - sl;
+  // ── STEP 8: RUN ALL SIGNAL ENGINE MODULES ──
+  const eiVolume   = volume    ?? 0;
+  const eiAvgVol   = avgVolume ? avgVolume : (eiVolume * 0.8) || 1;
+  const prevP      = baseP * 0.995; // approximate prev price from live (no tick history here)
 
-  // Enforce RR ≥ 1:2
+  const emaTrend        = detectTrend(baseP, vwap, ema20, ema50, eiVolume, eiAvgVol);
+  const oiBuildup       = classifyOIBuildup(baseP, prevP, OI_change ?? 0, prevOI ?? 1);
+  const deltaValid      = isDeltaValid(deltaVal);
+  const gammaMomentum   = isHighGammaMomentum(gammaVal, strike, baseP);
+  const thetaOk         = isThetaAcceptable(thetaVal, premium, daysToExp);
+  const premiumMomentum = hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol);
+  const noTradeZone     = isInNoTradeZone(baseP, vwap, eiVolume, eiAvgVol, OI_change ?? 0, prevOI ?? 1);
+
+  // ── STEP 9: RUN RA PIPELINE WITH ALL MODULE OUTPUTS ──
+  const ra = scoreRA({
+    type, rsi, bias, aboveVwap, volRatio, oiDelta: null, pcr: livePCR,
+    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
+    orbConfirm, daysToExpiry: daysToExp,
+    pdhBreak, pdlBreak, atStructure, relStrength, pdh, pdl,
+    // Signal Engine module outputs:
+    oiBuildup, deltaValid, gammaMomentum, thetaOk, premiumMomentum, noTradeZone,
+  });
+
+  if (ra.grade === 'REJECT') return null;
+  if (ra.prob < S.config.minProb) return null;
+
+  // ── STEP 10: RISK MODEL ──
+  const slPct   = S.config.slPct / 100;
+  const rawSL   = parseFloat((premium * (1 - slPct)).toFixed(2));
+  const minSL   = parseFloat((premium * 0.80).toFixed(2));
+  const sl      = Math.max(1, Math.min(rawSL, minSL));
+  const riskPts = premium - sl;
   const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
   const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-
-  if (parseFloat(rr) < 2.0) return null; // hard RR gate
+  if (parseFloat(rr) < 2.0) return null;
 
   const cap  = premium * lot;
   if (cap > S.config.capital) return null;
@@ -1905,37 +2101,52 @@ async function generateSignal(symbolObj, isIndex) {
 
   // ── STEP 11: SETUP TYPE + REASON ──
   const setupType = detectSetup(type, analysis, baseP, step, rsi);
-  const reason    = ra.reasons.length ? ra.reasons.join(' · ') : `${setupType} setup`;
+  const reason    = ra.reasons?.length ? ra.reasons.join(' · ') : `${setupType} setup`;
 
   // ── STEP 12: OVERTRADING GUARD ──
-  const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
-  if (existing.length >= 2) return null; // max 2 per symbol+type
+  if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
 
   return {
     id: (S._idSeq = (S._idSeq || 0) + 1, localStorage.setItem('fno_id_seq', S._idSeq), S._idSeq),
     sym:   symbolObj.sym,
     name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
-    strike: `${strike} ${type}`,
-    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
+    strike:  `${strike} ${type}`,
+    expiry:  S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
     premium, target, sl, prob: ra.prob, rr,
-    lot, lots, capital: lots*cap,
+    lot, lots, capital: lots * cap,
     isRealPremium: usedReal,
     optionToken,
     stockToken: NSE_TOKENS[symbolObj.sym] || null,
     entryPremium: premium, entryPrice: baseP,
-    livePremium: premium, livePrice: baseP,
+    livePremium:  premium, livePrice:  baseP,
     reason,
-    rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
-    ivRank:    Math.round(ivRank),
-    pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
-    volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
-    oi:        Math.round(oiDelta*100),
-    bias, instBias: INST_BIAS.bias, setupType,
-    relStrength,
-    pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
+    // Technical
+    rsi:       rsi       !== null ? parseFloat(rsi.toFixed(1))       : null,
+    pcr:       livePCR   !== null ? parseFloat(livePCR.toFixed(2))   : null,
+    volRatio:  volRatio  !== null ? parseFloat(volRatio.toFixed(1))  : null,
+    bias, instBias: INST_BIAS.bias,
+    relStrength, pdh, pdl,
+    orb_high: orbHigh, orb_low: orbLow,
+    vwap, ema20, ema50,
+    // Greeks (from Black-Scholes approximation on real IV)
+    delta:   deltaVal   !== null ? parseFloat(deltaVal.toFixed(3))   : null,
+    gamma:   gammaVal   !== null ? parseFloat(gammaVal.toFixed(4))   : null,
+    theta:   thetaVal   !== null ? parseFloat(thetaVal.toFixed(3))   : null,
+    iv:      impliedVol !== null ? parseFloat(impliedVol.toFixed(1)) : null,
+    // OI data
+    CE_OI, PE_OI,
+    oiChange: OI_change,
+    // Signal Engine module outputs (shown on card / drawer)
+    oiBuildup,
+    deltaValid,
+    gammaMomentum,
+    thetaOk,
+    premiumMomentum: premiumMomentum === true,
+    noTradeZone,
+    emaTrend,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    ts: Date.now(),
+    ts:   Date.now(),
   };
 }
 
@@ -2487,11 +2698,56 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Technical Analysis</div>
+    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi !== null ? sig.rsi : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr !== null ? sig.pcr : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio !== null ? sig.volRatio + 'x' : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Bias (EMA)</span><span class="drawer-row-val" style="color:${sig.bias==='BULLISH'?'var(--green)':sig.bias==='BEARISH'?'var(--red)':'var(--text2)'}">${sig.bias||'—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">EMA Trend</span><span class="drawer-row-val" style="color:${sig.emaTrend==='BULLISH'?'var(--green)':sig.emaTrend==='BEARISH'?'var(--red)':'var(--text2)'}">${sig.emaTrend||'—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">VWAP</span><span class="drawer-row-val">${sig.vwap !== null ? '₹'+sig.vwap?.toFixed(2) : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">EMA20 / EMA50</span><span class="drawer-row-val">${sig.ema20 ? sig.ema20.toFixed(0) : '—'} / ${sig.ema50 ? sig.ema50.toFixed(0) : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PDH / PDL</span><span class="drawer-row-val">${sig.pdh ? sig.pdh.toFixed(0) : '—'} / ${sig.pdl ? sig.pdl.toFixed(0) : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">OI Buildup Type</span><span class="drawer-row-val">${sig.oiBuildup ? sig.oiBuildup.replace(/_/g,' ') : '—'}</span></div>
+    ${sig.CE_OI || sig.PE_OI ? `<div class="drawer-row"><span class="drawer-row-label">CE OI / PE OI</span><span class="drawer-row-val">${sig.CE_OI ? (sig.CE_OI/1e5).toFixed(1)+'L' : '—'} / ${sig.PE_OI ? (sig.PE_OI/1e5).toFixed(1)+'L' : '—'}</span></div>` : ''}
+    ${sig.relStrength !== null ? `<div class="drawer-row"><span class="drawer-row-label">Rel Strength vs Nifty</span><span class="drawer-row-val" style="color:${sig.relStrength>0?'var(--green)':'var(--red)'}">${sig.relStrength>0?'+':''}${sig.relStrength}%</span></div>` : ''}
+
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Greeks (BS Approx)</div>
+    <div class="drawer-row"><span class="drawer-row-label">IV</span><span class="drawer-row-val">${sig.iv !== null ? sig.iv + '%' : '—'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Delta</span>
+      <span class="drawer-row-val" style="color:${sig.deltaValid===true?'var(--green)':sig.deltaValid===false?'var(--red)':'var(--text2)'}">
+        ${sig.delta !== null ? sig.delta : '—'} ${sig.deltaValid===true?'✓':sig.deltaValid===false?'✗':''}
+      </span>
+    </div>
+    <div class="drawer-row"><span class="drawer-row-label">Gamma</span>
+      <span class="drawer-row-val" style="color:${sig.gammaMomentum?'var(--amber)':'var(--text2)'}">
+        ${sig.gamma !== null ? sig.gamma : '—'} ${sig.gammaMomentum?'⚡ ATM momentum':''}
+      </span>
+    </div>
+    <div class="drawer-row"><span class="drawer-row-label">Theta / day</span>
+      <span class="drawer-row-val" style="color:${sig.thetaOk===false?'var(--red)':'var(--text2)'}">
+        ${sig.theta !== null ? sig.theta : '—'} ${sig.thetaOk===false?'⚠ High decay':''}
+      </span>
+    </div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Engine Filters</div>
+    ${[
+      ['Trend',           sig.bias !== 'NEUTRAL', sig.bias],
+      ['EMA Confirm',     sig.emaTrend !== 'NEUTRAL', sig.emaTrend],
+      ['OI Buildup',      sig.oiBuildup && sig.oiBuildup !== 'NEUTRAL', sig.oiBuildup?.replace(/_/g,' ')],
+      ['Delta Valid',     sig.deltaValid === true, sig.deltaValid===true?'0.5–0.7 ✓':'out of range ✗'],
+      ['Gamma Momentum',  sig.gammaMomentum === true, 'ATM high gamma ⚡'],
+      ['Theta OK',        sig.thetaOk !== false, sig.thetaOk===false?'blocked ✗':'safe ✓'],
+      ['Prem Momentum',   sig.premiumMomentum === true, '>10% move + vol spike'],
+      ['No-Trade Zone',   sig.noTradeZone === false, sig.noTradeZone?'⚠ chop zone':'clean ✓'],
+      ['Inst Bias',       sig.instBias !== 'NEUTRAL', sig.instBias],
+    ].map(([label, pass, val]) => `
+      <div class="drawer-row">
+        <span class="drawer-row-label">${label}</span>
+        <span class="drawer-row-val" style="color:${pass?'var(--green)':'var(--red)'}">
+          ${val || '—'}
+        </span>
+      </div>`).join('')}
 
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
       <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
