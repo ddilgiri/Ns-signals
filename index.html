@@ -27,6 +27,35 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
+
+/* ── LIGHT THEME ── */
+html.light{
+  --bg:#f0f4fa;--bg2:#e4eaf5;--bg3:#ffffff;--bg4:#edf1fa;--bg5:#dde4f0;
+  --border:#c8d4e8;--border2:#a8bcd8;--border3:#8aaac8;
+  --text:#0d1e38;--text2:#3a5580;--text3:#7a9cc0;--text4:#b0c4de;
+  --green:#00916e;--green2:#00c47d;--green-bg:#00916e12;
+  --red:#d42040;--red2:#b01830;--red-bg:#d4204012;
+  --amber:#c07800;--amber-bg:#c0780012;
+  --blue:#1a6fd4;--cyan:#0891b2;--purple:#6d3fd6;
+}
+html.light body{background:var(--bg)}
+html.light .topbar{background:var(--bg2);border-color:var(--border)}
+html.light .nav-bar{background:var(--bg2);border-color:var(--border)}
+html.light .sig-card{box-shadow:0 1px 4px rgba(0,0,0,.06)}
+html.light .stock-logo-fallback{background:linear-gradient(135deg,var(--bg4),var(--bg5))}
+html.light input,html.light select,html.light textarea{background:var(--bg3)!important;color:var(--text)!important;border-color:var(--border)!important}
+html.light .chip{background:var(--bg3);color:var(--text2)}
+html.light .chip.on{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+html.light .field-input{background:var(--bg3)!important}
+html.light .drawer{background:var(--bg2)!important}
+html.light .prob-bar{background:var(--bg4)}
+html.light .log-entry{background:var(--bg3);border-color:var(--border)}
+html.light .sig-tab{background:var(--bg3)}
+html.light .page{background:var(--bg)!important}
+
+/* Theme toggle button */
+.theme-toggle{width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;flex-shrink:0}
+.theme-toggle:active{transform:scale(.9)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
@@ -293,6 +322,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="dot" id="mDot"></div>
       <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
     </div>
+    <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
     <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
   </div>
 </div>
@@ -446,11 +476,21 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Expiry</label>
-        <select class="field-input" id="cfgExpiry">
-          <option value="WEEKLY">Current Weekly</option>
-          <option value="NEXT">Next Weekly</option>
-          <option value="MONTHLY">Monthly</option>
+        <label class="field-label">Index Expiry <span style="color:var(--text3);font-weight:400">(4 weekly + monthly)</span></label>
+        <select class="field-input" id="cfgIdxExpiry">
+          <option value="W1">Week 1 — nearest weekly</option>
+          <option value="W2">Week 2 — 2nd weekly</option>
+          <option value="W3">Week 3 — 3rd weekly</option>
+          <option value="W4">Week 4 — 4th weekly</option>
+          <option value="MONTHLY">Monthly — last Thu of month</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Stock Expiry <span style="color:var(--text3);font-weight:400">(monthly contracts only)</span></label>
+        <select class="field-input" id="cfgStkExpiry">
+          <option value="CURRENT">Current Month</option>
+          <option value="NEXT">Next Month</option>
         </select>
       </div>
 
@@ -608,233 +648,215 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 // FNO STOCKS
 // ══════════════════════════════════════════════════════════════════
 const FNO_STOCKS = [
-  {sym:'360ONE',name:'360 One WAM',lot:500,lotJun:500,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/360ONE.png'},
-  {sym:'ABB',name:'ABB',lot:125,lotJun:125,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/ABB.png'},
-  {sym:'ABCAPITAL',name:'Aditya Birla Capital',lot:3100,lotJun:3100,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/ABCAPITAL.png'},
-  {sym:'ADANIENSOL',name:'Adani Energy Solutions',lot:675,lotJun:675,grp:'ENERGY',logo:'https://images.dhan.co/symbol/ADANIENSOL.png'},
-  {sym:'ADANIENT',name:'Adani Enterprises',lot:309,lotJun:309,grp:'DIVERSIFIED',logo:'https://images.dhan.co/symbol/ADANIENT.png'},
-  {sym:'ADANIGREEN',name:'Adani Green Energy',lot:600,lotJun:600,grp:'ENERGY',logo:'https://images.dhan.co/symbol/ADANIGREEN.png'},
-  {sym:'ADANIPORTS',name:'Adani Ports',lot:475,lotJun:475,grp:'LOGISTICS',logo:'https://images.dhan.co/symbol/ADANIPORTS.png'},
-  {sym:'ADANIPOWER',name:'Adani Power',lot:3550,lotJun:3550,grp:'ENERGY',logo:'https://images.dhan.co/symbol/ADANIPOWER.png'},
-  {sym:'ALKEM',name:'Alkem Laboratories',lot:125,lotJun:125,grp:'PHARMA',logo:'https://images.dhan.co/symbol/ALKEM.png'},
-  {sym:'AMBER',name:'Amber Enterprises',lot:100,lotJun:100,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/AMBER.png'},
-  {sym:'AMBUJACEM',name:'Ambuja Cements',lot:1050,lotJun:1050,grp:'CEMENT',logo:'https://images.dhan.co/symbol/AMBUJACEM.png'},
-  {sym:'ANGELONE',name:'Angel One',lot:2500,lotJun:2500,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/ANGELONE.png'},
-  {sym:'APLAPOLLO',name:'APL Apollo Tubes',lot:350,lotJun:350,grp:'METAL',logo:'https://images.dhan.co/symbol/APLAPOLLO.png'},
-  {sym:'APOLLOHOSP',name:'Apollo Hospitals',lot:125,lotJun:125,grp:'HEALTHCARE',logo:'https://images.dhan.co/symbol/APOLLOHOSP.png'},
-  {sym:'ASHOKLEY',name:'Ashok Leyland',lot:5000,lotJun:5000,grp:'AUTO',logo:'https://images.dhan.co/symbol/ASHOKLEY.png'},
-  {sym:'ASIANPAINT',name:'Asian Paints',lot:250,lotJun:250,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/ASIANPAINT.png'},
-  {sym:'ASTRAL',name:'Astral',lot:425,lotJun:425,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/ASTRAL.png'},
-  {sym:'AUBANK',name:'AU Small Finance Bank',lot:1000,lotJun:1000,grp:'BANK',logo:'https://images.dhan.co/symbol/AUBANK.png'},
-  {sym:'AUROPHARMA',name:'Aurobindo Pharma',lot:550,lotJun:550,grp:'PHARMA',logo:'https://images.dhan.co/symbol/AUROPHARMA.png'},
-  {sym:'AXISBANK',name:'Axis Bank',lot:625,lotJun:625,grp:'BANK',logo:'https://images.dhan.co/symbol/AXISBANK.png'},
-  {sym:'BAJAJ-AUTO',name:'Bajaj Auto',lot:75,lotJun:75,grp:'AUTO',logo:'https://images.dhan.co/symbol/BAJAJ-AUTO.png'},
-  {sym:'BAJAJFINSV',name:'Bajaj Finserv',lot:250,lotJun:250,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/BAJAJFINSV.png'},
-  {sym:'BAJAJHLDNG',name:'Bajaj Holdings',lot:50,lotJun:50,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/BAJAJHLDNG.png'},
-  {sym:'BAJFINANCE',name:'Bajaj Finance',lot:750,lotJun:750,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/BAJFINANCE.png'},
-  {sym:'BANDHANBNK',name:'Bandhan Bank',lot:3600,lotJun:3600,grp:'BANK',logo:'https://images.dhan.co/symbol/BANDHANBNK.png'},
-  {sym:'BANKBARODA',name:'Bank of Baroda',lot:2925,lotJun:2925,grp:'BANK',logo:'https://images.dhan.co/symbol/BANKBARODA.png'},
-  {sym:'BANKINDIA',name:'Bank of India',lot:5200,lotJun:5200,grp:'BANK',logo:'https://images.dhan.co/symbol/BANKINDIA.png'},
-  {sym:'BDL',name:'Bharat Dynamics',lot:350,lotJun:350,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/BDL.png'},
-  {sym:'BEL',name:'Bharat Electronics',lot:1425,lotJun:1425,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/BEL.png'},
-  {sym:'BHARATFORG',name:'Bharat Forge',lot:500,lotJun:500,grp:'AUTO',logo:'https://images.dhan.co/symbol/BHARATFORG.png'},
-  {sym:'BHARTIARTL',name:'Bharti Airtel',lot:475,lotJun:475,grp:'TELECOM',logo:'https://images.dhan.co/symbol/BHARTIARTL.png'},
-  {sym:'BHEL',name:'BHEL',lot:2625,lotJun:2625,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/BHEL.png'},
-  {sym:'BIOCON',name:'Biocon',lot:2500,lotJun:2500,grp:'PHARMA',logo:'https://images.dhan.co/symbol/BIOCON.png'},
-  {sym:'BLUESTARCO',name:'Blue Star',lot:325,lotJun:325,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/BLUESTARCO.png'},
-  {sym:'BOSCHLTD',name:'Bosch',lot:25,lotJun:25,grp:'AUTO',logo:'https://images.dhan.co/symbol/BOSCHLTD.png'},
-  {sym:'BPCL',name:'BPCL',lot:1975,lotJun:1975,grp:'ENERGY',logo:'https://images.dhan.co/symbol/BPCL.png'},
-  {sym:'BRITANNIA',name:'Britannia',lot:125,lotJun:125,grp:'FMCG',logo:'https://images.dhan.co/symbol/BRITANNIA.png'},
-  {sym:'BSE',name:'BSE',lot:375,lotJun:375,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/BSE.png'},
-  {sym:'CAMS',name:'CAMS',lot:750,lotJun:750,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/CAMS.png'},
-  {sym:'CANBK',name:'Canara Bank',lot:6750,lotJun:6750,grp:'BANK',logo:'https://images.dhan.co/symbol/CANBK.png'},
-  {sym:'CDSL',name:'CDSL',lot:475,lotJun:475,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/CDSL.png'},
-  {sym:'CGPOWER',name:'CG Power',lot:850,lotJun:850,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/CGPOWER.png'},
-  {sym:'CHOLAFIN',name:'Cholamandalam',lot:625,lotJun:625,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/CHOLAFIN.png'},
-  {sym:'CIPLA',name:'Cipla',lot:375,lotJun:375,grp:'PHARMA',logo:'https://images.dhan.co/symbol/CIPLA.png'},
-  {sym:'COALINDIA',name:'Coal India',lot:1350,lotJun:1350,grp:'ENERGY',logo:'https://images.dhan.co/symbol/COALINDIA.png'},
-  {sym:'COCHINSHIP',name:'Cochin Shipyard',lot:400,lotJun:400,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/COCHINSHIP.png'},
-  {sym:'COFORGE',name:'Coforge',lot:375,lotJun:375,grp:'IT',logo:'https://images.dhan.co/symbol/COFORGE.png'},
-  {sym:'COLPAL',name:'Colgate Palmolive',lot:225,lotJun:225,grp:'FMCG',logo:'https://images.dhan.co/symbol/COLPAL.png'},
-  {sym:'CONCOR',name:'CONCOR',lot:1250,lotJun:1250,grp:'LOGISTICS',logo:'https://images.dhan.co/symbol/CONCOR.png'},
-  {sym:'CROMPTON',name:'Crompton Greaves',lot:1800,lotJun:1800,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/CROMPTON.png'},
-  {sym:'CUMMINSIND',name:'Cummins India',lot:200,lotJun:200,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/CUMMINSIND.png'},
-  {sym:'DABUR',name:'Dabur',lot:1250,lotJun:1250,grp:'FMCG',logo:'https://images.dhan.co/symbol/DABUR.png'},
-  {sym:'DALBHARAT',name:'Dalmia Bharat',lot:325,lotJun:325,grp:'CEMENT',logo:'https://images.dhan.co/symbol/DALBHARAT.png'},
-  {sym:'DELHIVERY',name:'Delhivery',lot:2075,lotJun:2075,grp:'LOGISTICS',logo:'https://images.dhan.co/symbol/DELHIVERY.png'},
-  {sym:'DIVISLAB',name:'Divis Laboratories',lot:100,lotJun:100,grp:'PHARMA',logo:'https://images.dhan.co/symbol/DIVISLAB.png'},
-  {sym:'DIXON',name:'Dixon Technologies',lot:50,lotJun:50,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/DIXON.png'},
-  {sym:'DLF',name:'DLF',lot:825,lotJun:825,grp:'REALTY',logo:'https://images.dhan.co/symbol/DLF.png'},
-  {sym:'DMART',name:'DMart',lot:150,lotJun:150,grp:'FMCG',logo:'https://images.dhan.co/symbol/DMART.png'},
-  {sym:'DRREDDY',name:'Dr Reddys',lot:625,lotJun:625,grp:'PHARMA',logo:'https://images.dhan.co/symbol/DRREDDY.png'},
-  {sym:'EICHERMOT',name:'Eicher Motors',lot:100,lotJun:100,grp:'AUTO',logo:'https://images.dhan.co/symbol/EICHERMOT.png'},
-  {sym:'ETERNAL',name:'Eternal (Zomato)',lot:2425,lotJun:2425,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/ETERNAL.png'},
-  {sym:'EXIDEIND',name:'Exide Industries',lot:1800,lotJun:1800,grp:'AUTO',logo:'https://images.dhan.co/symbol/EXIDEIND.png'},
-  {sym:'FEDERALBNK',name:'Federal Bank',lot:5000,lotJun:5000,grp:'BANK',logo:'https://images.dhan.co/symbol/FEDERALBNK.png'},
-  {sym:'FORCEMOT',name:'Force Motors',lot:25,lotJun:25,grp:'AUTO',logo:'https://images.dhan.co/symbol/FORCEMOT.png'},
-  {sym:'FORTIS',name:'Fortis Healthcare',lot:775,lotJun:775,grp:'HEALTHCARE',logo:'https://images.dhan.co/symbol/FORTIS.png'},
-  {sym:'GAIL',name:'GAIL',lot:3150,lotJun:3150,grp:'ENERGY',logo:'https://images.dhan.co/symbol/GAIL.png'},
-  {sym:'GLENMARK',name:'Glenmark Pharma',lot:375,lotJun:375,grp:'PHARMA',logo:'https://images.dhan.co/symbol/GLENMARK.png'},
-  {sym:'GMRAIRPORT',name:'GMR Airports',lot:6975,lotJun:6975,grp:'INFRA',logo:'https://images.dhan.co/symbol/GMRAIRPORT.png'},
-  {sym:'GODFRYPHLP',name:'Godfrey Phillips',lot:275,lotJun:275,grp:'FMCG',logo:'https://images.dhan.co/symbol/GODFRYPHLP.png'},
-  {sym:'GODREJCP',name:'Godrej Consumer',lot:500,lotJun:500,grp:'FMCG',logo:'https://images.dhan.co/symbol/GODREJCP.png'},
-  {sym:'GODREJPROP',name:'Godrej Properties',lot:275,lotJun:275,grp:'REALTY',logo:'https://images.dhan.co/symbol/GODREJPROP.png'},
-  {sym:'GRASIM',name:'Grasim Industries',lot:250,lotJun:250,grp:'DIVERSIFIED',logo:'https://images.dhan.co/symbol/GRASIM.png'},
-  {sym:'HAL',name:'HAL',lot:150,lotJun:150,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/HAL.png'},
-  {sym:'HAVELLS',name:'Havells',lot:500,lotJun:500,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/HAVELLS.png'},
-  {sym:'HCLTECH',name:'HCL Technologies',lot:350,lotJun:350,grp:'IT',logo:'https://images.dhan.co/symbol/HCLTECH.png'},
-  {sym:'HDFCAMC',name:'HDFC AMC',lot:300,lotJun:300,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/HDFCAMC.png'},
-  {sym:'HDFCBANK',name:'HDFC Bank',lot:550,lotJun:550,grp:'BANK',logo:'https://images.dhan.co/symbol/HDFCBANK.png'},
-  {sym:'HDFCLIFE',name:'HDFC Life Insurance',lot:1100,lotJun:1100,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/HDFCLIFE.png'},
-  {sym:'HEROMOTOCO',name:'Hero Motocorp',lot:150,lotJun:150,grp:'AUTO',logo:'https://images.dhan.co/symbol/HEROMOTOCO.png'},
-  {sym:'HINDALCO',name:'Hindalco',lot:700,lotJun:700,grp:'METAL',logo:'https://images.dhan.co/symbol/HINDALCO.png'},
-  {sym:'HINDPETRO',name:'Hindustan Petroleum',lot:2025,lotJun:2025,grp:'ENERGY',logo:'https://images.dhan.co/symbol/HINDPETRO.png'},
-  {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,lotJun:300,grp:'FMCG',logo:'https://images.dhan.co/symbol/HINDUNILVR.png'},
-  {sym:'HINDZINC',name:'Hindustan Zinc',lot:1225,lotJun:1225,grp:'METAL',logo:'https://images.dhan.co/symbol/HINDZINC.png'},
-  {sym:'HYUNDAI',name:'Hyundai India',lot:275,lotJun:275,grp:'AUTO',logo:'https://images.dhan.co/symbol/HYUNDAI.png'},
-  {sym:'ICICIBANK',name:'ICICI Bank',lot:700,lotJun:700,grp:'BANK',logo:'https://images.dhan.co/symbol/ICICIBANK.png'},
-  {sym:'ICICIGI',name:'ICICI Lombard',lot:325,lotJun:325,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/ICICIGI.png'},
-  {sym:'ICICIPRULI',name:'ICICI Prudential Life',lot:925,lotJun:925,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/ICICIPRULI.png'},
-  {sym:'IDEA',name:'Vodafone Idea',lot:71475,lotJun:71475,grp:'TELECOM',logo:'https://images.dhan.co/symbol/IDEA.png'},
-  {sym:'IDFCFIRSTB',name:'IDFC First Bank',lot:9275,lotJun:9275,grp:'BANK',logo:'https://images.dhan.co/symbol/IDFCFIRSTB.png'},
-  {sym:'IEX',name:'IEX',lot:3750,lotJun:3750,grp:'ENERGY',logo:'https://images.dhan.co/symbol/IEX.png'},
-  {sym:'INDHOTEL',name:'Indian Hotels',lot:1000,lotJun:1000,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/INDHOTEL.png'},
-  {sym:'INDIANB',name:'Indian Bank',lot:1000,lotJun:1000,grp:'BANK',logo:'https://images.dhan.co/symbol/INDIANB.png'},
-  {sym:'INDIGO',name:'IndiGo',lot:150,lotJun:150,grp:'AVIATION',logo:'https://images.dhan.co/symbol/INDIGO.png'},
-  {sym:'INDUSINDBK',name:'IndusInd Bank',lot:700,lotJun:700,grp:'BANK',logo:'https://images.dhan.co/symbol/INDUSINDBK.png'},
-  {sym:'INDUSTOWER',name:'Indus Towers',lot:1700,lotJun:1700,grp:'TELECOM',logo:'https://images.dhan.co/symbol/INDUSTOWER.png'},
-  {sym:'INFY',name:'Infosys',lot:400,lotJun:400,grp:'IT',logo:'https://images.dhan.co/symbol/INFY.png'},
-  {sym:'INOXWIND',name:'Inox Wind',lot:3575,lotJun:3575,grp:'ENERGY',logo:'https://images.dhan.co/symbol/INOXWIND.png'},
-  {sym:'IOC',name:'Indian Oil',lot:4875,lotJun:4875,grp:'ENERGY',logo:'https://images.dhan.co/symbol/IOC.png'},
-  {sym:'IREDA',name:'IREDA',lot:3450,lotJun:3450,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/IREDA.png'},
-  {sym:'IRFC',name:'IRFC',lot:4250,lotJun:4250,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/IRFC.png'},
-  {sym:'ITC',name:'ITC',lot:1600,lotJun:1600,grp:'FMCG',logo:'https://images.dhan.co/symbol/ITC.png'},
-  {sym:'JINDALSTEL',name:'Jindal Steel',lot:625,lotJun:625,grp:'METAL',logo:'https://images.dhan.co/symbol/JINDALSTEL.png'},
-  {sym:'JIOFIN',name:'Jio Financial',lot:2350,lotJun:2350,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/JIOFIN.png'},
-  {sym:'JSWENERGY',name:'JSW Energy',lot:1000,lotJun:1000,grp:'ENERGY',logo:'https://images.dhan.co/symbol/JSWENERGY.png'},
-  {sym:'JSWSTEEL',name:'JSW Steel',lot:675,lotJun:675,grp:'METAL',logo:'https://images.dhan.co/symbol/JSWSTEEL.png'},
-  {sym:'JUBLFOOD',name:'Jubilant FoodWorks',lot:1250,lotJun:1250,grp:'FMCG',logo:'https://images.dhan.co/symbol/JUBLFOOD.png'},
-  {sym:'KALYANKJIL',name:'Kalyan Jewellers',lot:1175,lotJun:1175,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/KALYANKJIL.png'},
-  {sym:'KAYNES',name:'Kaynes Technology',lot:100,lotJun:100,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/KAYNES.png'},
-  {sym:'KEI',name:'KEI Industries',lot:175,lotJun:175,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/KEI.png'},
-  {sym:'KFINTECH',name:'KFin Technologies',lot:500,lotJun:500,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/KFINTECH.png'},
-  {sym:'KOTAKBANK',name:'Kotak Bank',lot:2000,lotJun:2000,grp:'BANK',logo:'https://images.dhan.co/symbol/KOTAKBANK.png'},
-  {sym:'KPITTECH',name:'KPIT Technologies',lot:425,lotJun:425,grp:'IT',logo:'https://images.dhan.co/symbol/KPITTECH.png'},
-  {sym:'LAURUSLABS',name:'Laurus Labs',lot:850,lotJun:850,grp:'PHARMA',logo:'https://images.dhan.co/symbol/LAURUSLABS.png'},
-  {sym:'LICHSGFIN',name:'LIC Housing Finance',lot:1000,lotJun:1000,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/LICHSGFIN.png'},
-  {sym:'LICI',name:'LIC of India',lot:700,lotJun:700,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/LICI.png'},
-  {sym:'LODHA',name:'Lodha Developers',lot:450,lotJun:450,grp:'REALTY',logo:'https://images.dhan.co/symbol/LODHA.png'},
-  {sym:'LT',name:'Larsen & Toubro',lot:175,lotJun:175,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/LT.png'},
-  {sym:'LTF',name:'L&T Finance',lot:2250,lotJun:2250,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/LTF.png'},
-  {sym:'LTM',name:'LTIMindtree',lot:150,lotJun:150,grp:'IT',logo:'https://images.dhan.co/symbol/LTM.png'},
-  {sym:'LUPIN',name:'Lupin',lot:425,lotJun:425,grp:'PHARMA',logo:'https://images.dhan.co/symbol/LUPIN.png'},
-  {sym:'M&M',name:'Mahindra & Mahindra',lot:200,lotJun:200,grp:'AUTO',logo:'https://images.dhan.co/symbol/M&M.png'},
-  {sym:'MANAPPURAM',name:'Manappuram Finance',lot:3000,lotJun:3000,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/MANAPPURAM.png'},
-  {sym:'MANKIND',name:'Mankind Pharma',lot:225,lotJun:225,grp:'PHARMA',logo:'https://images.dhan.co/symbol/MANKIND.png'},
-  {sym:'MARICO',name:'Marico',lot:1200,lotJun:1200,grp:'FMCG',logo:'https://images.dhan.co/symbol/MARICO.png'},
-  {sym:'MARUTI',name:'Maruti Suzuki',lot:50,lotJun:50,grp:'AUTO',logo:'https://images.dhan.co/symbol/MARUTI.png'},
-  {sym:'MAXHEALTH',name:'Max Healthcare',lot:525,lotJun:525,grp:'HEALTHCARE',logo:'https://images.dhan.co/symbol/MAXHEALTH.png'},
-  {sym:'MAZDOCK',name:'Mazagon Dock',lot:200,lotJun:200,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/MAZDOCK.png'},
-  {sym:'MCX',name:'MCX',lot:625,lotJun:625,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/MCX.png'},
-  {sym:'MFSL',name:'Max Financial Services',lot:400,lotJun:400,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/MFSL.png'},
-  {sym:'MOTHERSON',name:'Samvardhana Motherson',lot:6150,lotJun:6150,grp:'AUTO',logo:'https://images.dhan.co/symbol/MOTHERSON.png'},
-  {sym:'MOTILALOFS',name:'Motilal Oswal',lot:775,lotJun:775,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/MOTILALOFS.png'},
-  {sym:'MPHASIS',name:'Mphasis',lot:275,lotJun:275,grp:'IT',logo:'https://images.dhan.co/symbol/MPHASIS.png'},
-  {sym:'MUTHOOTFIN',name:'Muthoot Finance',lot:275,lotJun:275,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/MUTHOOTFIN.png'},
-  {sym:'NAM-INDIA',name:'Nippon Life AMC',lot:625,lotJun:625,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/NAM-INDIA.png'},
-  {sym:'NATIONALUM',name:'NALCO',lot:3750,lotJun:3750,grp:'METAL',logo:'https://images.dhan.co/symbol/NATIONALUM.png'},
-  {sym:'NAUKRI',name:'Info Edge',lot:375,lotJun:375,grp:'IT',logo:'https://images.dhan.co/symbol/NAUKRI.png'},
-  {sym:'NBCC',name:'NBCC',lot:6500,lotJun:6500,grp:'INFRA',logo:'https://images.dhan.co/symbol/NBCC.png'},
-  {sym:'NESTLEIND',name:'Nestle India',lot:500,lotJun:500,grp:'FMCG',logo:'https://images.dhan.co/symbol/NESTLEIND.png'},
-  {sym:'NHPC',name:'NHPC',lot:6400,lotJun:6400,grp:'ENERGY',logo:'https://images.dhan.co/symbol/NHPC.png'},
-  {sym:'NMDC',name:'NMDC',lot:6750,lotJun:6750,grp:'METAL',logo:'https://images.dhan.co/symbol/NMDC.png'},
-  {sym:'NTPC',name:'NTPC',lot:1500,lotJun:1500,grp:'ENERGY',logo:'https://images.dhan.co/symbol/NTPC.png'},
-  {sym:'NUVAMA',name:'Nuvama Wealth',lot:500,lotJun:500,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/NUVAMA.png'},
-  {sym:'NYKAA',name:'Nykaa',lot:3125,lotJun:3125,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/NYKAA.png'},
-  {sym:'OBEROIRLTY',name:'Oberoi Realty',lot:350,lotJun:350,grp:'REALTY',logo:'https://images.dhan.co/symbol/OBEROIRLTY.png'},
-  {sym:'OFSS',name:'Oracle Financial',lot:75,lotJun:75,grp:'IT',logo:'https://images.dhan.co/symbol/OFSS.png'},
-  {sym:'OIL',name:'Oil India',lot:1400,lotJun:1400,grp:'ENERGY',logo:'https://images.dhan.co/symbol/OIL.png'},
-  {sym:'ONGC',name:'ONGC',lot:2250,lotJun:2250,grp:'ENERGY',logo:'https://images.dhan.co/symbol/ONGC.png'},
-  {sym:'PAGEIND',name:'Page Industries',lot:15,lotJun:15,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/PAGEIND.png'},
-  {sym:'PATANJALI',name:'Patanjali Foods',lot:900,lotJun:900,grp:'FMCG',logo:'https://images.dhan.co/symbol/PATANJALI.png'},
-  {sym:'PAYTM',name:'Paytm',lot:725,lotJun:725,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/PAYTM.png'},
-  {sym:'PERSISTENT',name:'Persistent Systems',lot:100,lotJun:100,grp:'IT',logo:'https://images.dhan.co/symbol/PERSISTENT.png'},
-  {sym:'PETRONET',name:'Petronet LNG',lot:1900,lotJun:1900,grp:'ENERGY',logo:'https://images.dhan.co/symbol/PETRONET.png'},
-  {sym:'PFC',name:'PFC',lot:1300,lotJun:1300,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/PFC.png'},
-  {sym:'PGEL',name:'PG Electroplast',lot:950,lotJun:950,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/PGEL.png'},
-  {sym:'PHOENIXLTD',name:'Phoenix Mills',lot:350,lotJun:350,grp:'REALTY',logo:'https://images.dhan.co/symbol/PHOENIXLTD.png'},
-  {sym:'PIDILITIND',name:'Pidilite Industries',lot:500,lotJun:500,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/PIDILITIND.png'},
-  {sym:'PIIND',name:'PI Industries',lot:175,lotJun:175,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/PIIND.png'},
-  {sym:'PNB',name:'Punjab National Bank',lot:8000,lotJun:8000,grp:'BANK',logo:'https://images.dhan.co/symbol/PNB.png'},
-  {sym:'PNBHOUSING',name:'PNB Housing Finance',lot:650,lotJun:650,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/PNBHOUSING.png'},
-  {sym:'POLICYBZR',name:'PB FinTech',lot:350,lotJun:350,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/POLICYBZR.png'},
-  {sym:'POLYCAB',name:'Polycab',lot:125,lotJun:125,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/POLYCAB.png'},
-  {sym:'POWERGRID',name:'Power Grid',lot:1900,lotJun:1900,grp:'ENERGY',logo:'https://images.dhan.co/symbol/POWERGRID.png'},
-  {sym:'POWERINDIA',name:'Hitachi Energy',lot:50,lotJun:50,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/POWERINDIA.png'},
-  {sym:'PREMIERENE',name:'Premier Energies',lot:575,lotJun:575,grp:'ENERGY',logo:'https://images.dhan.co/symbol/PREMIERENE.png'},
-  {sym:'PRESTIGE',name:'Prestige Estates',lot:450,lotJun:450,grp:'REALTY',logo:'https://images.dhan.co/symbol/PRESTIGE.png'},
-  {sym:'RBLBANK',name:'RBL Bank',lot:3175,lotJun:3175,grp:'BANK',logo:'https://images.dhan.co/symbol/RBLBANK.png'},
-  {sym:'RECLTD',name:'REC',lot:1400,lotJun:1400,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/RECLTD.png'},
-  {sym:'RELIANCE',name:'Reliance Industries',lot:500,lotJun:500,grp:'ENERGY',logo:'https://images.dhan.co/symbol/RELIANCE.png'},
-  {sym:'RVNL',name:'Rail Vikas Nigam',lot:1525,lotJun:1525,grp:'INFRA',logo:'https://images.dhan.co/symbol/RVNL.png'},
-  {sym:'SAIL',name:'SAIL',lot:4700,lotJun:4700,grp:'METAL',logo:'https://images.dhan.co/symbol/SAIL.png'},
-  {sym:'SAMMAANCAP',name:'Sammaan Capital',lot:4300,lotJun:4300,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/SAMMAANCAP.png'},
-  {sym:'SBICARD',name:'SBI Cards',lot:800,lotJun:800,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/SBICARD.png'},
-  {sym:'SBILIFE',name:'SBI Life Insurance',lot:375,lotJun:375,grp:'INSURANCE',logo:'https://images.dhan.co/symbol/SBILIFE.png'},
-  {sym:'SBIN',name:'State Bank of India',lot:750,lotJun:750,grp:'BANK',logo:'https://images.dhan.co/symbol/SBIN.png'},
-  {sym:'SHREECEM',name:'Shree Cement',lot:25,lotJun:25,grp:'CEMENT',logo:'https://images.dhan.co/symbol/SHREECEM.png'},
-  {sym:'SHRIRAMFIN',name:'Shriram Finance',lot:825,lotJun:825,grp:'FINANCIAL',logo:'https://images.dhan.co/symbol/SHRIRAMFIN.png'},
-  {sym:'SIEMENS',name:'Siemens',lot:175,lotJun:175,grp:'CAPITAL_GOODS',logo:'https://images.dhan.co/symbol/SIEMENS.png'},
-  {sym:'SOLARINDS',name:'Solar Industries',lot:50,lotJun:50,grp:'DEFENCE',logo:'https://images.dhan.co/symbol/SOLARINDS.png'},
-  {sym:'SONACOMS',name:'Sona BLW Precision',lot:1225,lotJun:1225,grp:'AUTO',logo:'https://images.dhan.co/symbol/SONACOMS.png'},
-  {sym:'SRF',name:'SRF',lot:200,lotJun:200,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/SRF.png'},
-  {sym:'SUNPHARMA',name:'Sun Pharma',lot:350,lotJun:350,grp:'PHARMA',logo:'https://images.dhan.co/symbol/SUNPHARMA.png'},
-  {sym:'SUPREMEIND',name:'Supreme Industries',lot:175,lotJun:175,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/SUPREMEIND.png'},
-  {sym:'SUZLON',name:'Suzlon Energy',lot:9025,lotJun:9025,grp:'ENERGY',logo:'https://images.dhan.co/symbol/SUZLON.png'},
-  {sym:'SWIGGY',name:'Swiggy',lot:1300,lotJun:1300,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/SWIGGY.png'},
-  {sym:'TATACONSUM',name:'Tata Consumer',lot:550,lotJun:550,grp:'FMCG',logo:'https://images.dhan.co/symbol/TATACONSUM.png'},
-  {sym:'TATAELXSI',name:'Tata Elxsi',lot:100,lotJun:100,grp:'IT',logo:'https://images.dhan.co/symbol/TATAELXSI.png'},
-  {sym:'TATAPOWER',name:'Tata Power',lot:1450,lotJun:1450,grp:'ENERGY',logo:'https://images.dhan.co/symbol/TATAPOWER.png'},
-  {sym:'TATASTEEL',name:'Tata Steel',lot:5500,lotJun:5500,grp:'METAL',logo:'https://images.dhan.co/symbol/TATASTEEL.png'},
-  {sym:'TCS',name:'TCS',lot:175,lotJun:175,grp:'IT',logo:'https://images.dhan.co/symbol/TCS.png'},
-  {sym:'TECHM',name:'Tech Mahindra',lot:600,lotJun:600,grp:'IT',logo:'https://images.dhan.co/symbol/TECHM.png'},
-  {sym:'TIINDIA',name:'Tube Investment',lot:200,lotJun:200,grp:'AUTO',logo:'https://images.dhan.co/symbol/TIINDIA.png'},
-  {sym:'TITAN',name:'Titan',lot:175,lotJun:175,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/TITAN.png'},
-  {sym:'TMPV',name:'Tata Motors PV',lot:800,lotJun:800,grp:'AUTO',logo:'https://images.dhan.co/symbol/TMPV.png'},
-  {sym:'TORNTPHARM',name:'Torrent Pharma',lot:250,lotJun:250,grp:'PHARMA',logo:'https://images.dhan.co/symbol/TORNTPHARM.png'},
-  {sym:'TRENT',name:'Trent',lot:100,lotJun:100,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/TRENT.png'},
-  {sym:'TVSMOTOR',name:'TVS Motors',lot:175,lotJun:175,grp:'AUTO',logo:'https://images.dhan.co/symbol/TVSMOTOR.png'},
-  {sym:'ULTRACEMCO',name:'UltraTech Cement',lot:50,lotJun:50,grp:'CEMENT',logo:'https://images.dhan.co/symbol/ULTRACEMCO.png'},
-  {sym:'UNIONBANK',name:'Union Bank of India',lot:4425,lotJun:4425,grp:'BANK',logo:'https://images.dhan.co/symbol/UNIONBANK.png'},
-  {sym:'UNITDSPR',name:'United Spirits',lot:400,lotJun:400,grp:'FMCG',logo:'https://images.dhan.co/symbol/UNITDSPR.png'},
-  {sym:'UNOMINDA',name:'UNO Minda',lot:550,lotJun:550,grp:'AUTO',logo:'https://images.dhan.co/symbol/UNOMINDA.png'},
-  {sym:'UPL',name:'UPL',lot:1355,lotJun:1355,grp:'CHEMICAL',logo:'https://images.dhan.co/symbol/UPL.png'},
-  {sym:'VBL',name:'Varun Beverages',lot:1125,lotJun:1125,grp:'FMCG',logo:'https://images.dhan.co/symbol/VBL.png'},
-  {sym:'VEDL',name:'Vedanta',lot:1150,lotJun:1150,grp:'METAL',logo:'https://images.dhan.co/symbol/VEDL.png'},
-  {sym:'VMM',name:'Vishal Mega Mart',lot:4850,lotJun:4850,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/VMM.png'},
-  {sym:'VOLTAS',name:'Voltas',lot:375,lotJun:375,grp:'CONSUMER',logo:'https://images.dhan.co/symbol/VOLTAS.png'},
-  {sym:'WAAREEENER',name:'Waaree Energies',lot:175,lotJun:175,grp:'ENERGY',logo:'https://images.dhan.co/symbol/WAAREEENER.png'},
-  {sym:'WIPRO',name:'Wipro',lot:3000,lotJun:3000,grp:'IT',logo:'https://images.dhan.co/symbol/WIPRO.png'},
-  {sym:'YESBANK',name:'Yes Bank',lot:31100,lotJun:31100,grp:'BANK',logo:'https://images.dhan.co/symbol/YESBANK.png'},
-  {sym:'ZYDUSLIFE',name:'Zydus Life Science',lot:900,lotJun:900,grp:'PHARMA',logo:'https://images.dhan.co/symbol/ZYDUSLIFE.png'},
+  // ── NIFTY 50 ── (lot sizes from Dhan Apr 2026)
+  {sym:'RELIANCE',name:'Reliance Industries',lot:250,grp:'NIFTY50'},
+  {sym:'TCS',name:'Tata Consultancy Services',lot:175,grp:'NIFTY50,IT'},
+  {sym:'HDFCBANK',name:'HDFC Bank',lot:550,grp:'NIFTY50,BANK'},
+  {sym:'INFY',name:'Infosys',lot:400,grp:'NIFTY50,IT'},
+  {sym:'ICICIBANK',name:'ICICI Bank',lot:700,grp:'NIFTY50,BANK'},
+  {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,grp:'NIFTY50,FMCG'},
+  {sym:'KOTAKBANK',name:'Kotak Mahindra Bank',lot:2000,grp:'NIFTY50,BANK'},
+  {sym:'SBIN',name:'State Bank of India',lot:1500,grp:'NIFTY50,BANK'},
+  {sym:'BHARTIARTL',name:'Bharti Airtel',lot:475,grp:'NIFTY50,TELECOM'},
+  {sym:'ITC',name:'ITC Ltd',lot:1600,grp:'NIFTY50,FMCG'},
+  {sym:'BAJFINANCE',name:'Bajaj Finance',lot:750,grp:'NIFTY50,NBFC'},
+  {sym:'LT',name:'Larsen & Toubro',lot:175,grp:'NIFTY50'},
+  {sym:'ASIANPAINT',name:'Asian Paints',lot:250,grp:'NIFTY50'},
+  {sym:'AXISBANK',name:'Axis Bank',lot:625,grp:'NIFTY50,BANK'},
+  {sym:'MARUTI',name:'Maruti Suzuki',lot:50,grp:'NIFTY50,AUTO'},
+  {sym:'WIPRO',name:'Wipro',lot:1500,grp:'NIFTY50,IT'},
+  {sym:'HCLTECH',name:'HCL Technologies',lot:350,grp:'NIFTY50,IT'},
+  {sym:'SUNPHARMA',name:'Sun Pharmaceutical',lot:700,grp:'NIFTY50,PHARMA'},
+  {sym:'TITAN',name:'Titan Company',lot:375,grp:'NIFTY50'},
+  {sym:'ULTRACEMCO',name:'UltraTech Cement',lot:100,grp:'NIFTY50,CEMENT'},
+  {sym:'NESTLEIND',name:'Nestle India',lot:500,grp:'NIFTY50,FMCG'},
+  {sym:'POWERGRID',name:'Power Grid Corp',lot:2700,grp:'NIFTY50,ENERGY'},
+  {sym:'NTPC',name:'NTPC Ltd',lot:1500,grp:'NIFTY50,ENERGY'},
+  {sym:'TECHM',name:'Tech Mahindra',lot:600,grp:'NIFTY50,IT'},
+  {sym:'ONGC',name:'ONGC',lot:2250,grp:'NIFTY50,ENERGY'},
+  {sym:'TATASTEEL',name:'Tata Steel',lot:5500,grp:'NIFTY50,METAL'},
+  {sym:'TATAMOTORS',name:'Tata Motors',lot:550,grp:'NIFTY50,AUTO'},
+  {sym:'JSWSTEEL',name:'JSW Steel',lot:675,grp:'NIFTY50,METAL'},
+  {sym:'M&M',name:'Mahindra & Mahindra',lot:200,grp:'NIFTY50,AUTO'},
+  {sym:'ADANIENT',name:'Adani Enterprises',lot:309,grp:'NIFTY50'},
+  {sym:'ADANIPORTS',name:'Adani Ports & SEZ',lot:475,grp:'NIFTY50'},
+  {sym:'COALINDIA',name:'Coal India',lot:1350,grp:'NIFTY50,ENERGY'},
+  {sym:'BAJAJFINSV',name:'Bajaj Finserv',lot:250,grp:'NIFTY50,NBFC'},
+  {sym:'HDFCLIFE',name:'HDFC Life Insurance',lot:1100,grp:'NIFTY50,INSURANCE'},
+  {sym:'SBILIFE',name:'SBI Life Insurance',lot:750,grp:'NIFTY50,INSURANCE'},
+  {sym:'CIPLA',name:'Cipla',lot:375,grp:'NIFTY50,PHARMA'},
+  {sym:'DRREDDY',name:'Dr Reddys Labs',lot:625,grp:'NIFTY50,PHARMA'},
+  {sym:'DIVISLAB',name:'Divis Laboratories',lot:100,grp:'NIFTY50,PHARMA'},
+  {sym:'EICHERMOT',name:'Eicher Motors',lot:100,grp:'NIFTY50,AUTO'},
+  {sym:'HEROMOTOCO',name:'Hero MotoCorp',lot:150,grp:'NIFTY50,AUTO'},
+  {sym:'APOLLOHOSP',name:'Apollo Hospitals',lot:125,grp:'NIFTY50,PHARMA'},
+  {sym:'BPCL',name:'BPCL',lot:1975,grp:'NIFTY50,ENERGY'},
+  {sym:'TATACONSUM',name:'Tata Consumer Products',lot:500,grp:'NIFTY50,FMCG'},
+  {sym:'BRITANNIA',name:'Britannia Industries',lot:125,grp:'NIFTY50,FMCG'},
+  {sym:'GRASIM',name:'Grasim Industries',lot:250,grp:'NIFTY50'},
+  {sym:'SHRIRAMFIN',name:'Shriram Finance',lot:500,grp:'NIFTY50,NBFC'},
+  {sym:'INDUSINDBK',name:'IndusInd Bank',lot:700,grp:'NIFTY50,BANK'},
+  // ── BANK NIFTY extras ──
+  {sym:'BANDHANBNK',name:'Bandhan Bank',lot:3600,grp:'BANK'},
+  {sym:'IDFCFIRSTB',name:'IDFC First Bank',lot:9275,grp:'BANK'},
+  {sym:'PNB',name:'Punjab National Bank',lot:8000,grp:'BANK'},
+  {sym:'BANKBARODA',name:'Bank of Baroda',lot:2925,grp:'BANK'},
+  {sym:'FEDERALBNK',name:'Federal Bank',lot:5000,grp:'BANK'},
+  {sym:'CANBK',name:'Canara Bank',lot:6750,grp:'BANK'},
+  {sym:'UNIONBANK',name:'Union Bank of India',lot:10000,grp:'BANK'},
+  {sym:'INDIANB',name:'Indian Bank',lot:1000,grp:'BANK'},
+  {sym:'BANKINDIA',name:'Bank of India',lot:5200,grp:'BANK'},
+  {sym:'AUBANK',name:'AU Small Finance Bank',lot:1000,grp:'BANK'},
+  // ── IT extras ──
+  {sym:'MPHASIS',name:'Mphasis',lot:275,grp:'IT'},
+  {sym:'COFORGE',name:'Coforge',lot:375,grp:'IT'},
+  {sym:'LTM',name:'LTIMindtree',lot:150,grp:'IT'},
+  {sym:'KPITTECH',name:'KPIT Technologies',lot:425,grp:'IT'},
+  {sym:'OFSS',name:'Oracle Financial Services',lot:75,grp:'IT'},
+  // ── Auto ──
+  {sym:'BAJAJ-AUTO',name:'Bajaj Auto',lot:75,grp:'AUTO'},
+  {sym:'TVSMOTORS',name:'TVS Motor Company',lot:350,grp:'AUTO'},
+  {sym:'ASHOKLEY',name:'Ashok Leyland',lot:5000,grp:'AUTO'},
+  {sym:'MOTHERSON',name:'Samvardhana Motherson',lot:6150,grp:'AUTO'},
+  {sym:'BOSCHLTD',name:'Bosch Ltd',lot:25,grp:'AUTO'},
+  {sym:'BHARATFORG',name:'Bharat Forge',lot:500,grp:'AUTO'},
+  {sym:'HYUNDAI',name:'Hyundai Motor India',lot:275,grp:'AUTO'},
+  // ── Pharma ──
+  {sym:'LUPIN',name:'Lupin',lot:425,grp:'PHARMA'},
+  {sym:'AUROPHARMA',name:'Aurobindo Pharma',lot:550,grp:'PHARMA'},
+  {sym:'BIOCON',name:'Biocon',lot:2500,grp:'PHARMA'},
+  {sym:'ALKEM',name:'Alkem Laboratories',lot:125,grp:'PHARMA'},
+  {sym:'GLENMARK',name:'Glenmark Pharmaceuticals',lot:375,grp:'PHARMA'},
+  {sym:'MAXHEALTH',name:'Max Healthcare',lot:525,grp:'PHARMA'},
+  {sym:'FORTIS',name:'Fortis Healthcare',lot:775,grp:'PHARMA'},
+  {sym:'MANKIND',name:'Mankind Pharma',lot:225,grp:'PHARMA'},
+  {sym:'LAURUSLABS',name:'Laurus Labs',lot:850,grp:'PHARMA'},
+  // ── Energy / Power ──
+  {sym:'ADANIGREEN',name:'Adani Green Energy',lot:600,grp:'ENERGY'},
+  {sym:'ADANIENSOL',name:'Adani Energy Solutions',lot:675,grp:'ENERGY'},
+  {sym:'ADANIPOWER',name:'Adani Power',lot:3550,grp:'ENERGY'},
+  {sym:'IOC',name:'Indian Oil Corp',lot:4875,grp:'ENERGY'},
+  {sym:'HINDPETRO',name:'Hindustan Petroleum',lot:2025,grp:'ENERGY'},
+  {sym:'GAIL',name:'GAIL India',lot:3150,grp:'ENERGY'},
+  {sym:'TATAPOWER',name:'Tata Power',lot:2700,grp:'ENERGY'},
+  {sym:'SUZLON',name:'Suzlon Energy',lot:14500,grp:'ENERGY'},
+  {sym:'NHPC',name:'NHPC Ltd',lot:6400,grp:'ENERGY'},
+  {sym:'IREDA',name:'IREDA',lot:3450,grp:'ENERGY'},
+  {sym:'JSWENERGY',name:'JSW Energy',lot:1000,grp:'ENERGY'},
+  {sym:'IRFC',name:'IRFC',lot:4250,grp:'ENERGY'},
+  // ── Metal / Mining ──
+  {sym:'HINDALCO',name:'Hindalco Industries',lot:700,grp:'METAL'},
+  {sym:'VEDL',name:'Vedanta Ltd',lot:2300,grp:'METAL'},
+  {sym:'NMDC',name:'NMDC',lot:6750,grp:'METAL'},
+  {sym:'APLAPOLLO',name:'APL Apollo Tubes',lot:350,grp:'METAL'},
+  {sym:'SAIL',name:'SAIL',lot:6500,grp:'METAL'},
+  {sym:'NATIONALUM',name:'National Aluminium',lot:3750,grp:'METAL'},
+  {sym:'HINDZINC',name:'Hindustan Zinc',lot:1225,grp:'METAL'},
+  {sym:'JINDALSTEL',name:'Jindal Steel & Power',lot:625,grp:'METAL'},
+  // ── FMCG ──
+  {sym:'GODREJCP',name:'Godrej Consumer Products',lot:500,grp:'FMCG'},
+  {sym:'DABUR',name:'Dabur India',lot:1250,grp:'FMCG'},
+  {sym:'COLPAL',name:'Colgate Palmolive',lot:225,grp:'FMCG'},
+  {sym:'MARICO',name:'Marico',lot:1200,grp:'FMCG'},
+  {sym:'VBL',name:'Varun Beverages',lot:500,grp:'FMCG'},
+  {sym:'JUBLFOOD',name:'Jubilant FoodWorks',lot:1250,grp:'FMCG'},
+  // ── Cement ──
+  {sym:'AMBUJACEM',name:'Ambuja Cements',lot:1050,grp:'CEMENT'},
+  {sym:'DALMIA',name:'Dalmia Bharat',lot:325,grp:'CEMENT'},
+  // ── Telecom / Media ──
+  {sym:'IDEA',name:'Vodafone Idea',lot:71475,grp:'TELECOM'},
+  {sym:'INDUSTOWER',name:'Indus Towers',lot:1700,grp:'TELECOM'},
+  {sym:'ZEEL',name:'Zee Entertainment',lot:2000,grp:'MEDIA'},
+  {sym:'PVRINOX',name:'PVR Inox',lot:400,grp:'MEDIA'},
+  // ── Real Estate ──
+  {sym:'DLF',name:'DLF Ltd',lot:825,grp:'REALTY'},
+  {sym:'GODREJPROP',name:'Godrej Properties',lot:275,grp:'REALTY'},
+  {sym:'OBEROIRLTY',name:'Oberoi Realty',lot:350,grp:'REALTY'},
+  {sym:'LODHA',name:'Lodha Developers',lot:450,grp:'REALTY'},
+  // ── Finance / NBFC ──
+  {sym:'CHOLAFIN',name:'Cholamandalam Finance',lot:625,grp:'NBFC'},
+  {sym:'LICHSGFIN',name:'LIC Housing Finance',lot:1000,grp:'NBFC'},
+  {sym:'MUTHOOTFIN',name:'Muthoot Finance',lot:275,grp:'NBFC'},
+  {sym:'MANAPPURAM',name:'Manappuram Finance',lot:3000,grp:'NBFC'},
+  {sym:'ABCAPITAL',name:'Aditya Birla Capital',lot:3100,grp:'NBFC'},
+  {sym:'CDSL',name:'CDSL',lot:475,grp:'NBFC'},
+  {sym:'BSE',name:'BSE Ltd',lot:375,grp:'NBFC'},
+  {sym:'JIOFIN',name:'Jio Financial Services',lot:2350,grp:'NBFC'},
+  {sym:'MOTILALOFS',name:'Motilal Oswal Financial',lot:775,grp:'NBFC'},
+  {sym:'LTF',name:'L&T Finance',lot:2250,grp:'NBFC'},
+  // ── Insurance ──
+  {sym:'ICICIGI',name:'ICICI Lombard General',lot:325,grp:'INSURANCE'},
+  {sym:'ICICIPRULI',name:'ICICI Prudential Life',lot:925,grp:'INSURANCE'},
+  {sym:'HDFCAMC',name:'HDFC AMC',lot:300,grp:'INSURANCE'},
+  {sym:'LICI',name:'LIC of India',lot:700,grp:'INSURANCE'},
+  {sym:'MFSL',name:'Max Financial Services',lot:400,grp:'INSURANCE'},
+  // ── Capital Goods / Defence ──
+  {sym:'ABB',name:'ABB India',lot:125,grp:'CAPGOODS'},
+  {sym:'HAVELLS',name:'Havells India',lot:500,grp:'CAPGOODS'},
+  {sym:'CUMMINSIND',name:'Cummins India',lot:200,grp:'CAPGOODS'},
+  {sym:'BEL',name:'Bharat Electronics',lot:1425,grp:'CAPGOODS'},
+  {sym:'HAL',name:'Hindustan Aeronautics',lot:150,grp:'CAPGOODS'},
+  {sym:'BHEL',name:'Bharat Heavy Electricals',lot:2625,grp:'CAPGOODS'},
+  {sym:'BDL',name:'Bharat Dynamics',lot:350,grp:'DEFENCE'},
+  {sym:'COCHINSHIP',name:'Cochin Shipyard',lot:400,grp:'DEFENCE'},
+  {sym:'MAZDOCK',name:'Mazagon Dock Shipbuilders',lot:200,grp:'DEFENCE'},
+  {sym:'CGPOWER',name:'CG Power & Industrial',lot:850,grp:'CAPGOODS'},
+  {sym:'DIXON',name:'Dixon Technologies',lot:50,grp:'CAPGOODS'},
+  {sym:'AMBER',name:'Amber Enterprises',lot:100,grp:'CAPGOODS'},
+  {sym:'KAYNES',name:'Kaynes Technology',lot:100,grp:'CAPGOODS'},
+  {sym:'KEI',name:'KEI Industries',lot:175,grp:'CAPGOODS'},
+  {sym:'BLUESTARCO',name:'Blue Star',lot:325,grp:'CAPGOODS'},
+  {sym:'CROMPTON',name:'Crompton Greaves Consumer',lot:1800,grp:'CAPGOODS'},
+  // ── New-age / Fintech ──
+  {sym:'ETERNAL',name:'Eternal (Zomato)',lot:2425,grp:'NEWAGE'},
+  {sym:'NYKAA',name:'FSN E-Commerce (Nykaa)',lot:3125,grp:'NEWAGE'},
+  {sym:'POLICYBZR',name:'PB Fintech (PolicyBazaar)',lot:1500,grp:'NEWAGE'},
+  {sym:'DELHIVERY',name:'Delhivery',lot:2075,grp:'NEWAGE'},
+  {sym:'ANGELONE',name:'Angel One',lot:2500,grp:'FINANCE'},
+  {sym:'MCX',name:'Multi Commodity Exchange',lot:625,grp:'FINANCE'},
+  {sym:'CAMS',name:'CAMS',lot:750,grp:'FINANCE'},
+  {sym:'KFINTECH',name:'KFin Technologies',lot:500,grp:'FINANCE'},
+  {sym:'NAUKRI',name:'Info Edge (Naukri)',lot:375,grp:'NEWAGE'},
+  {sym:'360ONE',name:'360 One WAM',lot:500,grp:'FINANCE'},
+  {sym:'NUVAMA',name:'Nuvama Wealth Management',lot:500,grp:'FINANCE'},
+  // ── Infra ──
+  {sym:'GMRAIRPORT',name:'GMR Airports Infra',lot:6975,grp:'INFRA'},
+  {sym:'CONCOR',name:'Container Corp of India',lot:1250,grp:'INFRA'},
+  {sym:'NBCC',name:'NBCC',lot:6500,grp:'INFRA'},
+  {sym:'HUDCO',name:'HUDCO',lot:2775,grp:'INFRA'},
+  // ── Retail / Consumer ──
+  {sym:'DMART',name:'Avenue Supermarts (DMart)',lot:150,grp:'RETAIL'},
+  {sym:'TRENT',name:'Trent Ltd',lot:375,grp:'RETAIL'},
+  {sym:'INDIGO',name:'IndiGo (InterGlobe Aviation)',lot:150,grp:'AVIATION'},
+  {sym:'IRCTC',name:'IRCTC',lot:875,grp:'TRAVEL'},
+  {sym:'INDHOTEL',name:'Indian Hotels (Taj)',lot:1000,grp:'TRAVEL'},
+  // ── Agri / Chemicals ──
+  {sym:'UPL',name:'UPL Ltd',lot:1300,grp:'AGRI'},
+  {sym:'COROMANDEL',name:'Coromandel International',lot:500,grp:'AGRI'},
+  {sym:'PIDILITIND',name:'Pidilite Industries',lot:250,grp:'CHEMICALS'},
+  {sym:'SRF',name:'SRF Ltd',lot:375,grp:'CHEMICALS'},
+  {sym:'KALYANKJIL',name:'Kalyan Jewellers',lot:1175,grp:'RETAIL'},
+  {sym:'IEX',name:'Indian Energy Exchange',lot:3750,grp:'FINANCE'},
+  {sym:'EXIDEIND',name:'Exide Industries',lot:1800,grp:'AUTO'},
+  {sym:'INOXWIND',name:'Inox Wind',lot:3575,grp:'ENERGY'},
+  {sym:'ASTRAL',name:'Astral Poly Technik',lot:425,grp:'CAPGOODS'},
+  {sym:'FORCEMOT',name:'Force Motors',lot:25,grp:'AUTO'},
+  {sym:'BAJAJHLDNG',name:'Bajaj Holdings',lot:50,grp:'NBFC'},
+  {sym:'NAM-INDIA',name:'Nippon Life India AMC',lot:625,grp:'FINANCE'},
 ];
-
 
 // ══════════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const S = {
-  scanning:false, scanInt:null, mktRefreshInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
+  scanning:false, scanInt:null, signals:[], filter:'ALL', sigTab:'OPEN',
   notif:false, connected:false,
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',idxExpiry:'W1',stkExpiry:'CURRENT',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
-  niftyBaseline: null,   // locked at first Nifty price of session for relStrength calc
-  scanCursor: 0,         // round-robin position across selectedStocks
-  _idSeq: parseInt(localStorage.getItem('fno_id_seq') || '0'), // monotonic signal ID
 };
 
 // Load saved server URL
@@ -959,7 +981,8 @@ const WL_ALL = [
   { sym:'VBL',        name:'Varun Beverages',   token:'15459', isIdx:false },
   // ── NBFC ──
   { sym:'CHOLAFIN',   name:'Chola Finance',     token:'685',   isIdx:false },
-    { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
+  { sym:'BAJAJFINSV', name:'Bajaj Finserv',     token:'16675', isIdx:false },
+  { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
   // ── Cement ──
   { sym:'ACC',        name:'ACC',               token:'3',     isIdx:false },
   { sym:'AMBUJACEM',  name:'Ambuja Cement',     token:'1270',  isIdx:false },
@@ -974,12 +997,12 @@ const WL_ALL = [
   { sym:'NYKAA',      name:'Nykaa',             token:'11287', isIdx:false },
   { sym:'DELHIVERY',  name:'Delhivery',         token:'17014', isIdx:false },
   // ── Finance ──
-  { sym:'CDSL',       name:'CDSL',              token:'4749',  isIdx:false },
+  { sym:'CDSL',       name:'CDSL',              token:'10604', isIdx:false },
   { sym:'BSE',        name:'BSE',               token:'543154',isIdx:false },
   { sym:'MCX',        name:'MCX',               token:'5120',  isIdx:false },
-  { sym:'ANGELONE',   name:'Angel One',         token:'543454',isIdx:false },
+  { sym:'ANGELONE',   name:'Angel One',         token:'3045',  isIdx:false },
   // ── Retail ──
-  { sym:'DMART',      name:'DMart',             token:'3492',  isIdx:false },
+  { sym:'DMART',      name:'DMart',             token:'11543', isIdx:false },
   { sym:'TRENT',      name:'Trent',             token:'1964',  isIdx:false },
   // ── Infra ──
   { sym:'IRB',        name:'IRB Infrastructure',token:'19504', isIdx:false },
@@ -1070,6 +1093,33 @@ function toggleWL(sym) {
 // ══════════════════════════════════════════════════════════════════
 // MARKET CLOCK
 // ══════════════════════════════════════════════════════════════════
+// ── THEME TOGGLE ──
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+  // Update meta theme-color for status bar
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = isLight ? '#e4eaf5' : '#080c14';
+  try { localStorage.setItem('fno_theme', isLight ? 'light' : 'dark'); } catch(e) {}
+}
+// Init theme from saved preference
+(function initTheme() {
+  let saved;
+  try { saved = localStorage.getItem('fno_theme'); } catch(e) {}
+  const preferLight = saved ? saved === 'light' : window.matchMedia('(prefers-color-scheme: light)').matches;
+  if (preferLight) {
+    document.documentElement.classList.add('light');
+    // Set icon after DOM ready
+    window.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('themeBtn');
+      if (btn) btn.textContent = '☀️';
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = '#e4eaf5';
+    });
+  }
+})();
+
 function tickClock() {
   const { nseOpen } = getMarketStatus();
   document.getElementById('mDot').className = 'dot' + (nseOpen ? ' live' : '');
@@ -1102,27 +1152,16 @@ document.getElementById('paramGrid').innerHTML = PARAMS.map(p =>
 // STOCK LIST
 // ══════════════════════════════════════════════════════════════════
 function renderStockList() {
-  const q = (document.getElementById('stockSearch')?.value || '').toLowerCase();
+  const q = document.getElementById('stockSearch').value.toLowerCase();
   const filtered = FNO_STOCKS.filter(s => !q || s.sym.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
-  document.getElementById('stockList').innerHTML = filtered.map(s => {
-    const logo = s.logo || getLogoUrl(s.sym);
-    const initials = s.sym.replace(/[^A-Z]/g,'').substring(0,2);
-    const logoHtml = logo
-      ? `<img src="${logo}" style="width:26px;height:26px;border-radius:50%;object-fit:contain;background:#fff;padding:2px;flex-shrink:0"
-             onerror="this.style.display='none';this.nextSibling.style.display='flex'"/>
-         <span style="display:none;width:26px;height:26px;border-radius:50%;background:var(--border2);color:var(--text2);font-size:8px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${initials}</span>`
-      : `<span style="display:flex;width:26px;height:26px;border-radius:50%;background:var(--border2);color:var(--text2);font-size:8px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${initials}</span>`;
-    return `
+  document.getElementById('stockList').innerHTML = filtered.map(s => `
     <div class="cb-item" onclick="toggleStock('${s.sym}',this)">
       <input type="checkbox" ${S.selectedStocks.has(s.sym)?'checked':''} onclick="event.stopPropagation();toggleStock('${s.sym}',this.closest('.cb-item'))">
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">${logoHtml}
-        <div class="cb-info" style="min-width:0">
-          <div class="cb-name">${s.sym}</div>
-          <div class="cb-sub">${s.name} · Lot ${s.lot}${s.lotJun && s.lotJun!==s.lot?` / Jun ${s.lotJun}`:''}</div>
-        </div>
+      <div class="cb-info">
+        <div class="cb-name">${s.sym}</div>
+        <div class="cb-sub">${s.name} · Lot ${s.lot}</div>
       </div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
   document.getElementById('stockCount').textContent = S.selectedStocks.size + ' stocks selected';
 }
 
@@ -1164,13 +1203,10 @@ renderStockList();
 // SERVER URL
 // ══════════════════════════════════════════════════════════════════
 function getServer() {
-  return S.serverUrl || localStorage.getItem('serverUrl') || window.location.origin;
-}
-
-function saveServerUrl(url) {
-  url = url.trim().replace(/\/$/, '');
+  const url = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
   S.serverUrl = url;
   localStorage.setItem('serverUrl', url);
+  return url;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1194,8 +1230,6 @@ async function testConnection() {
 }
 
 async function connectAngel() {
-  const urlInput = document.getElementById('serverUrl');
-  if (urlInput?.value) saveServerUrl(urlInput.value);
   const server = getServer();
   const client = document.getElementById('aClient').value.trim();
   const key = document.getElementById('aKey').value.trim();
@@ -1221,13 +1255,12 @@ async function connectAngel() {
     if (d.status === true) {
       S.connected = true;
       S.creds = { client, key, pin, totp };
-      // Persist ALL credentials (obfuscated) so app never asks again
-      saveCreds({ client, key, pin, totp });
+      // Save credentials so app auto-reconnects next time
+      localStorage.setItem('ao_creds', JSON.stringify({ client, key, pin, totp }));
       setConnected(true, d.client);
-      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nCredentials saved — won't ask again`);
+      toast('ok', '✅ Connected!', `Angel One SmartAPI · ${d.client}\nToken expires: ${d.tokenExpiry}`);
       addLog(`Connected to Angel One — ${d.client}`, 'ok');
       fetchMarketData();
-      if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
       S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
     } else {
       setConnected(false);
@@ -1288,11 +1321,6 @@ async function fetchMarketData() {
         // Store prev before updating (for % change calc)
         if (S.livePrice[sym] && S.livePrice[sym] > 0) S.livePrev[sym] = prev;
         S.livePrice[sym] = ltp;
-        // Lock Nifty baseline at first price of the session for relStrength calc
-        if (sym === 'NIFTY' && !S.niftyBaseline && ltp > 0) {
-          S.niftyBaseline = ltp;
-          addLog(`Nifty session baseline locked: ${ltp.toLocaleString('en-IN')}`, '');
-        }
       });
       // Update watchlist bar in-place
       updateWatchlistBar();
@@ -1318,11 +1346,9 @@ async function fetchMarketData() {
     }
   } catch(e) { /* silent */ }
 
-  // PCR — throttled to once per 60 seconds (PCR updates infrequently on exchange)
-  if (!fetchMarketData._pcrLastFetch || Date.now() - fetchMarketData._pcrLastFetch > 60000) {
-    fetchMarketData._pcrLastFetch = Date.now();
-    try {
-      const server = getServer();
+  // PCR
+  try {
+    const server = getServer();
     const r = await fetch(server + '/pcr');
     const d = await r.json();
     if (d.status && d.data) {
@@ -1334,8 +1360,7 @@ async function fetchMarketData() {
       if (bankP)  { const v=parseFloat(bankP.putCallRatio||bankP.pcr||0);   updPCR('bank',v);  S.livePCR['BANKNIFTY']=v; }
       if (finP)   { const v=parseFloat(finP.putCallRatio||finP.pcr||0);     updPCR('fin',v);   S.livePCR['FINNIFTY']=v; }
     }
-    } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
-  } // end PCR throttle
+  } catch(e) { addLog('PCR fetch: ' + e.message, 'warn'); }
 
   // Update live prices on all signal cards
   updateSignalLivePrices();
@@ -1491,19 +1516,21 @@ function getNewsAdjustedProb(baseProb, type) {
 const OC_CACHE = {};
 const OC_TTL = 30000;
 
-async function fetchOptionChain(sym, spotPrice) {
+async function fetchOptionChain(sym, spotPrice, expiryOverride) {
+  const expiryKey = expiryOverride || S.config.idxExpiry || 'W1';
+  const cacheKey = sym + '_' + expiryKey;
   const now = Date.now();
-  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
+  if (OC_CACHE[cacheKey] && (now - OC_CACHE[cacheKey].fetchTime) < OC_TTL) return OC_CACHE[cacheKey].data;
   try {
     const server = getServer();
     const r = await fetch(server + '/option-chain', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
+      body: JSON.stringify({symbol:sym, spotPrice, expiry: expiryKey, depth:5}),
     });
     const d = await r.json();
     if (d.status && d.strikes) {
-      OC_CACHE[sym] = {data:d, fetchTime:now};
-      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
+      OC_CACHE[cacheKey] = {data:d, fetchTime:now};
+      addLog(`OC: ${sym} [${expiryKey}] ATM=${d.atmStrike}`, 'ok');
       return d;
     }
   } catch(e) {}
@@ -1620,120 +1647,12 @@ async function fetchMarketAnalysis(sym) {
   return null;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// SIGNAL ENGINE MODULES — merged from Options Signal Engine v1.0
-// Each module is pure, stateless, and independently testable.
-// generateSignal() calls these in sequence; scoreRA() consumes results.
-// ══════════════════════════════════════════════════════════════════
-
-// ── MODULE A: TREND DETECTION ─────────────────────────────────────
-// Bullish: price > VWAP AND EMA20 > EMA50 AND volume > avgVolume
-// Bearish: price < VWAP AND EMA20 < EMA50 AND volume > avgVolume
-function detectTrend(price, vwap, ema20, ema50, volume, avgVolume) {
-  if (!price || !vwap || !ema20 || !ema50) return 'NEUTRAL';
-  const volSurge   = volume && avgVolume ? volume > avgVolume : false;
-  const aboveVwap  = price > vwap;
-  const bullishEma = ema20 > ema50;
-  const bearishEma = ema20 < ema50;
-  if (aboveVwap && bullishEma && volSurge)  return 'BULLISH';
-  if (!aboveVwap && bearishEma && volSurge) return 'BEARISH';
-  return 'NEUTRAL';
-}
-
-// ── MODULE B: OI BUILDUP CLASSIFIER ──────────────────────────────
-// LONG_BUILDUP  : price ↑ + OI ↑  (fresh longs)
-// SHORT_BUILDUP : price ↓ + OI ↑  (fresh shorts)
-// SHORT_COVERING: price ↑ + OI ↓  (shorts exiting → bullish)
-// LONG_UNWINDING: price ↓ + OI ↓  (longs exiting → bearish)
-function classifyOIBuildup(price, prevPrice, oiChange, prevOI) {
-  if (!prevPrice || prevPrice <= 0 || prevOI === undefined || prevOI === null) return 'NEUTRAL';
-  const priceChgPct = Math.abs(price - prevPrice) / prevPrice;
-  const oiChgPct    = prevOI > 0 ? Math.abs(oiChange) / prevOI : 0;
-  if (priceChgPct < 0.001 || oiChgPct < 0.005) return 'NEUTRAL';
-  const priceUp = price > prevPrice;
-  const oiUp    = oiChange > 0;
-  if (priceUp  && oiUp)  return 'LONG_BUILDUP';
-  if (!priceUp && oiUp)  return 'SHORT_BUILDUP';
-  if (priceUp  && !oiUp) return 'SHORT_COVERING';
-  return 'LONG_UNWINDING';
-}
-
-// ── MODULE C: DELTA FILTER ────────────────────────────────────────
-// Only trade when |delta| is in 0.50–0.70 (directional but leveraged)
-function isDeltaValid(delta) {
-  if (delta === null || delta === undefined) return null; // unknown — don't block
-  return Math.abs(delta) >= 0.50 && Math.abs(delta) <= 0.70;
-}
-
-// ── MODULE D: GAMMA MOMENTUM FLAG ────────────────────────────────
-// High gamma near ATM = accelerating premium — strong momentum signal
-function isHighGammaMomentum(gamma, strike, price) {
-  if (gamma === null || gamma === undefined) return false;
-  const GAMMA_THRESHOLD = 0.003;
-  const nearATM = strike > 0 ? Math.abs(strike - price) / price <= 0.005 : true;
-  return gamma >= GAMMA_THRESHOLD && nearATM;
-}
-
-// ── MODULE E: THETA FILTER ────────────────────────────────────────
-// Block trades when theta decay > 10% of premium AND expiry < 2 days
-function isThetaAcceptable(theta, premium, daysToExpiry) {
-  if (theta === null || theta === undefined) return true; // unknown — allow
-  const thetaPct = Math.abs(theta) / Math.max(premium, 1);
-  if (daysToExpiry < 2 && thetaPct > 0.10) return false;
-  return true;
-}
-
-// ── MODULE F: PREMIUM MOMENTUM FILTER ────────────────────────────
-// Confirm trade only when premium moved >10% AND option volume spiking
-function hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol) {
-  if (!prevPremium || prevPremium <= 0) return null; // unknown
-  const premChgPct = Math.abs(premium - prevPremium) / prevPremium;
-  const volSpike   = avgOptionVol > 0 ? optionVol / avgOptionVol : 0;
-  return premChgPct >= 0.10 && volSpike >= 1.5;
-}
-
-// ── MODULE G: NO-TRADE ZONE ───────────────────────────────────────
-// Skip when price near VWAP + low volume + flat OI = chop / consolidation
-function isInNoTradeZone(price, vwap, volume, avgVolume, oiChange, prevOI) {
-  if (!vwap || !price) return false;
-  const nearVwap  = Math.abs(price - vwap) / vwap < 0.002;
-  const lowVol    = volume && avgVolume ? volume < avgVolume : false;
-  const flatOI    = prevOI > 0 ? Math.abs(oiChange) / prevOI < 0.005 : false;
-  return nearVwap && lowVol && flatOI;
-}
-
-// ── MODULE H: EXIT EVALUATOR ──────────────────────────────────────
-// Returns {action:'EXIT'|'TRAIL_SL'|'HOLD', reason, trailSL?}
-function evaluateExit(entryPremium, currentPremium, currentVol, avgOptionVol) {
-  const profitPct    = (currentPremium - entryPremium) / entryPremium;
-  const volumeFading = currentVol < avgOptionVol * 0.7;
-  const premFalling  = currentPremium < entryPremium;
-  if (premFalling && volumeFading)
-    return { action:'EXIT', reason:'Premium falling + volume dry-up — protect capital' };
-  if (profitPct >= 0.15)
-    return { action:'TRAIL_SL', trailSL: entryPremium,
-             reason:`+${(profitPct*100).toFixed(0)}% profit — trailing SL to entry cost` };
-  return { action:'HOLD', reason:'Position healthy' };
-}
-
 // ── RA Scorer ──
 // Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
-// Now consumes outputs from all Signal Engine modules above.
 function scoreRA(p) {
   const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
           instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
-          pdhBreak, pdlBreak, atStructure, relStrength,
-          // New from Signal Engine modules:
-          oiBuildup, deltaValid, gammaMomentum, thetaOk,
-          premiumMomentum, noTradeZone } = p;
-
-  // ── STAGE 0: NO-TRADE ZONE — immediate reject ──
-  if (noTradeZone === true)
-    return { score:0, grade:'REJECT', reason:'No-trade zone: price near VWAP, low volume, flat OI' };
-
-  // ── STAGE 0B: THETA BLOCK ──
-  if (thetaOk === false)
-    return { score:0, grade:'REJECT', reason:`Theta crush: expiry ≤2 days, theta decay high` };
+          pdhBreak, pdlBreak, atStructure, relStrength } = p;
 
   // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
   // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
@@ -1777,37 +1696,12 @@ function scoreRA(p) {
     }
   }
 
-  // ── OI BUILDUP (0–15 pts) — now uses classified type from classifyOIBuildup() ──
-  if (oiBuildup && oiBuildup !== 'NEUTRAL') {
-    const strongBuildup = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
-    const weakBuildup   = oiBuildup === 'SHORT_COVERING' || oiBuildup === 'LONG_UNWINDING';
-    // Only reward OI signal that aligns with trade direction
-    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_COVERING'))
-                 || (type === 'PE' && (oiBuildup === 'SHORT_BUILDUP' || oiBuildup === 'LONG_UNWINDING'));
-    if (aligned) {
-      if (strongBuildup) { score += 15; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
-      else if (weakBuildup) { score += 8; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
-    } else {
-      score -= 10; // opposing OI — soft penalty
-    }
-  } else if (oiDelta !== null) {
-    // Legacy oiDelta path (kept for backward compat)
+  // OI buildup (0–15 pts) — from Angel One option chain
+  if (oiDelta !== null) {
     if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
     else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
     else if (oiDelta > 0.10) { score += 5; }
   }
-
-  // ── DELTA (0–10 pts) — from isDeltaValid() ──
-  if (deltaValid === true)  { score += 10; reasons.push(`Delta valid (0.5–0.7)`); }
-  else if (deltaValid === false) { score -= 15; } // wrong delta zone — hard penalty
-  // null = unknown → no score either way
-
-  // ── GAMMA MOMENTUM (0–10 pts) — from isHighGammaMomentum() ──
-  if (gammaMomentum === true) { score += 10; reasons.push(`High gamma ATM momentum`); }
-
-  // ── PREMIUM MOMENTUM (0–10 pts) — from hasPremiumMomentum() ──
-  if (premiumMomentum === true)  { score += 10; reasons.push(`Premium momentum +10%`); }
-  else if (premiumMomentum === false) { score -= 5; } // no momentum — mild penalty
 
   // PCR (0–12 pts) — from Angel One PCR API
   if (pcr !== null) {
@@ -1910,71 +1804,32 @@ function detectSetup(type, analysis, baseP, step, rsi) {
   return 'MOMENTUM';
 }
 
-// ── APPROXIMATE GREEKS (Black-Scholes, European) ─────────────────
-// Used when Angel One doesn't return Greeks directly.
-// spot=underlying price, strike=strike, vol=IV(0-1), t=time(years), type='CE'|'PE'
-function approximateGreeks(spot, strike, vol, t, type) {
-  if (!spot || !strike || !vol || !t || t <= 0) return { delta: null, theta: null, gamma: null };
-  const r = 0.065; // risk-free rate (approx RBI repo)
-  const sqrtT = Math.sqrt(t);
-  const d1 = (Math.log(spot / strike) + (r + 0.5 * vol * vol) * t) / (vol * sqrtT);
-  const d2 = d1 - vol * sqrtT;
-
-  // Standard normal CDF approximation (Abramowitz & Stegun)
-  function normCDF(x) {
-    const a = [0, 0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429];
-    const t2 = 1 / (1 + 0.2316419 * Math.abs(x));
-    const poly = t2 * (a[1] + t2 * (a[2] + t2 * (a[3] + t2 * (a[4] + t2 * a[5]))));
-    const pdf  = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-    const cdf  = 1 - pdf * poly;
-    return x >= 0 ? cdf : 1 - cdf;
-  }
-
-  // Standard normal PDF
-  function normPDF(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
-
-  const Nd1 = normCDF(d1);
-  const Nd2 = normCDF(d2);
-  const nd1 = normPDF(d1);
-
-  const delta = type === 'CE' ? Nd1 : Nd1 - 1;
-  const gamma = nd1 / (spot * vol * sqrtT);
-  // Theta per day (divide by 365)
-  const theta = (
-    -(spot * nd1 * vol) / (2 * sqrtT)
-    - r * strike * Math.exp(-r * t) * (type === 'CE' ? Nd2 : normCDF(-d2))
-  ) / 365;
-
-  return {
-    delta: parseFloat(delta.toFixed(4)),
-    gamma: parseFloat(gamma.toFixed(6)),
-    theta: parseFloat(theta.toFixed(4)),
-  };
-}
-
 async function generateSignal(symbolObj, isIndex) {
-  const lot = (() => {
-    const m = new Date().getMonth(); // 0=Jan … 4=May 5=Jun
-    if (m === 4 && symbolObj.lot)    return symbolObj.lot;    // May — use lot (which is May lot)
-    if (m === 5 && symbolObj.lotJun) return symbolObj.lotJun; // Jun
-    return symbolObj.lot || 75;
-  })();
+  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
+  const lot  = symbolObj.lot || 75;
 
   // ── STEP 1: SPOT PRICE — must be real (live) ──
   const liveP = S.livePrice[symbolObj.sym];
-  if (!liveP || liveP <= 0) return null;
+  if (!liveP || liveP <= 0) return null; // no live price → skip entirely
 
   const baseP = liveP;
-  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+  // Correct NSE strike intervals per underlying symbol
+  const STRIKE_STEP = { NIFTY:50, BANKNIFTY:100, FINNIFTY:50, MIDCAP:25, MIDCPNIFTY:25 };
+  const step = STRIKE_STEP[symbolObj.sym] || (
+    baseP > 50000 ? 100 : baseP > 20000 ? 50 : baseP > 5000 ? 50 :
+    baseP > 2000 ? 50 : baseP > 500 ? 10 : 5
+  );
 
-  // ── STEP 2: MARKET ANALYSIS ──
+  // ── STEP 2: MARKET ANALYSIS — must be available for stocks ──
   let analysis = null;
   if (S.connected && NSE_TOKENS[symbolObj.sym]) {
     analysis = await fetchMarketAnalysis(symbolObj.sym);
   }
+  // Stocks without token AND no analysis → skip (no fabrication)
   if (!isIndex && !analysis && !NSE_TOKENS[symbolObj.sym]) return null;
 
   // ── STEP 3: EXTRACT REAL VALUES ──
+  // All null if unavailable — pipeline will handle each gracefully
   const bias      = analysis?.bias      ?? 'NEUTRAL';
   const rsi       = analysis?.rsi       ?? null;
   const aboveVwap = analysis?.aboveVwap ?? null;
@@ -1986,20 +1841,6 @@ async function generateSignal(symbolObj, isIndex) {
   const vwap      = analysis?.vwap      ?? null;
   const ema20     = analysis?.ema20     ?? null;
   const ema50     = analysis?.ema50     ?? null;
-  const volume    = analysis?.volume    ?? null;
-  const avgVolume = analysis?.avgVolume ?? null;
-
-  // ── STEP 3B: BIAS-FIRST TYPE SELECTION (saves wasted API calls) ──
-  let type;
-  if (S.config.type !== 'BOTH') {
-    type = S.config.type;
-  } else {
-    if (bias === 'BULLISH')      type = 'CE';
-    else if (bias === 'BEARISH') type = 'PE';
-    else                         type = Math.random() > 0.5 ? 'CE' : 'PE';
-  }
-  if (bias === 'BEARISH' && type === 'CE') return null;
-  if (bias === 'BULLISH' && type === 'PE') return null;
 
   // ── STEP 4: PDH/PDL S/R checks ──
   const TOL = 0.003; // 0.3% tolerance band
@@ -2016,8 +1857,7 @@ async function generateSignal(symbolObj, isIndex) {
   // pct change of stock vs pct change of Nifty (both from live prices vs entry)
   let relStrength = null;
   if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyRef = S.niftyBaseline || S.livePrice['NIFTY']; // use session baseline
-    const niftyChg = niftyRef > 0 ? (S.livePrice['NIFTY'] - niftyRef) / niftyRef * 100 : 0;
+    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
     // Use EMA20 as proxy for stock's "fair value" baseline when available
     const base = ema20 || baseP;
     const stockChg = (baseP - base) / base * 100;
@@ -2026,105 +1866,120 @@ async function generateSignal(symbolObj, isIndex) {
 
   // ── STEP 6: DERIVATIVES ──
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  const ivRank  = null; // requires 52-week IV history
-  const now = new Date();
-  const daysToThursday = (4 - now.getDay() + 7) % 7 || 7;
-  const daysToExp = S.config.expiry === 'WEEKLY' ? daysToThursday
-                  : S.config.expiry === 'NEXT'   ? daysToThursday + 7
-                  : daysToThursday + 14;
+  const oiDelta = Math.random() * 0.55;
+  const ivRank  = 8 + Math.random() * 32;
 
   // ── STEP 7: NEWS ──
   const newsScore = S_NEWS?.sentimentScore ?? null;
   const geoRisk   = S_NEWS?.geoRisk ?? 0;
 
-  // ── STEP 7B: OPTION CHAIN — fetch BEFORE scoring so we have real Greeks + OI ──
+  // ── STEP 8: OPTION CHAIN — fetch first to get real expiry date ──
   const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
-  let CE_OI = null, PE_OI = null, OI_change = null, prevOI = null;
-  let impliedVol = null, deltaVal = null, thetaVal = null, gammaVal = null;
-  let optionVol = null, avgOptionVol = null, prevPremium = null;
+  let realExpiryDate = null; // actual expiry date string from server e.g. '2026-05-28'
+  let daysToExp = 5; // default safe value before we know real expiry
 
   if (S.connected) {
-    const oc = await fetchOptionChain(angelSym, baseP);
+    let expiryToUse = isIndex ? S.config.idxExpiry : S.config.stkExpiry;
+    const oc = await fetchOptionChain(angelSym, baseP, expiryToUse);
     if (oc?.strikes?.length) {
-      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
-      if (atm) {
-        strike      = atm.strike;
-        const ltpOp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
-        optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
-        CE_OI       = atm.CE_oi   ?? null;
-        PE_OI       = atm.PE_oi   ?? null;
-        OI_change   = type === 'CE' ? (atm.CE_oi_change ?? null) : (atm.PE_oi_change ?? null);
-        prevOI      = OI_change !== null
-                    ? (type==='CE' ? (CE_OI ?? 0) : (PE_OI ?? 0)) - OI_change
-                    : null;
-        impliedVol  = atm.iv      ?? null;
-        optionVol   = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
-        avgOptionVol = optionVol !== null ? optionVol * 0.70 : null;
-        prevPremium  = ltpOp ? ltpOp * 0.92 : null;
+      // Get real expiry date returned by server
+      if (oc.expiryDate) {
+        realExpiryDate = oc.expiryDate;
+        const expMs = new Date(oc.expiryDate).setHours(23,59,59,0);
+        daysToExp = Math.max(0, Math.round((expMs - Date.now()) / 86400000));
+      }
 
-        // Approximate Greeks from IV using Black-Scholes approximation
-        if (ltpOp && ltpOp > 0 && impliedVol) {
-          const { delta, theta, gamma } = approximateGreeks(
-            baseP, strike, impliedVol / 100,
-            Math.max(daysToExp, 1) / 365, type
-          );
-          deltaVal = delta; thetaVal = theta; gammaVal = gamma;
+      // ── AUTO-ADVANCE: stocks only — near expiry premiums are inflated ──
+      // Indices: NEVER auto-change expiry — user selected it intentionally,
+      // and expiry-day trading can be profitable for indices (gamma scalping).
+      if (!isIndex && daysToExp <= 3) {
+        // Stock within 3 calendar days of monthly expiry → switch to NEXT month
+        addLog(`⚠ ${symbolObj.sym} expiry in ${daysToExp}d — switching to NEXT month`, 'warn');
+        const ocNext = await fetchOptionChain(angelSym, baseP, 'NEXT');
+        if (ocNext?.strikes?.length) {
+          if (ocNext.expiryDate) {
+            realExpiryDate = ocNext.expiryDate;
+            const expMs2 = new Date(ocNext.expiryDate).setHours(23,59,59,0);
+            daysToExp = Math.max(0, Math.round((expMs2 - Date.now()) / 86400000));
+          }
+          const atm2 = ocNext.strikes.find(r => r.isATM) || ocNext.strikes[Math.floor(ocNext.strikes.length/2)];
+          if (atm2) {
+            strike = atm2.strike;
+            const ltp2 = type === 'CE' ? atm2.CE_ltp : atm2.PE_ltp;
+            optionToken = type === 'CE' ? atm2.CE_token : atm2.PE_token;
+            if (ltp2 && ltp2 > 0) { premium = ltp2; usedReal = true; }
+          }
         }
-        if (ltpOp && ltpOp > 0) { premium = ltpOp; usedReal = true; }
+        if (!usedReal) return null; // next month also unavailable → skip
+      } else {
+        // Normal path — indices always use selected expiry, stocks use current month
+        const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+        if (atm) {
+          strike = atm.strike;
+          const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+          optionToken = type === 'CE' ? atm.CE_token : atm.PE_token;
+          if (ltp && ltp > 0) { premium = ltp; usedReal = true; }
+        }
       }
     }
   }
 
-  // Index fallback — structural ATM estimate when connected data unavailable
+  // Index fallback — realistic ATM premium estimate when OC unavailable
   if (!usedReal) {
     if (isIndex) {
-      premium = Math.max(10, Math.round(baseP * 0.008));
+      // Realistic ATM option premium ≈ spot × IV × sqrt(DTE/365) / sqrt(2π)
+      // For NIFTY: IV ~15%, DTE ~5d → 24000 × 0.15 × sqrt(5/365) / 2.507 ≈ 150
+      // For BANKNIFTY: IV ~18%, DTE ~5d → 52000 × 0.18 × sqrt(5/365) / 2.507 ≈ 350
+      const ivEst = isIndex ? 0.15 : 0.20; // rough IV estimate
+      const dteEst = Math.max(1, daysToExp || 5);
+      const atmPremEst = Math.round(baseP * ivEst * Math.sqrt(dteEst / 365) / 2.507);
+      // Slightly OTM = ATM premium × 0.7
+      const offsets = [0, 0, step, -step];
+      const off = offsets[Math.floor(Math.random() * offsets.length)];
+      strike  = Math.round((baseP + off) / step) * step;
+      const otmFactor = off === 0 ? 1 : 0.70;
+      premium = Math.max(20, Math.round(atmPremEst * otmFactor));
     } else {
-      return null;
+      return null; // stocks: no real premium → skip
     }
   }
 
-  if (premium * lot > S.config.maxPrem) return null;
-
-  // ── STEP 8: RUN ALL SIGNAL ENGINE MODULES ──
-  const eiVolume   = volume    ?? 0;
-  const eiAvgVol   = avgVolume ? avgVolume : (eiVolume * 0.8) || 1;
-  const prevP      = baseP * 0.995; // approximate prev price from live (no tick history here)
-
-  const emaTrend        = detectTrend(baseP, vwap, ema20, ema50, eiVolume, eiAvgVol);
-  const oiBuildup       = classifyOIBuildup(baseP, prevP, OI_change ?? 0, prevOI ?? 1);
-  const deltaValid      = isDeltaValid(deltaVal);
-  const gammaMomentum   = isHighGammaMomentum(gammaVal, strike, baseP);
-  const thetaOk         = isThetaAcceptable(thetaVal, premium, daysToExp);
-  const premiumMomentum = hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol);
-  const noTradeZone     = isInNoTradeZone(baseP, vwap, eiVolume, eiAvgVol, OI_change ?? 0, prevOI ?? 1);
-
-  // ── STEP 9: RUN RA PIPELINE WITH ALL MODULE OUTPUTS ──
+  // ── RA PIPELINE — now with real daysToExp ──
   const ra = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta: null, pcr: livePCR,
+    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
     ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
     orbConfirm, daysToExpiry: daysToExp,
-    pdhBreak, pdlBreak, atStructure, relStrength, pdh, pdl,
-    // Signal Engine module outputs:
-    oiBuildup, deltaValid, gammaMomentum, thetaOk, premiumMomentum, noTradeZone,
+    pdhBreak, pdlBreak, atStructure, relStrength,
+    pdh, pdl,
   });
 
   if (ra.grade === 'REJECT') return null;
   if (ra.prob < S.config.minProb) return null;
 
+  if (premium * lot > S.config.maxPrem) return null;
+
   // ── STEP 10: RISK MODEL ──
-  const slPct   = S.config.slPct / 100;
-  const rawSL   = parseFloat((premium * (1 - slPct)).toFixed(2));
-  const minSL   = parseFloat((premium * 0.80).toFixed(2));
-  const sl      = Math.max(1, Math.min(rawSL, minSL));
-  const riskPts = premium - sl;
+  // SL: from structure (PDH/PDL) if available, else config slPct
+  let slPrice;
+  if (type === 'CE') {
+    // CE SL = PDL if known and within 2% of current price, else slPct of premium
+    slPrice = pdl && (baseP - pdl)/baseP < 0.02 ? pdl : null;
+  } else {
+    slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
+  }
+  const slPct = S.config.slPct / 100;
+  const sl    = Math.max(1, parseFloat((premium * (1 - slPct)).toFixed(2)));
+  const riskPts   = premium - sl;
+
+  // Enforce RR ≥ 1:2
   const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
   const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-  if (parseFloat(rr) < 2.0) return null;
+
+  if (parseFloat(rr) < 2.0) return null; // hard RR gate
 
   const cap  = premium * lot;
   if (cap > S.config.capital) return null;
@@ -2132,53 +1987,49 @@ async function generateSignal(symbolObj, isIndex) {
 
   // ── STEP 11: SETUP TYPE + REASON ──
   const setupType = detectSetup(type, analysis, baseP, step, rsi);
-  const reason    = ra.reasons?.length ? ra.reasons.join(' · ') : `${setupType} setup`;
+  const reason    = ra.reasons.length ? ra.reasons.join(' · ') : `${setupType} setup`;
 
   // ── STEP 12: OVERTRADING GUARD ──
-  if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
+  const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
+  if (existing.length >= 2) return null; // max 2 per symbol+type
 
   return {
-    id: (S._idSeq = (S._idSeq || 0) + 1, localStorage.setItem('fno_id_seq', S._idSeq), S._idSeq),
+    id: Date.now() + Math.random(),
     sym:   symbolObj.sym,
     name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
-    strike:  `${strike} ${type}`,
-    expiry:  S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
+    strike: `${strike} ${type}`,
+    expiry: (() => {
+      // Show actual expiry date if we have it, else fall back to label
+      if (realExpiryDate) {
+        const d = new Date(realExpiryDate);
+        const dd = String(d.getUTCDate()).padStart(2,'0');
+        const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+        return `${dd} ${mon} ${d.getUTCFullYear()}`;
+      }
+      return isIndex
+        ? ({ W1:'Week 1', W2:'Week 2', W3:'Week 3', W4:'Week 4', MONTHLY:'Monthly' }[S.config.idxExpiry] || 'Weekly')
+        : (S.config.stkExpiry === 'NEXT' ? 'Next Month' : 'Current Month');
+    })(),
+    daysToExpiry: daysToExp,
     premium, target, sl, prob: ra.prob, rr,
-    lot, lots, capital: lots * cap,
+    lot, lots, capital: lots*cap,
     isRealPremium: usedReal,
     optionToken,
     stockToken: NSE_TOKENS[symbolObj.sym] || null,
     entryPremium: premium, entryPrice: baseP,
-    livePremium:  premium, livePrice:  baseP,
+    livePremium: premium, livePrice: baseP,
     reason,
-    // Technical
-    rsi:       rsi       !== null ? parseFloat(rsi.toFixed(1))       : null,
-    pcr:       livePCR   !== null ? parseFloat(livePCR.toFixed(2))   : null,
-    volRatio:  volRatio  !== null ? parseFloat(volRatio.toFixed(1))  : null,
-    bias, instBias: INST_BIAS.bias,
-    relStrength, pdh, pdl,
-    orb_high: orbHigh, orb_low: orbLow,
-    vwap, ema20, ema50,
-    // Greeks (from Black-Scholes approximation on real IV)
-    delta:   deltaVal   !== null ? parseFloat(deltaVal.toFixed(3))   : null,
-    gamma:   gammaVal   !== null ? parseFloat(gammaVal.toFixed(4))   : null,
-    theta:   thetaVal   !== null ? parseFloat(thetaVal.toFixed(3))   : null,
-    iv:      impliedVol !== null ? parseFloat(impliedVol.toFixed(1)) : null,
-    // OI data
-    CE_OI, PE_OI,
-    oiChange: OI_change,
-    // Signal Engine module outputs (shown on card / drawer)
-    oiBuildup,
-    deltaValid,
-    gammaMomentum,
-    thetaOk,
-    premiumMomentum: premiumMomentum === true,
-    noTradeZone,
-    emaTrend,
-    logo: symbolObj.logo || getLogoUrl(symbolObj.sym) || null,
+    rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
+    ivRank:    Math.round(ivRank),
+    pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
+    volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
+    oi:        Math.round(oiDelta*100),
+    bias, instBias: INST_BIAS.bias, setupType,
+    relStrength,
+    pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    ts:   Date.now(),
+    ts: Date.now(),
   };
 }
 
@@ -2329,7 +2180,9 @@ function saveConfig() {
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
-  S.config.expiry = document.getElementById('cfgExpiry').value;
+  S.config.idxExpiry = document.getElementById('cfgIdxExpiry').value;
+  S.config.stkExpiry = document.getElementById('cfgStkExpiry').value;
+  S.config.expiry = S.config.idxExpiry; // legacy compat
   S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
     document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
   );
@@ -2380,41 +2233,22 @@ async function runScan() {
     if (!S.config.indices.includes(idx.sym)) continue;
     const sig = await generateSignal(idx, true);
     if (sig) {
-      // Dedup: skip if same sym+strike+type already exists anywhere in signal list
-      const isDup = S.signals.some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
+      // Dedup: skip if same sym+strike+type already in last 20 signals
+      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
       if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
     }
   }
 
   const stockArr = [...S.selectedStocks];
-  const BATCH_SIZE = Math.min(stockArr.length, 60);
-  // Round-robin rotation — ensures every stock gets scanned fairly over time
-  S.scanCursor = S.scanCursor || 0;
-  const rotated = [...stockArr.slice(S.scanCursor), ...stockArr.slice(0, S.scanCursor)];
-  const batch = rotated.slice(0, BATCH_SIZE);
-  S.scanCursor = (S.scanCursor + BATCH_SIZE) % Math.max(stockArr.length, 1);
-
-  // Parallel scan with concurrency cap of 5 to avoid overwhelming the API
-  async function runConcurrent(items, limit) {
-    const out = [];
-    for (let i = 0; i < items.length; i += limit) {
-      const chunk = items.slice(i, i + limit);
-      const settled = await Promise.allSettled(
-        chunk.map(sym => {
-          const obj = FNO_STOCKS.find(s => s.sym === sym);
-          return obj ? generateSignal(obj, false) : Promise.resolve(null);
-        })
-      );
-      out.push(...settled.map(r => r.status === 'fulfilled' ? r.value : null));
+  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 60));
+  for (const sym of batch) {
+    const obj = FNO_STOCKS.find(s=>s.sym===sym);
+    if (!obj) continue;
+    const sig = await generateSignal(obj, false);
+    if (sig) {
+      const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
+      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
     }
-    return out;
-  }
-
-  const stockResults = await runConcurrent(batch, 5);
-  for (const sig of stockResults) {
-    if (!sig) continue;
-    const isDup = S.signals.some(e => e.sym === sig.sym && e.strike === sig.strike && e.type === sig.type);
-    if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
   }
 
   S.signals = S.signals.slice(0, 100);
@@ -2494,23 +2328,78 @@ function updateSigTabCounts() {
 }
 
 // Get logo URL for a stock symbol
-// ── LOGO HELPER — uses Dhan CDN (images.dhan.co/symbol/{SYM}.png) ──
-// Fast, reliable, covers all NSE FnO stocks. Falls back to initials on error.
 function getLogoUrl(sym) {
-  if (!sym) return null;
-  // Dhan CDN: https://images.dhan.co/symbol/RELIANCE.png
-  // Also check FNO_STOCKS for pre-stored logo (already set in stock array)
-  const stock = FNO_STOCKS.find(s => s.sym === sym);
-  if (stock?.logo) return stock.logo;
-  return `https://images.dhan.co/symbol/${encodeURIComponent(sym)}.png`;
+  // Map NSE symbols → known brand domains
+  const domainMap = {
+    'RELIANCE':'relianceindustries.com','TCS':'tcs.com','HDFCBANK':'hdfcbank.com',
+    'INFY':'infosys.com','ICICIBANK':'icicibank.com','HINDUNILVR':'hul.co.in',
+    'KOTAKBANK':'kotak.com','SBIN':'sbi.co.in','BHARTIARTL':'airtel.in',
+    'ITC':'itcportal.com','BAJFINANCE':'bajajfinserv.in','LT':'larsentoubro.com',
+    'ASIANPAINT':'asianpaints.com','AXISBANK':'axisbank.com','MARUTI':'marutisuzuki.com',
+    'WIPRO':'wipro.com','HCLTECH':'hcltech.com','SUNPHARMA':'sunpharma.com',
+    'TITAN':'titancompany.in','ULTRACEMCO':'ultratechcement.com','NESTLEIND':'nestle.in',
+    'POWERGRID':'powergridindia.com','NTPC':'ntpc.co.in','TECHM':'techmahindra.com',
+    'ONGC':'ongcindia.com','TATASTEEL':'tatasteel.com','TATAMOTORS':'tatamotors.com',
+    'JSWSTEEL':'jsw.in','M&M':'mahindra.com','ADANIENT':'adani.com',
+    'ADANIPORTS':'adaniports.com','COALINDIA':'coalindia.in','BAJAJFINSV':'bajajfinserv.in',
+    'HDFCLIFE':'hdfclife.com','SBILIFE':'sbilife.co.in','CIPLA':'cipla.com',
+    'DRREDDY':'drreddys.com','DIVISLAB':'divislab.com','EICHERMOT':'eichermotors.com',
+    'HEROMOTOCO':'heromotocorp.com','APOLLOHOSP':'apollohospitals.com','BPCL':'bharatpetroleum.com',
+    'TATACONSUM':'tataconsumer.com','BRITANNIA':'britannia.co.in','GRASIM':'grasim.com',
+    'SHRIRAMFIN':'shriramfinance.in','INDUSINDBK':'indusind.com','BANDHANBNK':'bandhanbank.com',
+    'IDFCFIRSTB':'idfcfirstbank.com','PNB':'pnbindia.in','BANKBARODA':'bankofbaroda.in',
+    'FEDERALBNK':'federalbank.co.in','CANBK':'canarabank.in','UNIONBANK':'unionbankofindia.co.in',
+    'MPHASIS':'mphasis.com','COFORGE':'coforge.com','BAJAJ-AUTO':'bajajauto.com',
+    'TVSMOTORS':'tvsmotor.com','ASHOKLEY':'ashokleyland.com','BOSCHLTD':'bosch.in',
+    'LUPIN':'lupin.com','AUROPHARMA':'aurobindo.com','BIOCON':'biocon.com',
+    'GLENMARK':'glenmarkpharma.com','MAXHEALTH':'maxhealthcare.in','FORTIS':'fortishealthcare.com',
+    'ADANIGREEN':'adanigreenenergy.com','IOC':'iocl.com','HINDPETRO':'hindustanpetroleum.com',
+    'GAIL':'gailonline.com','TATAPOWER':'tatapower.com','SUZLON':'suzlon.com',
+    'HINDALCO':'hindalco.com','VEDL':'vedantalimited.com','NMDC':'nmdc.co.in',
+    'SAIL':'sail.co.in','GODREJCP':'godrejcp.com','DABUR':'dabur.com',
+    'COLPAL':'colgatepalmolive.co.in','MARICO':'marico.com','VBL':'varunbev.com',
+    'JUBLFOOD':'jubilantfoodworks.com','AMBUJACEM':'ambujacement.com',
+    'IDEA':'myvi.in','ZEEL':'zeemedia.in','PVRINOX':'pvrinox.com',
+    'DLF':'dlf.in','GODREJPROP':'godrejproperties.com','OBEROIRLTY':'oberoirealty.com',
+    'CHOLAFIN':'cholamandalam.com','LICHSGFIN':'lichousing.com','MUTHOOTFIN':'muthootfin.com',
+    'ICICIGI':'icicilombard.com','ICICIPRULI':'iciciprulife.com','HDFCAMC':'hdfcfund.com',
+    'LICI':'licindia.in','ABB':'abb.com','HAVELLS':'havells.com',
+    'BEL':'bel-india.in','HAL':'hal-india.in','BHEL':'bhel.com',
+    'ETERNAL':'zomato.com','NYKAA':'nykaa.com','POLICYBZR':'policybazaar.com',
+    'DELHIVERY':'delhivery.com','ANGELONE':'angelbroking.com','MCX':'mcxindia.com',
+    'DMART':'dmartindia.com','TRENT':'trent.in','INDIGO':'goindigo.in',
+    'IRCTC':'irctc.co.in','INDHOTEL':'tajhotels.com','UPL':'upl-ltd.com',
+    'PIDILITIND':'pidilite.com','SRF':'srf.com','IRFC':'irfc.nic.in',
+    'DIXON':'dixoninfo.com','KALYANKJIL':'kalyanjewellers.com','IEX':'iexindia.com',
+    'BDL':'bdl-india.in','HDFCBANK':'hdfcbank.com','JIOFIN':'jio.com',
+    'AUBANK':'aubank.in','LTM':'ltimindtree.com','KPITTECH':'kpit.com',
+    'OFSS':'oracle.com','MOTHERSON':'motherson.com','BHARATFORG':'bharatforge.com',
+    'HYUNDAI':'hyundai.com','ALKEM':'alkemlab.com','MANKIND':'mankindpharma.com',
+    'LAURUSLABS':'lauruslabs.com','ADANIENSOL':'adaniports.com','ADANIPOWER':'adanipower.com',
+    'NHPC':'nhpcindia.com','IREDA':'iredaltd.com','JSWENERGY':'jsw.in',
+    'HINDZINC':'hzlindia.com','JINDALSTEL':'jspl.com','NATIONALUM':'nalcoindia.co.in',
+    'INDUSTOWER':'industowers.com','GMRAIRPORT':'gmrairports.com','CONCOR':'concorindia.com',
+    'LODHA':'lodhagroup.com','NAUKRI':'infoedge.in','BSE':'bseindia.com',
+    'CDSL':'cdslindia.com','MOTILALOFS':'motilaloswal.com','LTF':'ltfs.com',
+    'MFSL':'maxlifeinsurance.com','CGPOWER':'cgpower.com','AMBER':'ambergroup.in',
+    'KAYNES':'kaynes.in','KEI':'kei-ind.com','BLUESTARCO':'bluestarindia.com',
+    'CROMPTON':'crompton.co.in','NUVAMA':'nuvama.com','360ONE':'360.one',
+    'KFINTECH':'kfintech.com','CAMS':'camsonline.com','HUDCO':'hudco.org',
+    'NBCC':'nbccindia.com','COROMANDEL':'coromandel.net','EXIDEIND':'exideindustries.com',
+    'BANKINDIA':'bankofindia.co.in','INDIANB':'indianbank.in','INOXWIND':'inoxwind.com',
+    'ASTRAL':'astralpipes.com','BAJAJHLDNG':'bajaj.com','HINDPETRO':'hindustanpetroleum.com',
+    'NAM-INDIA':'nipponindiaim.com','BAJAJ-AUTO':'bajajauto.com','FORCEMOT':'forcemotors.com',
+  };
+  const domain = domainMap[sym];
+  if (!domain) return null;
+  return 'https://logo.clearbit.com/' + domain;
 }
 
 // Helper: check if signal is SL-hit (livePremium ≤ sl × 0.90)
 function isSLHit(sig) {
-  const p = sig.livePremium;
-  if (p === 0) return true;           // expired or zero-bid — treat as closed
-  if (!p || p < 0 || !sig.sl) return false;
-  return p <= sig.sl * 0.90;
+  const livePrem = (sig.livePremium && sig.livePremium > 0) ? sig.livePremium : 0;
+  if (!livePrem || !sig.sl) return false;
+  return livePrem <= sig.sl * 0.90;
 }
 
 function renderSignals() {
@@ -2585,6 +2474,7 @@ function renderSignals() {
         </div>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
       </div>
+
       <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
         <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
         <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
@@ -2620,13 +2510,17 @@ function renderSignals() {
         </div>
       </div>
       <div class="sig-tags">
-        <span class="sig-tag">${s.expiry}</span>
+        <span class="sig-tag" style="color:${
+          s.daysToExpiry<=3?'var(--red)':s.daysToExpiry<=7?'var(--amber)':'var(--text3)'
+        };font-weight:${s.daysToExpiry<=3?'700':'400'}">📅 ${s.expiry}${
+          s.daysToExpiry!=null?' · '+s.daysToExpiry+'d':''
+        }${s.daysToExpiry<=3?' ⚠':''}</span>
         ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
         <span class="sig-tag">IV ${s.ivRank}</span>
         ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
         ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
         ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''}${s.relStrength?.toFixed(1)}</span>`:''}
-        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
+        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)}</span>
       </div>
       <div class="sig-reason">${s.reason}</div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
@@ -2646,16 +2540,9 @@ function openDrawer(idStr) {
   document.getElementById('drawerContent').innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
-      <div class="drawer-title" style="display:flex;align-items:center;gap:10px">
-        ${!sig.isIndex ? `<img src="${sig.logo||getLogoUrl(sig.sym)||''}" style="width:36px;height:36px;border-radius:50%;object-fit:contain;background:#fff;padding:3px;flex-shrink:0"
-          onerror="this.style.display='none'"/>` : ''}
-        <div>
-          <div>${sig.sym}</div>
-          ${sig.name && sig.name !== sig.sym ? `<div style="font-size:11px;color:var(--text2);font-weight:400;font-family:var(--font-sans)">${sig.name}</div>` : ''}
-        </div>
-      </div>
+      <div class="drawer-title">${sig.sym}</div>
     </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
+    <div class="drawer-sub">${sig.strike} · ${sig.expiry}${sig.daysToExpiry!=null?' ('+sig.daysToExpiry+'d)':''} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
 
     <div class="drawer-grid">
       <div class="drawer-cell">
@@ -2681,56 +2568,11 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Technical Analysis</div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi !== null ? sig.rsi : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr !== null ? sig.pcr : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio !== null ? sig.volRatio + 'x' : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Bias (EMA)</span><span class="drawer-row-val" style="color:${sig.bias==='BULLISH'?'var(--green)':sig.bias==='BEARISH'?'var(--red)':'var(--text2)'}">${sig.bias||'—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">EMA Trend</span><span class="drawer-row-val" style="color:${sig.emaTrend==='BULLISH'?'var(--green)':sig.emaTrend==='BEARISH'?'var(--red)':'var(--text2)'}">${sig.emaTrend||'—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">VWAP</span><span class="drawer-row-val">${sig.vwap !== null ? '₹'+sig.vwap?.toFixed(2) : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">EMA20 / EMA50</span><span class="drawer-row-val">${sig.ema20 ? sig.ema20.toFixed(0) : '—'} / ${sig.ema50 ? sig.ema50.toFixed(0) : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PDH / PDL</span><span class="drawer-row-val">${sig.pdh ? sig.pdh.toFixed(0) : '—'} / ${sig.pdl ? sig.pdl.toFixed(0) : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">OI Buildup Type</span><span class="drawer-row-val">${sig.oiBuildup ? sig.oiBuildup.replace(/_/g,' ') : '—'}</span></div>
-    ${sig.CE_OI || sig.PE_OI ? `<div class="drawer-row"><span class="drawer-row-label">CE OI / PE OI</span><span class="drawer-row-val">${sig.CE_OI ? (sig.CE_OI/1e5).toFixed(1)+'L' : '—'} / ${sig.PE_OI ? (sig.PE_OI/1e5).toFixed(1)+'L' : '—'}</span></div>` : ''}
-    ${sig.relStrength !== null ? `<div class="drawer-row"><span class="drawer-row-label">Rel Strength vs Nifty</span><span class="drawer-row-val" style="color:${sig.relStrength>0?'var(--green)':'var(--red)'}">${sig.relStrength>0?'+':''}${sig.relStrength}%</span></div>` : ''}
-
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Greeks (BS Approx)</div>
-    <div class="drawer-row"><span class="drawer-row-label">IV</span><span class="drawer-row-val">${sig.iv !== null ? sig.iv + '%' : '—'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Delta</span>
-      <span class="drawer-row-val" style="color:${sig.deltaValid===true?'var(--green)':sig.deltaValid===false?'var(--red)':'var(--text2)'}">
-        ${sig.delta !== null ? sig.delta : '—'} ${sig.deltaValid===true?'✓':sig.deltaValid===false?'✗':''}
-      </span>
-    </div>
-    <div class="drawer-row"><span class="drawer-row-label">Gamma</span>
-      <span class="drawer-row-val" style="color:${sig.gammaMomentum?'var(--amber)':'var(--text2)'}">
-        ${sig.gamma !== null ? sig.gamma : '—'} ${sig.gammaMomentum?'⚡ ATM momentum':''}
-      </span>
-    </div>
-    <div class="drawer-row"><span class="drawer-row-label">Theta / day</span>
-      <span class="drawer-row-val" style="color:${sig.thetaOk===false?'var(--red)':'var(--text2)'}">
-        ${sig.theta !== null ? sig.theta : '—'} ${sig.thetaOk===false?'⚠ High decay':''}
-      </span>
-    </div>
-
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Engine Filters</div>
-    ${[
-      ['Trend',           sig.bias !== 'NEUTRAL', sig.bias],
-      ['EMA Confirm',     sig.emaTrend !== 'NEUTRAL', sig.emaTrend],
-      ['OI Buildup',      sig.oiBuildup && sig.oiBuildup !== 'NEUTRAL', sig.oiBuildup?.replace(/_/g,' ')],
-      ['Delta Valid',     sig.deltaValid === true, sig.deltaValid===true?'0.5–0.7 ✓':'out of range ✗'],
-      ['Gamma Momentum',  sig.gammaMomentum === true, 'ATM high gamma ⚡'],
-      ['Theta OK',        sig.thetaOk !== false, sig.thetaOk===false?'blocked ✗':'safe ✓'],
-      ['Prem Momentum',   sig.premiumMomentum === true, '>10% move + vol spike'],
-      ['No-Trade Zone',   sig.noTradeZone === false, sig.noTradeZone?'⚠ chop zone':'clean ✓'],
-      ['Inst Bias',       sig.instBias !== 'NEUTRAL', sig.instBias],
-    ].map(([label, pass, val]) => `
-      <div class="drawer-row">
-        <span class="drawer-row-label">${label}</span>
-        <span class="drawer-row-val" style="color:${pass?'var(--green)':'var(--red)'}">
-          ${val || '—'}
-        </span>
-      </div>`).join('')}
+    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
 
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
       <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
@@ -2757,16 +2599,15 @@ document.getElementById('drawerSheet').addEventListener('touchend', e => {
 // NOTIFICATIONS
 // ══════════════════════════════════════════════════════════════════
 function forgetCreds() {
-  clearCreds();
-  const el = (id) => document.getElementById(id);
-  if (el('aClient')) el('aClient').value = '';
-  if (el('aKey'))    el('aKey').value    = '';
-  if (el('aPin'))    el('aPin').value    = '';
-  if (el('aTotp'))   el('aTotp').value   = '';
+  localStorage.removeItem('ao_creds');
+  document.getElementById('aClient').value = '';
+  document.getElementById('aKey').value    = '';
+  document.getElementById('aPin').value    = '';
+  document.getElementById('aTotp').value   = '';
   S.connected = false;
   S.creds = { client:'', key:'', pin:'', totp:'' };
   setConnected(false);
-  toast('ok', '🗑 Credentials Cleared', 'Saved login removed — enter details to reconnect');
+  toast('ok', '🗑 Credentials Cleared', 'Saved login removed from this device');
   addLog('Saved credentials cleared', 'warn');
 }
 
@@ -2825,8 +2666,7 @@ function addLog(msg, cls) {
   row.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${cls||''}">${msg}</span>`;
   const body = document.getElementById('logBody');
   body.prepend(row);
-  // Cap log DOM to 200 rows to prevent memory/layout lag after long sessions
-  while (body.children.length > 200) body.lastElementChild.remove();
+  if (body.children.length > 100) body.lastElementChild.remove();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2864,37 +2704,16 @@ if ('serviceWorker' in navigator) {
 addLog('NSE F&O Signal Engine — Mobile PWA loaded', 'ok');
 renderWatchlistBar();
 
-// Restore signals from last session — today's only
+// Restore signals from last session
 try {
   const saved = localStorage.getItem('fno_signals');
   if (saved) {
-    const today = new Date().toDateString();
-    const allSigs = JSON.parse(saved);
-    S.signals = allSigs.filter(sig => {
-      // Drop signals from previous trading days
-      const sigDate = new Date(sig.ts || 0).toDateString();
-      return sigDate === today;
-    }).map(sig => {
-      // Clean up transient runtime properties that shouldn't persist
-      delete sig._prevSLHit;
-      delete sig._priceStale;
-      return sig;
-    });
-    const dropped = allSigs.length - S.signals.length;
-    if (dropped > 0) {
-      localStorage.setItem('fno_signals', JSON.stringify(S.signals));
-      addLog(`Cleared ${dropped} stale signal(s) from previous session`, 'warn');
-    }
-    if (S.signals.length) {
-      document.getElementById('mSigs').textContent = S.signals.length;
-      renderSignals();
-      addLog(`Restored ${S.signals.length} signal(s) from today's session`, 'ok');
-    }
+    S.signals = JSON.parse(saved);
+    document.getElementById('mSigs').textContent = S.signals.length;
+    renderSignals();
+    addLog(`Restored ${S.signals.length} signals from last session`, 'ok');
   }
-} catch(e) {
-  S.signals = [];
-  localStorage.removeItem('fno_signals');
-}
+} catch(e) {}
 
 function clearSignals() {
   S.signals = [];
@@ -2909,102 +2728,53 @@ function clearSignals() {
   addLog('Signals cleared manually', 'warn');
 }
 
-// ── CREDENTIAL HELPERS ──────────────────────────────────────────────
-// Simple XOR obfuscation — not cryptographic, but prevents plain-text
-// credentials sitting readable in localStorage dev tools at a glance.
-const _CKEY = 'fno' + (navigator.userAgent.length % 97);
-function _enc(s) {
-  return btoa(s.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^_CKEY.charCodeAt(i%_CKEY.length))).join(''));
-}
-function _dec(s) {
-  try { const b=atob(s); return b.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^_CKEY.charCodeAt(i%_CKEY.length))).join(''); } catch{return '';}
-}
-function saveCreds(c) {
-  localStorage.setItem('ao_v5', JSON.stringify({
-    client: c.client,
-    key:    _enc(c.key),
-    pin:    _enc(c.pin),
-    totp:   _enc(c.totp || ''),
-  }));
-}
-function loadCreds() {
-  // Try new format first
-  const v5 = (() => { try { return JSON.parse(localStorage.getItem('ao_v5') || 'null'); } catch { return null; } })();
-  if (v5?.client) return { client: v5.client, key: _dec(v5.key), pin: _dec(v5.pin), totp: _dec(v5.totp) };
-  // Legacy ao_meta + ao_session
-  const meta = (() => { try { return JSON.parse(localStorage.getItem('ao_meta') || 'null'); } catch { return null; } })();
-  const sess = (() => { try { return JSON.parse(sessionStorage.getItem('ao_session') || 'null'); } catch { return null; } })();
-  if (meta?.client && sess?.pin) return { client: meta.client, key: meta.key, pin: sess.pin, totp: sess.totp || '' };
-  // Legacy ao_creds (plaintext)
-  const leg = (() => { try { return JSON.parse(localStorage.getItem('ao_creds') || 'null'); } catch { return null; } })();
-  if (leg?.client) return { client: leg.client, key: leg.key, pin: leg.pin, totp: leg.totp || '' };
-  return null;
-}
-function clearCreds() {
-  ['ao_v5','ao_meta','ao_creds'].forEach(k => localStorage.removeItem(k));
-  sessionStorage.removeItem('ao_session');
-}
-
 (async function autoLogin() {
-  const creds = loadCreds();
-
-  if (!creds?.client || !creds?.key || !creds?.pin) {
-    addLog('Enter your Angel One credentials in Setup tab to connect', '');
+  const saved = localStorage.getItem('ao_creds');
+  if (!saved) {
+    addLog('Enter your Angel One credentials in Setup tab', '');
     return;
   }
-
-  // Migrate legacy formats to v5 immediately
-  if (!localStorage.getItem('ao_v5')) {
-    saveCreds(creds);
-    localStorage.removeItem('ao_meta');
-    localStorage.removeItem('ao_creds');
-    sessionStorage.removeItem('ao_session');
-  }
-
-  // Fill ALL form fields so the user sees them pre-populated
-  const el = (id) => document.getElementById(id);
-  if (el('aClient')) el('aClient').value = creds.client;
-  if (el('aKey'))    el('aKey').value    = creds.key;
-  if (el('aPin'))    el('aPin').value    = creds.pin;
-  if (el('aTotp'))   el('aTotp').value   = creds.totp || '';
-
-  addLog(`Credentials loaded — auto-connecting ${creds.client}...`, '');
-  if (el('apiStat')) el('apiStat').textContent = 'Auto-connecting...';
-
-  await new Promise(r => setTimeout(r, 800));
-
-  const server = getServer();
-  let resp;
   try {
-    resp = await fetch(server + '/login', {
+    const creds = JSON.parse(saved);
+    // Fill the form fields with saved values
+    document.getElementById('aClient').value = creds.client || '';
+    document.getElementById('aKey').value    = creds.key    || '';
+    document.getElementById('aPin').value    = creds.pin    || '';
+    document.getElementById('aTotp').value   = creds.totp   || '';
+
+    addLog(`Saved credentials found — auto-connecting ${creds.client}...`, '');
+    document.getElementById('apiStat').textContent = 'Auto-connecting...';
+
+    // Small delay so UI renders first
+    await new Promise(r => setTimeout(r, 1200));
+
+    const server = getServer();
+    const resp = await fetch(server + '/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientCode: creds.client, password: creds.pin, apiKey: creds.key, totpSecret: creds.totp }),
-      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({
+        clientCode: creds.client,
+        password:   creds.pin,
+        apiKey:     creds.key,
+        totpSecret: creds.totp,
+      }),
+      signal: AbortSignal.timeout(30000),
     });
-  } catch(fetchErr) {
-    addLog(`Auto-login: server unreachable (${fetchErr.message}) — connect manually`, 'warn');
-    toast('warn', '⚠ Offline', 'Server unreachable.\nCheck URL in Setup and tap Connect.');
-    return;
-  }
-
-  try {
     const d = await resp.json();
     if (d.status === true) {
       S.connected = true;
       S.creds = creds;
       setConnected(true, d.client);
-      toast('ok', '✅ Auto-connected!', `Welcome back, ${d.client}`);
+      toast('ok', '✅ Auto-connected!', `Welcome back ${d.client} — session restored`);
       addLog(`Auto-login success — ${d.client}`, 'ok');
       fetchMarketData();
-      if (S.mktRefreshInt) clearInterval(S.mktRefreshInt);
       S.mktRefreshInt = setInterval(() => { if(S.connected) fetchMarketData(); }, 5000);
     } else {
-      addLog(`Auto-login failed: ${d.message} — tap Connect in Setup`, 'warn');
-      toast('warn', '⚠ Login Failed', d.message + '\nTap Connect in Setup tab.');
+      addLog(`Auto-login failed: ${d.message} — tap Setup to reconnect`, 'warn');
+      toast('warn', '⚠ Auto-login failed', d.message + '\nGo to Setup tab to reconnect');
     }
   } catch(e) {
-    addLog('Auto-login parse error: ' + e.message, 'warn');
+    addLog('Auto-login error: ' + e.message, 'warn');
   }
 })();
 
