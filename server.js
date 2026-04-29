@@ -822,8 +822,17 @@ app.post('/option-chain', async (req, res) => {
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
-    // Compute ATM strike
-    const step = spot > 10000 ? 500 : spot > 5000 ? 200 : spot > 2000 ? 100 : spot > 500 ? 50 : 10;
+    // NSE option strike intervals by underlying price
+    // Source: NSE circular on contract specifications
+    const step = spot >= 25000 ? 500   // NIFTY 50 range
+               : spot >= 10000 ? 500   // BankNifty / high-priced indices
+               : spot >= 5000  ? 200   // e.g. Bosch, Page
+               : spot >= 2000  ? 100   // e.g. Reliance, HDFC
+               : spot >= 1000  ? 50    // e.g. Sunpharma, TCS, Infy
+               : spot >= 500   ? 20    // e.g. ICICI, Axis, SBI
+               : spot >= 200   ? 10    // e.g. BEL, BHEL
+               : spot >= 100   ? 5     // e.g. IDEA, Yes
+               : 2;                    // penny / sub-100
     const atmStrike = Math.round(spot / step) * step;
 
     // Build list of strikes to query (ATM ± depth)
@@ -889,21 +898,25 @@ app.post('/option-chain', async (req, res) => {
       }
     }
 
-    // Build result
-    const ltpMap = {};
-    allFetched.forEach(q => { ltpMap[String(q.symbolToken)] = parseFloat(q.ltp || q.close || 0); });
+    const closeMap = {};
+    allFetched.forEach(q => {
+      ltpMap[String(q.symbolToken)]   = parseFloat(q.ltp   || q.close || 0);
+      closeMap[String(q.symbolToken)] = parseFloat(q.close || q.ltp   || 0);
+    });
 
     const result = strikeList.map(strike => {
       const m = strikeMap[strike];
       return {
         strike,
-        isATM: strike === atmStrike,
-        CE_ltp: m.CE_token ? (ltpMap[m.CE_token] || 0) : null,
-        PE_ltp: m.PE_token ? (ltpMap[m.PE_token] || 0) : null,
+        isATM:    strike === atmStrike,
+        CE_ltp:   m.CE_token ? (ltpMap[m.CE_token]   || 0)    : null,
+        PE_ltp:   m.PE_token ? (ltpMap[m.PE_token]   || 0)    : null,
+        CE_close: m.CE_token ? (closeMap[m.CE_token] || null) : null,
+        PE_close: m.PE_token ? (closeMap[m.PE_token] || null) : null,
         CE_token: m.CE_token || null,
         PE_token: m.PE_token || null,
-        CE_sym: m.CE_sym || null,
-        PE_sym: m.PE_sym || null,
+        CE_sym:   m.CE_sym   || null,
+        PE_sym:   m.PE_sym   || null,
       };
     });
 

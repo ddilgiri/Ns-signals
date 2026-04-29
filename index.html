@@ -27,6 +27,35 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
+
+/* ── LIGHT THEME ── */
+body.light-theme {
+  --bg:#f0f4fa;--bg2:#e4eaf5;--bg3:#d8e2f0;--bg4:#cdd8ec;--bg5:#c2cee8;
+  --border:#b8c8e0;--border2:#a0b4d0;--border3:#8090b0;
+  --text:#0d1a2e;--text2:#3a5278;--text3:#6a82a8;--text4:#9ab0cc;
+  --green:#007a50;--green2:#005c38;--green-bg:#007a500d;
+  --red:#c0001a;--red2:#900012;--red-bg:#c0001a0d;
+  --amber:#a06800;--amber-bg:#a068000d;
+  --blue:#1060d0;--cyan:#0090b0;--purple:#6040c0;
+}
+body.light-theme .topbar { border-bottom-color: var(--border); }
+body.light-theme .sig-card { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+/* ── THEME TOGGLE BUTTON ── */
+.theme-btn {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--bg4); border: 1px solid var(--border2);
+  cursor: pointer; position: relative; transition: background .25s;
+  flex-shrink: 0;
+}
+.theme-btn::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text3); transition: transform .25s, background .25s;
+}
+body.light-theme .theme-btn { background: #3d9bff; border-color: #2070cc; }
+body.light-theme .theme-btn::after { transform: translateX(16px); background: #fff; }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
@@ -293,6 +322,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="dot" id="mDot"></div>
       <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
     </div>
+    <div onclick="toggleTheme()" class="theme-btn" id="themeToggle" title="Toggle light/dark theme"></div>
     <button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button>
   </div>
 </div>
@@ -1745,9 +1775,10 @@ function scoreRA(p) {
   if (atStructure && !pdhBreak && !pdlBreak)
     return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
 
-  // ── STAGE 3: VOLUME — hard reject if illiquid ──
-  if (volRatio !== null && volRatio < 1.0)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — illiquid, skipping` };
+  // ── STAGE 3: VOLUME — hard reject only if severely illiquid (< 0.3× avg) ──
+  // Soft gate: volRatio < 1.0 handled in scoring below, not a hard block
+  if (volRatio !== null && volRatio < 0.3)
+    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — severely illiquid` };
 
   // ── STAGE 4: EXPIRY ──
   if (daysToExpiry <= 1) return { score:0, grade:'REJECT', reason:'Expiry tomorrow — theta crush' };
@@ -1797,17 +1828,17 @@ function scoreRA(p) {
     else if (oiDelta > 0.10) { score += 5; }
   }
 
-  // ── DELTA (0–10 pts) — from isDeltaValid() ──
+  // ── DELTA (0–10 pts) — reward valid delta but never hard-penalise (Greeks are approximated) ──
   if (deltaValid === true)  { score += 10; reasons.push(`Delta valid (0.5–0.7)`); }
-  else if (deltaValid === false) { score -= 15; } // wrong delta zone — hard penalty
-  // null = unknown → no score either way
+  // deltaValid===false: no penalty (approximated Greeks unreliable enough to skip negative scoring)
+  // null = unknown → no effect
 
   // ── GAMMA MOMENTUM (0–10 pts) — from isHighGammaMomentum() ──
   if (gammaMomentum === true) { score += 10; reasons.push(`High gamma ATM momentum`); }
 
-  // ── PREMIUM MOMENTUM (0–10 pts) — from hasPremiumMomentum() ──
-  if (premiumMomentum === true)  { score += 10; reasons.push(`Premium momentum +10%`); }
-  else if (premiumMomentum === false) { score -= 5; } // no momentum — mild penalty
+  // ── PREMIUM MOMENTUM (0–10 pts) — only reward, never penalise (prevPremium is estimated) ──
+  if (premiumMomentum === true) { score += 10; reasons.push(`Premium momentum +10%`); }
+  // false/null: no penalty — live option volume data needed for reliable signal
 
   // PCR (0–12 pts) — from Angel One PCR API
   if (pcr !== null) {
@@ -1965,7 +1996,15 @@ async function generateSignal(symbolObj, isIndex) {
   if (!liveP || liveP <= 0) return null;
 
   const baseP = liveP;
-  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+  const step  = baseP >= 25000 ? 500
+              : baseP >= 10000 ? 500
+              : baseP >= 5000  ? 200
+              : baseP >= 2000  ? 100
+              : baseP >= 1000  ? 50
+              : baseP >= 500   ? 20
+              : baseP >= 200   ? 10
+              : baseP >= 100   ? 5
+              : 2;
 
   // ── STEP 2: MARKET ANALYSIS ──
   let analysis = null;
@@ -2060,9 +2099,11 @@ async function generateSignal(symbolObj, isIndex) {
                     ? (type==='CE' ? (CE_OI ?? 0) : (PE_OI ?? 0)) - OI_change
                     : null;
         impliedVol  = atm.iv      ?? null;
-        optionVol   = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
+        optionVol    = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
         avgOptionVol = optionVol !== null ? optionVol * 0.70 : null;
-        prevPremium  = ltpOp ? ltpOp * 0.92 : null;
+        // prevPremium: use close price from quote (more realistic than fake 8% gap)
+        prevPremium  = type === 'CE' ? (atm.CE_close ?? (ltpOp ? ltpOp * 0.97 : null))
+                                     : (atm.PE_close ?? (ltpOp ? ltpOp * 0.97 : null));
 
         // Approximate Greeks from IV using Black-Scholes approximation
         if (ltpOp && ltpOp > 0 && impliedVol) {
@@ -2325,7 +2366,7 @@ function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
   S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
   S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 80;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 70;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
@@ -2908,6 +2949,18 @@ function clearSignals() {
   toast('ok', '🗑 Signals Cleared', 'All signals removed');
   addLog('Signals cleared manually', 'warn');
 }
+
+// ── THEME TOGGLE ──────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light-theme');
+  localStorage.setItem('fno_theme', isLight ? 'light' : 'dark');
+}
+
+// Init theme on load
+(function initTheme() {
+  const saved = localStorage.getItem('fno_theme');
+  if (saved === 'light') document.body.classList.add('light-theme');
+})();
 
 // ── CREDENTIAL HELPERS ──────────────────────────────────────────────
 // Simple XOR obfuscation — not cryptographic, but prevents plain-text
