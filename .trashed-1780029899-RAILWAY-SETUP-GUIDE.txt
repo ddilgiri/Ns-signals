@@ -1,0 +1,196 @@
+╔══════════════════════════════════════════════════════════╗
+║   NSE F&O Signal Engine — Android App Setup Guide       ║
+║   Using Railway.app (FREE) — No PC Ever Needed          ║
+╚══════════════════════════════════════════════════════════╝
+
+Railway is BETTER than Render because:
+✅ Server NEVER sleeps (Render free tier sleeps after 15 mins)
+✅ Always fast — no 30 second wake-up delay
+✅ 500 free hours/month (more than enough for 24x7)
+✅ No credit card needed to start
+
+════════════════════════════════════════════════════════════
+TOTAL TIME: About 10 to 15 minutes. All free.
+════════════════════════════════════════════════════════════
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1 — Upload files to GitHub (free online storage)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: Create GitHub account
+  1. Open Chrome on your phone
+  2. Go to https://github.com
+  3. Tap "Sign up"
+  4. Enter email, password, username
+  5. Verify your email (check inbox, click link)
+
+STEP 2: Create a new repository (online folder)
+  1. After login, tap "+" icon (top right)
+  2. Tap "New repository"
+  3. Name: nse-signals
+  4. Select: Private  (IMPORTANT — keep files private!)
+  5. Check "Add a README file"
+  6. Tap "Create repository"
+
+STEP 3: Extract the zip file on your phone
+  1. Find the downloaded zip in your Downloads folder
+  2. Tap it → Tap "Extract" or "Extract here"
+  3. A folder appears with all the files
+
+STEP 4: Upload ALL files to GitHub
+  1. In your new GitHub repo, tap "Add file" → "Upload files"
+  2. Tap "choose your files"
+  3. Select ALL these files from the extracted folder:
+       server.js
+       index.html
+       package.json
+       package-lock.json
+       manifest.json
+       sw.js
+       icon-192.png
+       icon-512.png
+       Procfile
+       railway.json
+       render.yaml
+  4. Tap "Commit changes" (green button)
+  5. Done! All files are online now.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2 — Run the server FREE on Railway (never sleeps)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 5: Create Railway account
+  1. Go to https://railway.app
+  2. Tap "Start a New Project"
+  3. Tap "Login with GitHub"
+  4. Tap "Authorize railway-app"
+  5. You are logged in!
+
+STEP 6: Deploy your server
+  1. Tap "New Project"
+  2. Tap "Deploy from GitHub repo"
+  3. Find and tap "nse-signals"
+  4. Tap "Deploy Now"
+  5. Wait 2-3 minutes for it to build...
+  6. You will see "Active" or "Success" when done.
+
+STEP 7: Get your app URL
+  1. Click your deployed service in Railway
+  2. Go to "Settings" tab
+  3. Under "Domains" tap "Generate Domain"
+  4. You get a URL like:
+       https://nse-signals-production.up.railway.app
+
+  SAVE THIS URL — you need it in the next step!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3 — Install the app on your Android phone
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 8: Open in Chrome
+  1. Open Google Chrome on your Android
+  2. Go to your Railway URL + /index.html
+     Example: https://nse-signals-production.up.railway.app/index.html
+  3. The app loads!
+
+STEP 9: Install on home screen
+  1. Chrome shows "Add to Home Screen" banner at bottom
+     → Tap "Install"
+  OR
+  1. Tap Chrome menu (three dots top right)
+  2. Tap "Add to Home screen"
+  3. Tap "Add"
+  4. App icon appears on your home screen!
+  5. Open it — runs full screen like a real app.
+
+STEP 10: Connect Angel One
+  1. Open the app
+  2. Tap "Setup" tab (bottom, plug icon)
+  3. Server URL is filled automatically
+  4. Enter your Angel One details:
+
+     Client ID    = Your Angel One login ID (e.g. A123456)
+
+     SmartAPI Key = Get FREE from smartapi.angelbroking.com
+                    Sign in → My Apps → Create App → Copy Key
+
+     Password     = Your Angel One trading password
+
+     TOTP Secret  = Optional. Skip if you don't know this.
+
+  5. Tap "Connect Angel One"
+  6. You see "Connected — A123456"
+
+STEP 11: Start scanning!
+  1. Tap "Signals" tab (lightning bolt icon)
+  2. Tap "SCAN" button (top right)
+  3. Live F&O signals appear!
+  4. LIVE badge = real price from Angel One
+     EST badge = estimated (when market is closed)
+  5. Tap any signal = see full P&L details
+
+STEP 12: Enable notifications
+  1. Tap "Setup" tab
+  2. Tap "Enable Signal Notifications"
+  3. Tap "Allow"
+  4. You get alerts on your phone for every new signal!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT IS INSIDE THE APP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+180+ NSE F&O Stocks across all sectors:
+  NIFTY50, Banks, IT, Pharma, Auto, Energy, FMCG,
+  Metal, Realty, NBFC, Cement, Chemicals, Defence,
+  New Age Tech, Insurance, Infrastructure
+
+4 Indices:
+  NIFTY 50, BANKNIFTY, FINNIFTY, MIDCAP NIFTY
+
+Signal Features:
+  Real ATM option premium from Angel One NFO
+  RSI, PCR, IV Rank, OI, Volume analysis
+  Capital fit check (only signals you can afford)
+  Expiry guard (no theta-crushed signals)
+  Target and Stop Loss calculated automatically
+
+Bottom Navigation:
+  Lightning = Live signals feed
+  Chart     = PCR analysis
+  Gear      = Scanner settings
+  List      = Stock selector (180+ stocks)
+  Plug      = API setup
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+App not loading?
+  Wait 30 seconds — Railway may be starting up
+  Check your URL is correct in Chrome
+
+Not connected error?
+  Go to Setup tab, enter credentials again, tap Connect
+  Sessions expire after 8 hours — just reconnect
+
+Premium shows EST not LIVE?
+  Market must be open: 9:15 AM to 3:30 PM, Mon to Fri
+  Reconnect Angel One and start scan again
+
+Railway hours used up?
+  Free hours reset on 1st of each month
+  Add a card to get more free hours (no charge unless
+  you manually upgrade to a paid plan)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DISCLAIMER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Signals are algorithmic only. Not SEBI-registered advice.
+Options trading involves risk. Always use stop-loss.
+Paper trade first before using real money.
