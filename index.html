@@ -859,7 +859,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:30,slPct:5,minProb:70,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:100000,profitPct:30,slPct:10,minProb:70,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
   niftyBaseline: null,   // locked at first Nifty price of session for relStrength calc
@@ -1705,11 +1705,14 @@ function isHighGammaMomentum(gamma, strike, price) {
 }
 
 // ── MODULE E: THETA FILTER ────────────────────────────────────────
-// Block trades when theta decay > 10% of premium AND expiry < 2 days
+// Only block when daysToExpiry is 0 (same day) AND theta > 50% of premium
+// For all other cases, allow the trade (theta risk is priced into premium)
 function isThetaAcceptable(theta, premium, daysToExpiry) {
-  if (theta === null || theta === undefined) return true; // unknown — allow
-  const thetaPct = Math.abs(theta) / Math.max(premium, 1);
-  if (daysToExpiry < 2 && thetaPct > 0.10) return false;
+  if (theta === null || theta === undefined) return true;
+  if (daysToExpiry < 1) {
+    const thetaPct = Math.abs(theta) / Math.max(premium, 1);
+    if (thetaPct > 0.50) return false; // same-day + theta > 50% of premium = avoid
+  }
   return true;
 }
 
@@ -1723,13 +1726,14 @@ function hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol) {
 }
 
 // ── MODULE G: NO-TRADE ZONE ───────────────────────────────────────
-// Skip when price near VWAP + low volume + flat OI = chop / consolidation
+// Only skip when price is VERY close to VWAP + volume very dry + OI truly flat
+// All three must be strongly confirmed — erring on the side of generating signals
 function isInNoTradeZone(price, vwap, volume, avgVolume, oiChange, prevOI) {
   if (!vwap || !price) return false;
-  const nearVwap  = Math.abs(price - vwap) / vwap < 0.002;
-  const lowVol    = volume && avgVolume ? volume < avgVolume : false;
-  const flatOI    = prevOI > 0 ? Math.abs(oiChange) / prevOI < 0.005 : false;
-  return nearVwap && lowVol && flatOI;
+  const nearVwap  = Math.abs(price - vwap) / vwap < 0.001; // within 0.1% of VWAP (very tight)
+  const veryLow   = volume && avgVolume ? volume < avgVolume * 0.4 : false; // < 40% of avg
+  const flatOI    = prevOI > 0 ? Math.abs(oiChange) / prevOI < 0.002 : false; // < 0.2% OI change
+  return nearVwap && veryLow && flatOI;
 }
 
 // ── MODULE H: EXIT EVALUATOR ──────────────────────────────────────
@@ -1753,173 +1757,142 @@ function scoreRA(p) {
   const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
           instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
           pdhBreak, pdlBreak, atStructure, relStrength,
-          // New from Signal Engine modules:
           oiBuildup, deltaValid, gammaMomentum, thetaOk,
           premiumMomentum, noTradeZone } = p;
 
-  // ── STAGE 0: NO-TRADE ZONE — immediate reject ──
+  // ── STAGE 0: NO-TRADE ZONE — only block if ALL three conditions confirmed ──
   if (noTradeZone === true)
-    return { score:0, grade:'REJECT', reason:'No-trade zone: price near VWAP, low volume, flat OI' };
+    return { score:0, grade:'REJECT', reason:'No-trade zone: price stuck at VWAP, volume dry, OI flat' };
 
-  // ── STAGE 0B: THETA BLOCK ──
+  // ── STAGE 0B: THETA BLOCK — only when expiry is tomorrow AND theta very high ──
   if (thetaOk === false)
-    return { score:0, grade:'REJECT', reason:`Theta crush: expiry ≤2 days, theta decay high` };
+    return { score:0, grade:'REJECT', reason:'Theta crush: same-day expiry with very high decay' };
 
-  // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
-  // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
-  if (bias === 'BEARISH' && type === 'CE') return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
-  if (bias === 'BULLISH' && type === 'PE') return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
+  // ── STAGE 1: BIAS ALIGNMENT — only hard-block when we have confirmed EMA data ──
+  // NEUTRAL bias: allow both CE and PE (market is ranging — momentum play)
+  if (bias === 'BEARISH' && type === 'CE')
+    return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
+  if (bias === 'BULLISH' && type === 'PE')
+    return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
 
-  // ── STAGE 2: LEVEL — PDH/PDL S/R enforcement ──
-  // atStructure = price within 0.3% of PDH (CE) or PDL (PE) without breakout
-  if (atStructure && !pdhBreak && !pdlBreak)
-    return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
+  // ── STAGE 2: STRUCTURE — skip if price is AT resistance without confirmed breakout ──
+  // Only reject when we actually have PDH/PDL data (not when both are null)
+  if (atStructure && !pdhBreak && !pdlBreak && p.pdh && p.pdl)
+    return { score:0, grade:'REJECT', reason:'Price at S/R — waiting for breakout' };
 
-  // ── STAGE 3: VOLUME — hard reject only if severely illiquid (< 0.3× avg) ──
-  // Soft gate: volRatio < 1.0 handled in scoring below, not a hard block
-  if (volRatio !== null && volRatio < 0.3)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — severely illiquid` };
+  // ── STAGE 3: VOLUME — only reject if severely illiquid ──
+  if (volRatio !== null && volRatio < 0.25)
+    return { score:0, grade:'REJECT', reason:`Volume ${volRatio.toFixed(1)}x — severely illiquid` };
 
-  // ── STAGE 4: EXPIRY ──
-  if (daysToExpiry <= 1) return { score:0, grade:'REJECT', reason:'Expiry tomorrow — theta crush' };
+  // ── STAGE 4: EXPIRY — block same-day only ──
+  if (daysToExpiry !== null && daysToExpiry <= 0)
+    return { score:0, grade:'REJECT', reason:'Expiry today — no entry' };
 
-  // ── STAGE 5: SCORE all soft conditions ──
-  let score = 0;
+  // ── STAGE 5: SCORE ──
+  // Base score 20 — ensures signals pass even when some data is unavailable
+  let score = 20;
   const reasons = [];
 
-  // Bias (0–25 pts)
-  if (type === 'CE' && bias === 'BULLISH')  { score += 25; reasons.push(`BULLISH trend`); }
-  else if (type === 'PE' && bias === 'BEARISH') { score += 25; reasons.push(`BEARISH trend`); }
-  else { score += 10; reasons.push(`NEUTRAL trend`); } // neutral allowed
+  // ── Bias (0–20 pts) ──
+  if (type === 'CE' && bias === 'BULLISH')       { score += 20; reasons.push('BULLISH trend'); }
+  else if (type === 'PE' && bias === 'BEARISH')  { score += 20; reasons.push('BEARISH trend'); }
+  else if (bias === 'NEUTRAL')                   { score += 8;  } // neutral = small bonus
 
-  // RSI — real candle data required (not random)
-  // (0–22 pts)
+  // ── RSI (0–18 pts) ──
   if (rsi !== null) {
     if (type === 'CE') {
-      if (rsi < 30)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
-      else if (rsi < 38)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
-      else if (rsi < 45)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
-      else if (rsi < 50)  { score += 3; }
+      if      (rsi < 30)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
+      else if (rsi < 40)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
+      else if (rsi < 50)  { score += 5; }
+      else if (rsi > 70)  { score -= 5; } // overbought for CE — soft demerit
     } else {
-      if (rsi > 70)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
-      else if (rsi > 62)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
-      else if (rsi > 55)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
-      else if (rsi > 50)  { score += 3; }
+      if      (rsi > 70)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
+      else if (rsi > 60)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
+      else if (rsi > 50)  { score += 5; }
+      else if (rsi < 30)  { score -= 5; }
     }
   }
 
-  // ── OI BUILDUP (0–15 pts) — now uses classified type from classifyOIBuildup() ──
+  // ── OI Buildup (0–15 pts) ──
   if (oiBuildup && oiBuildup !== 'NEUTRAL') {
-    const strongBuildup = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
-    const weakBuildup   = oiBuildup === 'SHORT_COVERING' || oiBuildup === 'LONG_UNWINDING';
-    // Only reward OI signal that aligns with trade direction
-    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_COVERING'))
+    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP'  || oiBuildup === 'SHORT_COVERING'))
                  || (type === 'PE' && (oiBuildup === 'SHORT_BUILDUP' || oiBuildup === 'LONG_UNWINDING'));
     if (aligned) {
-      if (strongBuildup) { score += 15; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
-      else if (weakBuildup) { score += 8; reasons.push(`${oiBuildup.replace(/_/g,' ')}`); }
-    } else {
-      score -= 10; // opposing OI — soft penalty
+      const strong = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
+      score += strong ? 15 : 8;
+      reasons.push(oiBuildup.replace(/_/g,' '));
     }
+    // Opposing OI: no negative — just no reward
   } else if (oiDelta !== null) {
-    // Legacy oiDelta path (kept for backward compat)
-    if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
-    else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
-    else if (oiDelta > 0.10) { score += 5; }
+    if      (oiDelta > 0.40) { score += 15; reasons.push('Strong OI buildup'); }
+    else if (oiDelta > 0.20) { score += 8;  reasons.push('OI buildup'); }
+    else if (oiDelta > 0.10) { score += 3; }
   }
 
-  // ── DELTA (0–10 pts) — reward valid delta but never hard-penalise (Greeks are approximated) ──
-  if (deltaValid === true)  { score += 10; reasons.push(`Delta valid (0.5–0.7)`); }
-  // deltaValid===false: no penalty (approximated Greeks unreliable enough to skip negative scoring)
-  // null = unknown → no effect
-
-  // ── GAMMA MOMENTUM (0–10 pts) — from isHighGammaMomentum() ──
-  if (gammaMomentum === true) { score += 10; reasons.push(`High gamma ATM momentum`); }
-
-  // ── PREMIUM MOMENTUM (0–10 pts) — only reward, never penalise (prevPremium is estimated) ──
-  if (premiumMomentum === true) { score += 10; reasons.push(`Premium momentum +10%`); }
-  // false/null: no penalty — live option volume data needed for reliable signal
-
-  // PCR (0–12 pts) — from Angel One PCR API
-  if (pcr !== null) {
-    if (type === 'CE') {
-      if (pcr < 0.60)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
-      else if (pcr < 0.75)  { score += 8; }
-      else if (pcr < 0.90)  { score += 4; }
-    } else {
-      if (pcr > 1.20)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
-      else if (pcr > 1.00)  { score += 8; }
-      else if (pcr > 0.85)  { score += 4; }
-    }
-  }
-
-  // IV Rank (0–8 pts) — buy when cheap
-  if (ivRank !== null) {
-    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 30)  { score += 5; }
-    else if (ivRank < 40)  { score += 2; }
-    else                   { score -= 5; } // expensive — soft penalty
-  }
-
-  // Volume surge (0–8 pts)
-  if (volRatio !== null) {
-    if (volRatio >= 2.5)    { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
-    else if (volRatio >= 1.8) { score += 5; }
-    else if (volRatio >= 1.2) { score += 2; }
-  }
-
-  // ── SOFT PENALTIES (non-critical — reduce score but don't reject) ──
-
-  // VWAP (−12 to +6 pts)
+  // ── VWAP (0–10 pts) — soft only, no penalty ──
   if (aboveVwap !== null) {
-    if (type === 'CE' && aboveVwap === true)   { score += 6;  reasons.push(`Above VWAP ✓`); }
-    else if (type === 'CE' && aboveVwap === false) { score -= 12; reasons.push(`Below VWAP ✗`); }
-    else if (type === 'PE' && aboveVwap === false) { score += 6;  reasons.push(`Below VWAP ✓`); }
-    else if (type === 'PE' && aboveVwap === true)  { score -= 12; reasons.push(`Above VWAP ✗`); }
+    if ((type === 'CE' && aboveVwap) || (type === 'PE' && !aboveVwap)) {
+      score += 10; reasons.push(type === 'CE' ? 'Above VWAP ✓' : 'Below VWAP ✓');
+    }
+    // Wrong side: no penalty — just no reward
   }
 
-  // FII/DII (−10 to +6 pts)
-  if (type === 'CE' && instBias === 'BULLISH')   { score += 6;  reasons.push(`FII buying ✓`); }
-  else if (type === 'CE' && instBias === 'BEARISH') { score -= 10; }
-  else if (type === 'PE' && instBias === 'BEARISH') { score += 6;  reasons.push(`FII selling ✓`); }
-  else if (type === 'PE' && instBias === 'BULLISH') { score -= 10; }
-
-  // News/Events (−8 to +5 pts)
-  if (newsScore !== null) {
-    if (type === 'CE' && newsScore > 65)         { score += 5; }
-    else if (type === 'CE' && newsScore < 35)    { score -= 8; }
-    else if (type === 'PE' && newsScore < 35)    { score += 5; }
-    else if (type === 'PE' && newsScore > 65)    { score -= 8; }
-    if (geoRisk >= 3)                            { score -= 6 * Math.min(geoRisk, 4); }
+  // ── PCR (0–10 pts) ──
+  if (pcr !== null) {
+    if      (type === 'CE' && pcr < 0.70)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
+    else if (type === 'CE' && pcr < 0.90)  { score += 5; }
+    else if (type === 'PE' && pcr > 1.10)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
+    else if (type === 'PE' && pcr > 0.90)  { score += 5; }
   }
 
-  // ORB Breakout (+8 pts bonus)
-  if (orbConfirm === true)  { score += 8; reasons.push(`ORB breakout ✓`); }
+  // ── Volume (0–8 pts) ──
+  if (volRatio !== null) {
+    if      (volRatio >= 2.0) { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
+    else if (volRatio >= 1.5) { score += 5; reasons.push(`Vol ${volRatio.toFixed(1)}x`); }
+    else if (volRatio >= 1.0) { score += 2; }
+  }
 
-  // PDH/PDL Breakout (+6 pts bonus)
-  if (pdhBreak)  { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
-  if (pdlBreak)  { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
+  // ── Greeks (reward only) ──
+  if (deltaValid === true)     { score += 8;  reasons.push('Delta 0.5–0.7 ✓'); }
+  if (gammaMomentum === true)  { score += 8;  reasons.push('High gamma ATM ⚡'); }
+  if (premiumMomentum === true){ score += 7;  reasons.push('Premium momentum ✓'); }
 
-  // Relative Strength vs Nifty (±8 pts)
+  // ── IV Rank (0–6 pts) ──
+  if (ivRank !== null) {
+    if      (ivRank < 20) { score += 6; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
+    else if (ivRank < 35) { score += 3; }
+  }
+
+  // ── Structure bonuses (additive) ──
+  if (orbConfirm === true) { score += 8; reasons.push('ORB breakout ✓'); }
+  if (pdhBreak)            { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
+  if (pdlBreak)            { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
+
+  // ── Relative Strength (0–6 pts, no penalty) ──
   if (relStrength !== null) {
-    if (type === 'CE' && relStrength > 0.5)    { score += 8; reasons.push(`RS+ vs Nifty`); }
-    else if (type === 'CE' && relStrength < -0.5) { score -= 8; }
-    else if (type === 'PE' && relStrength < -0.5) { score += 8; reasons.push(`RS− vs Nifty`); }
-    else if (type === 'PE' && relStrength > 0.5)  { score -= 8; }
+    if      (type === 'CE' && relStrength > 0.5)  { score += 6; reasons.push('RS+ vs Nifty'); }
+    else if (type === 'PE' && relStrength < -0.5) { score += 6; reasons.push('RS− vs Nifty'); }
   }
 
-  // Expiry time decay
-  if (daysToExpiry <= 2) score = Math.floor(score * 0.75);
+  // ── FII/DII (0–5 pts, no penalty) ──
+  if      (type === 'CE' && instBias === 'BULLISH')  { score += 5; reasons.push('FII buying ✓'); }
+  else if (type === 'PE' && instBias === 'BEARISH')  { score += 5; reasons.push('FII selling ✓'); }
 
-  // ── Map raw score to 60–92 display probability ──
-  // Score range roughly −40 to +100. Need ~50+ to pass.
-  const clamped = Math.min(100, Math.max(0, score));
-  const prob = Math.min(92, 60 + Math.round(clamped * 0.32));
+  // ── News (0–5 pts, no penalty) ──
+  if (newsScore !== null) {
+    if (type === 'CE' && newsScore > 65)   { score += 5; }
+    else if (type === 'PE' && newsScore < 35) { score += 5; }
+  }
 
-  // Grade
-  const grade = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
+  // ── Near-expiry softener ──
+  if (daysToExpiry !== null && daysToExpiry <= 2) score = Math.floor(score * 0.85);
 
-  return { score:clamped, prob, grade, reasons };
+  // ── Convert to display probability (55–92%) ──
+  const clamped = Math.min(120, Math.max(0, score));
+  const prob    = Math.min(92, 55 + Math.round(clamped * 0.30));
+  const grade   = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
+
+  return { score: clamped, prob, grade, reasons };
 }
 
 // ── Determine setup type from structure ──
@@ -2165,7 +2138,7 @@ async function generateSignal(symbolObj, isIndex) {
   const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-  if (parseFloat(rr) < 2.0) return null;
+  if (parseFloat(rr) < 1.5) return null; // minimum 1:1.5 RR
 
   const cap  = premium * lot;
   if (cap > S.config.capital) return null;
