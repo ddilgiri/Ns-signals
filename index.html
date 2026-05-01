@@ -1818,8 +1818,8 @@ function scoreRA(p) {
     return { score:0, grade:'REJECT', reason:'Expiry today — no entry' };
 
   // ── STAGE 5: SCORE ──
-  // Base score 30 — ensures signals pass even when some data is unavailable
-  let score = 30;
+  // Base score 20 — ensures signals pass even when some data is unavailable
+  let score = 20;
   const reasons = [];
 
   // ── Bias (0–20 pts) ──
@@ -1919,7 +1919,7 @@ function scoreRA(p) {
   // ── Convert to display probability (55–92%) ──
   const clamped = Math.min(120, Math.max(0, score));
   const prob    = Math.min(92, 55 + Math.round(clamped * 0.30));
-  const grade   = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 62 ? 'C' : 'REJECT';
+  const grade   = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
 
   return { score: clamped, prob, grade, reasons };
 }
@@ -2040,8 +2040,8 @@ async function generateSignal(symbolObj, isIndex) {
     else if (bias === 'BEARISH') type = 'PE';
     else                         type = Math.random() > 0.5 ? 'CE' : 'PE';
   }
-  if (bias === 'BEARISH' && type === 'CE') { addLog(`${symbolObj.sym} CE skipped — BEARISH trend`, ''); return null; }
-  if (bias === 'BULLISH' && type === 'PE') { addLog(`${symbolObj.sym} PE skipped — BULLISH trend`, ''); return null; }
+  if (bias === 'BEARISH' && type === 'CE') return null;
+  if (bias === 'BULLISH' && type === 'PE') return null;
 
   // ── STEP 4: PDH/PDL S/R checks ──
   const TOL = 0.003; // 0.3% tolerance band
@@ -2175,7 +2175,7 @@ async function generateSignal(symbolObj, isIndex) {
   const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-  if (parseFloat(rr) < 1.5) { addLog(`${symbolObj.sym} ${type} RR ${rr} < 1.5 — skipped`, ''); return null; } // minimum 1:1.5 RR
+  if (parseFloat(rr) < 1.5) return null; // minimum 1:1.5 RR
 
   const cap  = premium * lot;
   // Allow signal even if only 1 lot affordable — let user decide sizing
@@ -2187,7 +2187,7 @@ async function generateSignal(symbolObj, isIndex) {
   const reason    = ra.reasons?.length ? ra.reasons.join(' · ') : `${setupType} setup`;
 
   // ── STEP 12: OVERTRADING GUARD ──
-  if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) { addLog(`${symbolObj.sym} ${type} overtrading guard — 2 signals already exist`, ''); return null; }
+  if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
 
   return {
     id: (S._idSeq = (S._idSeq || 0) + 1, localStorage.setItem('fno_id_seq', S._idSeq), S._idSeq),
