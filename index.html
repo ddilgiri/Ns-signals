@@ -859,7 +859,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:100000,profitPct:30,slPct:10,minProb:70,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:100000,profitPct:30,slPct:10,minProb:60,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
   niftyBaseline: null,   // locked at first Nifty price of session for relStrength calc
@@ -1943,15 +1943,16 @@ function calcEdgeScores(p) {
   return { callEdge: ce, putEdge: pe, straddleEdge: st, recommendation };
 }
 
-// ── MODULE N5: ZERODHA SYMBOL FORMAT ─────────────────────────────
-// Format: NIFTY + YYMMDD + STRIKE + CE/PE  e.g. NIFTY25052424500CE
-function toZerodhaSymbol(underlying, expiryDate, strike, type) {
+// ── MODULE N5: ANGEL ONE SYMBOL FORMAT ───────────────────────────
+// Angel One trading symbol format: NIFTY25MAY24500CE or RELIANCE25MAY1280CE
+// Format: UNDERLYING + DDMMMYY + STRIKE + CE/PE
+function toAngelSymbol(underlying, expiryDate, strike, type) {
   if (!expiryDate) return `${underlying}${strike}${type}`;
-  const d   = new Date(expiryDate);
-  const yy  = String(d.getFullYear()).slice(2);
-  const mm  = String(d.getMonth() + 1).padStart(2, '0');
-  const dd  = String(d.getDate()).padStart(2, '0');
-  return `${underlying}${yy}${mm}${dd}${strike}${type}`;
+  const d    = new Date(expiryDate);
+  const dd   = String(d.getDate()).padStart(2, '0');
+  const mon  = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()];
+  const yy   = String(d.getFullYear()).slice(2);
+  return `${underlying}${dd}${mon}${yy}${strike}${type}`;
 }
 
 // ── MODULE N6: IV CRUSH RISK ──────────────────────────────────────
@@ -1978,137 +1979,119 @@ function scoreRA(p) {
           oiBuildup, deltaValid, gammaMomentum, thetaOk,
           premiumMomentum, noTradeZone } = p;
 
-  // ── STAGE 0: NO-TRADE ZONE — only block if ALL three conditions confirmed ──
+  // ── STAGE 0: NO-TRADE ZONE — extremely tight conditions only ──
   if (noTradeZone === true)
-    return { score:0, grade:'REJECT', reason:'No-trade zone: price stuck at VWAP, volume dry, OI flat' };
+    return { score:0, grade:'REJECT', reason:'No-trade zone: price stuck flat, volume dead, OI frozen' };
 
-  // ── STAGE 0B: THETA BLOCK — only when expiry is tomorrow AND theta very high ──
+  // ── STAGE 1: THETA — only block genuine same-day zero-DTE ──
   if (thetaOk === false)
-    return { score:0, grade:'REJECT', reason:'Theta crush: same-day expiry with very high decay' };
+    return { score:0, grade:'REJECT', reason:'Same-day expiry with extreme theta — skip' };
 
-  // ── STAGE 1: BIAS ALIGNMENT — only hard-block when we have confirmed EMA data ──
-  // NEUTRAL bias: allow both CE and PE (market is ranging — momentum play)
-  if (bias === 'BEARISH' && type === 'CE')
-    return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
-  if (bias === 'BULLISH' && type === 'PE')
-    return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
+  // ── STAGE 2: HARD BIAS — only block when config is CE/PE fixed + bias strongly opposes ──
+  // When type=BOTH: bias-first selection already handled upstream, so both already aligned
+  if (S.config.type === 'CE' && bias === 'BEARISH')
+    return { score:0, grade:'REJECT', reason:'Config=CE only, trend BEARISH — skip' };
+  if (S.config.type === 'PE' && bias === 'BULLISH')
+    return { score:0, grade:'REJECT', reason:'Config=PE only, trend BULLISH — skip' };
 
-  // ── STAGE 2: STRUCTURE — skip if price is AT resistance without confirmed breakout ──
-  // Only reject when we actually have PDH/PDL data (not when both are null)
-  if (atStructure && !pdhBreak && !pdlBreak && p.pdh && p.pdl)
-    return { score:0, grade:'REJECT', reason:'Price at S/R — waiting for breakout' };
+  // ── STAGE 3: VOLUME — only block truly dead market ──
+  if (volRatio !== null && volRatio < 0.15)
+    return { score:0, grade:'REJECT', reason:`Volume ${volRatio.toFixed(2)}x — market frozen` };
 
-  // ── STAGE 3: VOLUME — only reject if severely illiquid ──
-  if (volRatio !== null && volRatio < 0.25)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio.toFixed(1)}x — severely illiquid` };
+  // ── No more hard blocks — everything else is scored ──
 
-  // ── STAGE 4: EXPIRY — block same-day only ──
-  if (daysToExpiry !== null && daysToExpiry <= 0)
-    return { score:0, grade:'REJECT', reason:'Expiry today — no entry' };
-
-  // ── STAGE 5: SCORE ──
-  // Base score 20 — ensures signals pass even when some data is unavailable
-  let score = 20;
+  // ── SCORE — starts at 40 so signals generate even with sparse data ──
+  let score = 40;
   const reasons = [];
 
   // ── Bias (0–20 pts) ──
   if (type === 'CE' && bias === 'BULLISH')       { score += 20; reasons.push('BULLISH trend'); }
   else if (type === 'PE' && bias === 'BEARISH')  { score += 20; reasons.push('BEARISH trend'); }
-  else if (bias === 'NEUTRAL')                   { score += 8;  } // neutral = small bonus
+  else if (bias === 'NEUTRAL')                   { score += 8;  reasons.push('Neutral — momentum play'); }
+  // opposing bias (BEARISH+CE or BULLISH+PE) only reaches here when config=BOTH — penalise softly
+  else                                           { score -= 5; }
 
-  // ── RSI (0–18 pts) ──
+  // ── RSI (0–15 pts, no penalty) ──
   if (rsi !== null) {
     if (type === 'CE') {
-      if      (rsi < 30)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
-      else if (rsi < 40)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
-      else if (rsi < 50)  { score += 5; }
-      else if (rsi > 70)  { score -= 5; } // overbought for CE — soft demerit
+      if      (rsi < 30)  { score += 15; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
+      else if (rsi < 45)  { score += 8;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
+      else if (rsi < 55)  { score += 3; }
     } else {
-      if      (rsi > 70)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
-      else if (rsi > 60)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
-      else if (rsi > 50)  { score += 5; }
-      else if (rsi < 30)  { score -= 5; }
+      if      (rsi > 70)  { score += 15; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
+      else if (rsi > 55)  { score += 8;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
+      else if (rsi > 45)  { score += 3; }
     }
   }
 
-  // ── OI Buildup (0–15 pts) ──
+  // ── OI Buildup (0–12 pts) ──
   if (oiBuildup && oiBuildup !== 'NEUTRAL') {
-    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP'  || oiBuildup === 'SHORT_COVERING'))
-                 || (type === 'PE' && (oiBuildup === 'SHORT_BUILDUP' || oiBuildup === 'LONG_UNWINDING'));
+    const aligned = (type==='CE' && (oiBuildup==='LONG_BUILDUP'||oiBuildup==='SHORT_COVERING'))
+                 || (type==='PE' && (oiBuildup==='SHORT_BUILDUP'||oiBuildup==='LONG_UNWINDING'));
     if (aligned) {
-      const strong = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
-      score += strong ? 15 : 8;
+      score += oiBuildup==='LONG_BUILDUP'||oiBuildup==='SHORT_BUILDUP' ? 12 : 7;
       reasons.push(oiBuildup.replace(/_/g,' '));
     }
-    // Opposing OI: no negative — just no reward
-  } else if (oiDelta !== null) {
-    if      (oiDelta > 0.40) { score += 15; reasons.push('Strong OI buildup'); }
-    else if (oiDelta > 0.20) { score += 8;  reasons.push('OI buildup'); }
-    else if (oiDelta > 0.10) { score += 3; }
+  } else if (oiDelta !== null && oiDelta > 0.15) {
+    score += 8; reasons.push('OI buildup');
   }
 
-  // ── VWAP (0–10 pts) — soft only, no penalty ──
+  // ── VWAP (0–8 pts) ──
   if (aboveVwap !== null) {
-    if ((type === 'CE' && aboveVwap) || (type === 'PE' && !aboveVwap)) {
-      score += 10; reasons.push(type === 'CE' ? 'Above VWAP ✓' : 'Below VWAP ✓');
+    if ((type==='CE' && aboveVwap) || (type==='PE' && !aboveVwap)) {
+      score += 8; reasons.push(type==='CE' ? 'Above VWAP' : 'Below VWAP');
     }
-    // Wrong side: no penalty — just no reward
   }
 
-  // ── PCR (0–10 pts) ──
+  // ── PCR (0–8 pts) ──
   if (pcr !== null) {
-    if      (type === 'CE' && pcr < 0.70)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
-    else if (type === 'CE' && pcr < 0.90)  { score += 5; }
-    else if (type === 'PE' && pcr > 1.10)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
-    else if (type === 'PE' && pcr > 0.90)  { score += 5; }
+    if      (type==='CE' && pcr < 0.80)  { score += 8; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
+    else if (type==='CE' && pcr < 0.95)  { score += 4; }
+    else if (type==='PE' && pcr > 1.10)  { score += 8; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
+    else if (type==='PE' && pcr > 0.95)  { score += 4; }
   }
 
   // ── Volume (0–8 pts) ──
   if (volRatio !== null) {
     if      (volRatio >= 2.0) { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
-    else if (volRatio >= 1.5) { score += 5; reasons.push(`Vol ${volRatio.toFixed(1)}x`); }
+    else if (volRatio >= 1.5) { score += 5; }
     else if (volRatio >= 1.0) { score += 2; }
   }
 
-  // ── Greeks (reward only) ──
-  if (deltaValid === true)     { score += 8;  reasons.push('Delta 0.5–0.7 ✓'); }
-  if (gammaMomentum === true)  { score += 8;  reasons.push('High gamma ATM ⚡'); }
-  if (premiumMomentum === true){ score += 7;  reasons.push('Premium momentum ✓'); }
+  // ── Greeks reward only (0–8 pts each) ──
+  if (deltaValid === true)      { score += 8; reasons.push('Delta 0.5–0.7 ✓'); }
+  if (gammaMomentum === true)   { score += 8; reasons.push('High gamma ATM ⚡'); }
+  if (premiumMomentum === true) { score += 6; reasons.push('Premium momentum'); }
 
-  // ── IV Rank (0–6 pts) ──
-  if (ivRank !== null) {
-    if      (ivRank < 20) { score += 6; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 35) { score += 3; }
-  }
+  // ── Structure (additive) ──
+  if (orbConfirm === true)  { score += 8; reasons.push('ORB breakout ✓'); }
+  if (pdhBreak)             { score += 6; reasons.push(`PDH break ✓`); }
+  if (pdlBreak)             { score += 6; reasons.push(`PDL break ✓`); }
 
-  // ── Structure bonuses (additive) ──
-  if (orbConfirm === true) { score += 8; reasons.push('ORB breakout ✓'); }
-  if (pdhBreak)            { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
-  if (pdlBreak)            { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
-
-  // ── Relative Strength (0–6 pts, no penalty) ──
+  // ── Relative Strength (0–5 pts) ──
   if (relStrength !== null) {
-    if      (type === 'CE' && relStrength > 0.5)  { score += 6; reasons.push('RS+ vs Nifty'); }
-    else if (type === 'PE' && relStrength < -0.5) { score += 6; reasons.push('RS− vs Nifty'); }
+    if      (type==='CE' && relStrength > 0.5)  { score += 5; reasons.push('RS+ vs Nifty'); }
+    else if (type==='PE' && relStrength < -0.5) { score += 5; reasons.push('RS− vs Nifty'); }
   }
 
-  // ── FII/DII (0–5 pts, no penalty) ──
-  if      (type === 'CE' && instBias === 'BULLISH')  { score += 5; reasons.push('FII buying ✓'); }
-  else if (type === 'PE' && instBias === 'BEARISH')  { score += 5; reasons.push('FII selling ✓'); }
+  // ── FII/DII (0–5 pts) ──
+  if      (type==='CE' && instBias==='BULLISH') { score += 5; reasons.push('FII buying'); }
+  else if (type==='PE' && instBias==='BEARISH') { score += 5; reasons.push('FII selling'); }
 
-  // ── News (0–5 pts, no penalty) ──
-  if (newsScore !== null) {
-    if (type === 'CE' && newsScore > 65)   { score += 5; }
-    else if (type === 'PE' && newsScore < 35) { score += 5; }
-  }
+  // ── IV Rank (0–5 pts) ──
+  if (ivRank !== null && ivRank < 30) { score += 5; reasons.push(`IV cheap`); }
 
-  // ── Near-expiry softener ──
-  if (daysToExpiry !== null && daysToExpiry <= 2) score = Math.floor(score * 0.85);
+  // ── Near-expiry softener (not a blocker) ──
+  if (daysToExpiry !== null && daysToExpiry <= 1) score = Math.floor(score * 0.90);
 
-  // ── Convert to display probability (55–92%) ──
-  const clamped = Math.min(120, Math.max(0, score));
-  const prob    = Math.min(92, 55 + Math.round(clamped * 0.30));
-  const grade   = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
+  // ── Map score to probability 60–92% ──
+  // Score of 40 (base, no data) → 60% prob → grade C → passes minProb 60
+  // Score of 60 → 66% prob → grade C
+  // Score of 80 → 72% prob → grade C
+  // Score of 100 → 78% prob → grade B
+  const clamped = Math.min(150, Math.max(0, score));
+  const prob    = Math.min(92, 60 + Math.round(clamped * 0.22));
+  const grade   = prob >= 85 ? 'A' : prob >= 75 ? 'B' : prob >= 60 ? 'C' : 'REJECT';
 
   return { score: clamped, prob, grade, reasons };
 }
@@ -2322,8 +2305,8 @@ async function generateSignal(symbolObj, isIndex) {
   const matchedPut = allStrikes.length
     ? findPremiumMatchedPut(atmCEPremium, allStrikes) : null;
 
-  // Gap Analysis
-  const prevClose   = pdh ?? (baseP * 0.995);
+  // Gap Analysis — uses real prev close from server, works for both stocks and indices
+  const prevClose   = analysis?.prevClose ?? pdh ?? (baseP * 0.995);
   const openPrice   = analysis?.open ?? baseP;
   const gapAnalysis = analyzeGap(prevClose, openPrice, livePCR, volRatio, impliedVol);
 
@@ -2333,11 +2316,9 @@ async function generateSignal(symbolObj, isIndex) {
   // IV Crush Risk
   const ivCrushRisk = calcIVCrushRisk(impliedVol, ivRank, daysToExp, false);
 
-  // Zerodha symbol format
-  const expiryDateObj = (() => {
-    const d = new Date(); d.setDate(d.getDate() + daysToExp); return d;
-  })();
-  const zerodhaSymbol = toZerodhaSymbol(symbolObj.sym, expiryDateObj, strike, type);
+  // Angel One symbol format e.g. RELIANCE29MAY251280CE
+  const expiryDateObj = (() => { const d = new Date(); d.setDate(d.getDate() + daysToExp); return d; })();
+  const angelSymbolStr = toAngelSymbol(symbolObj.sym, expiryDateObj, strike, type);
 
   // Synthetic straddle price (CE + matched PE premium)
   const straddlePrice = matchedPut
@@ -2447,7 +2428,7 @@ async function generateSignal(symbolObj, isIndex) {
     matchedPut,                  // { strike, premium, diff } — premium-matched PE
     straddlePrice,               // CE premium + matched PE premium
     requiredMove,                // % move needed to profit from straddle
-    zerodhaSymbol,               // e.g. NIFTY25052424500CE
+    angelSymbol: angelSymbolStr,     // e.g. RELIANCE29MAY251280CE (Angel One format)
     logo: symbolObj.logo || getLogoUrl(symbolObj.sym) || null,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
     ts:   Date.now(),
@@ -2597,7 +2578,7 @@ function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
   S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
   S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 70;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 60;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
@@ -2956,7 +2937,7 @@ function openDrawer(idStr) {
 
     <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Advanced Analysis</div>
 
-    ${sig.zerodhaSymbol ? `<div class="drawer-row"><span class="drawer-row-label">Zerodha Symbol</span><span class="drawer-row-val" style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">${sig.zerodhaSymbol}</span></div>` : ''}
+    ${sig.angelSymbol ? `<div class="drawer-row"><span class="drawer-row-label">Angel One Symbol</span><span class="drawer-row-val" style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">${sig.angelSymbol}</span></div>` : ''}
 
     ${sig.edgeScores ? `
     <div class="drawer-row"><span class="drawer-row-label">Call Edge</span><span class="drawer-row-val"><span style="display:inline-block;width:${sig.edgeScores.callEdge}px;max-width:80px;height:6px;background:var(--green);border-radius:3px;margin-right:6px;vertical-align:middle"></span>${sig.edgeScores.callEdge}/100</span></div>
