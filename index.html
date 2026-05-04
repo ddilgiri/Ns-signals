@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#080c14">
+<meta name="theme-color" content="#080c14" id="themeColorMeta">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="F&O Signals">
@@ -27,6 +27,19 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
+[data-theme="light"]{
+  --bg:#f0f4fa;--bg2:#ffffff;--bg3:#e8edf7;--bg4:#dce5f5;--bg5:#cfd9ef;
+  --border:#c8d4e8;--border2:#a8bcdc;--border3:#8aa4c8;
+  --text:#0f1f3d;--text2:#2a4a78;--text3:#6b84a8;--text4:#8fa8cc;
+  --green:#00a86b;--green2:#007d50;--green-bg:#00a86b12;
+  --red:#d92d4a;--red2:#a8203a;--red-bg:#d92d4a12;
+  --amber:#c47a00;--amber-bg:#c47a0012;
+  --blue:#1a6fd4;--cyan:#0d9fb8;--purple:#6c5ce7;
+}
+
+/* ── THEME TOGGLE BUTTON ── */
+.theme-toggle{width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all .2s}
+.theme-toggle:active{background:var(--bg4)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:column}
@@ -114,7 +127,16 @@ body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:
 .sig-val{font-size:13px;font-weight:700;font-family:var(--font-mono)}
 .sig-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
 .sig-tag{font-size:9px;color:var(--text3);padding:2px 7px;border-radius:4px;background:var(--bg4);border:1px solid var(--border)}
+/* ── SIGNAL REASON HIGHLIGHT ── */
 .sig-reason{font-size:10px;color:var(--text3);line-height:1.5;padding-top:8px;border-top:1px solid var(--border)}
+.sig-reason-title{font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;display:flex;align-items:center;gap:5px}
+.sig-reason-title::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.sig-key-reasons{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
+.sig-key-tag{font-size:9px;font-family:var(--font-mono);font-weight:700;padding:3px 8px;border-radius:5px;border:1px solid}
+.sig-key-tag.bullish{color:var(--green);background:var(--green-bg);border-color:#00f5a030}
+.sig-key-tag.bearish{color:var(--red);background:var(--red-bg);border-color:#ff3d5a30}
+.sig-key-tag.neutral{color:var(--amber);background:var(--amber-bg);border-color:#ffb62730}
+.sig-full-reason{font-size:10px;color:var(--text3);line-height:1.5}
 .prob-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-top:8px}
 .prob-fill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .6s ease}
 .live-badge{font-size:8px;background:var(--green);color:#000;border-radius:3px;padding:1px 4px;font-weight:700}
@@ -275,6 +297,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
     <p id="topStatus">ANGEL ONE · DISCONNECTED</p>
   </div>
   <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <div class="status-pill">
       <div class="dot" id="mDot"></div>
       <span id="mStat" style="color:var(--text2);font-size:10px">–</span>
@@ -346,34 +369,41 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   <div class="page" id="page-analysis">
     <div class="disc">⚠ Signals are algorithmic only. Options involve risk. Always use stop-loss. Not SEBI-registered advice.</div>
 
-    <div class="sec-head">PUT-CALL RATIO</div>
+    <div class="sec-head">MARKET SENTIMENT</div>
     <div class="card" style="margin-top:0">
       <div class="card-body">
-        <div class="pcr-item">
-          <div class="pcr-label">NIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-nifty-bar" style="width:60%;background:var(--amber)"></div></div>
-          <div class="pcr-num" id="pcr-nifty-val" style="color:var(--amber)">0.89</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Market</div>
+            <div id="anlMktStatus" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">CLOSED</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">FII/DII</div>
+            <div id="anlInstBias" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">–</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Signals</div>
+            <div id="anlSigCount" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">0</div>
+          </div>
         </div>
-        <div class="pcr-item">
-          <div class="pcr-label">BANKNIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-bank-bar" style="width:42%;background:var(--green)"></div></div>
-          <div class="pcr-num" id="pcr-bank-val" style="color:var(--green)">0.68</div>
-        </div>
-        <div class="pcr-item">
-          <div class="pcr-label">FINNIFTY</div>
-          <div class="pcr-track"><div class="pcr-fill" id="pcr-fin-bar" style="width:76%;background:var(--red)"></div></div>
-          <div class="pcr-num" id="pcr-fin-val" style="color:var(--red)">1.12</div>
-        </div>
-        <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:4px">&lt;0.7 BULLISH · 0.7–1.0 NEUTRAL · &gt;1.0 BEARISH</div>
+        <div id="anlNewsHeadline" style="font-size:10px;color:var(--text3);font-family:var(--font-mono);line-height:1.6;padding:8px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">News context loading...</div>
       </div>
     </div>
 
-    <div class="sec-head">SIGNAL PARAMETERS ACTIVE</div>
+    <div class="sec-head">ACTIVE SIGNALS SUMMARY</div>
     <div class="card" style="margin-top:0">
-      <div class="card-body" style="display:grid;gap:8px">
-        <div id="paramGrid"></div>
+      <div class="card-body" id="anlSignalSummary">
+        <div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">No active signals</div>
       </div>
     </div>
+
+    <div class="sec-head">INDEX PERFORMANCE</div>
+    <div id="anlIndexGrid" class="card" style="margin-top:0">
+      <div class="card-body">
+        <div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">Connect Angel One to see live index data</div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ══ PAGE: SCANNER CONFIG ══ -->
@@ -1078,26 +1108,6 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 30000);
-
-// ══════════════════════════════════════════════════════════════════
-// ANALYSIS PAGE — PARAMS
-// ══════════════════════════════════════════════════════════════════
-const PARAMS = [
-  'RSI Divergence (5m + 15m)',
-  'OI Buildup + OI Change %',
-  'IV Rank (< 30 to enter)',
-  'PCR Sentiment Reversal',
-  'Volume Surge (> 2x avg)',
-  'VWAP Crossover Filter',
-  'Expiry Guard (> 1 day left)',
-  'Capital Fit Filter',
-];
-document.getElementById('paramGrid').innerHTML = PARAMS.map(p =>
-  `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <span style="font-size:12px;color:var(--text2)">${p}</span>
-    <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;color:var(--green);background:var(--green-bg);border:1px solid #00f5a025;padding:2px 7px;border-radius:4px">ACTIVE</span>
-  </div>`
-).join('');
 
 // ══════════════════════════════════════════════════════════════════
 // STOCK LIST
@@ -2157,6 +2167,7 @@ async function runScan() {
   addLog(`Scan done — ${newSigs} new signals`, 'ok');
   if (S.connected) fetchMarketData();
   renderSignals();
+  updateAnalysisPage();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2353,7 +2364,10 @@ function renderSignals() {
         ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''  }${s.relStrength?.toFixed(1)}</span>`:''}
         <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
       </div>
-      <div class="sig-reason">${s.reason}</div>
+      <div class="sig-reason">
+        <div class="sig-reason-title">WHY THIS SIGNAL</div>
+        ${buildKeyReasons(s)}
+      </div>
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
     </div>`;
   }).join('');
@@ -2518,8 +2532,214 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// SERVICE WORKER
+// SIGNAL REASON HIGHLIGHTS — extracts top conditions from signal data
 // ══════════════════════════════════════════════════════════════════
+function buildKeyReasons(sig) {
+  const isCE = sig.type === 'CE';
+  const tags = [];
+
+  // ── Primary setup type ──
+  const setupColors = {
+    'ORB BREAKOUT': 'bullish', 'BREAKOUT': 'bullish',
+    'REVERSAL': 'neutral', 'PULLBACK': 'neutral', 'MOMENTUM': 'neutral',
+  };
+  tags.push({ label: sig.setupType || 'MOMENTUM', cls: setupColors[sig.setupType] || 'neutral', icon: '📐' });
+
+  // ── RSI condition ──
+  if (sig.rsi !== null && sig.rsi !== undefined) {
+    if (sig.rsi < 30)       tags.push({ label: `RSI ${sig.rsi} OVERSOLD`, cls: 'bullish', icon: '📊' });
+    else if (sig.rsi > 70)  tags.push({ label: `RSI ${sig.rsi} OVERBOUGHT`, cls: 'bearish', icon: '📊' });
+    else if (sig.rsi < 40)  tags.push({ label: `RSI ${sig.rsi} WEAK`, cls: 'neutral', icon: '📊' });
+    else if (sig.rsi > 60)  tags.push({ label: `RSI ${sig.rsi} STRONG`, cls: 'neutral', icon: '📊' });
+  }
+
+  // ── Bias / market direction ──
+  if (sig.bias === 'BULLISH') tags.push({ label: 'MARKET BULLISH', cls: 'bullish', icon: '🟢' });
+  else if (sig.bias === 'BEARISH') tags.push({ label: 'MARKET BEARISH', cls: 'bearish', icon: '🔴' });
+
+  // ── Volume surge ──
+  if (sig.volRatio !== null && sig.volRatio !== undefined) {
+    if (sig.volRatio >= 2) tags.push({ label: `VOL ${sig.volRatio}× SURGE`, cls: 'bullish', icon: '🔥' });
+    else if (sig.volRatio >= 1.5) tags.push({ label: `VOL ${sig.volRatio}× ABOVE AVG`, cls: 'neutral', icon: '📈' });
+  }
+
+  // ── PDH/PDL breakout ──
+  if (sig.pdh && sig.livePrice > sig.pdh * 1.003)
+    tags.push({ label: `ABOVE PDH ${Number(sig.pdh).toFixed(0)}`, cls: 'bullish', icon: '🔓' });
+  if (sig.pdl && sig.livePrice < sig.pdl * 0.997)
+    tags.push({ label: `BELOW PDL ${Number(sig.pdl).toFixed(0)}`, cls: 'bearish', icon: '🔓' });
+
+  // ── ORB ──
+  if (sig.orb_high && isCE && sig.livePrice > sig.orb_high)
+    tags.push({ label: 'ORB HIGH CLEARED', cls: 'bullish', icon: '🚀' });
+  if (sig.orb_low && !isCE && sig.livePrice < sig.orb_low)
+    tags.push({ label: 'ORB LOW BROKEN', cls: 'bearish', icon: '📉' });
+
+  // ── Relative strength vs Nifty ──
+  if (sig.relStrength !== null && sig.relStrength !== undefined) {
+    if (sig.relStrength > 1) tags.push({ label: `RS +${sig.relStrength.toFixed(1)} VS NIFTY`, cls: 'bullish', icon: '💪' });
+    else if (sig.relStrength < -1) tags.push({ label: `RS ${sig.relStrength.toFixed(1)} VS NIFTY`, cls: 'bearish', icon: '⬇' });
+  }
+
+  // ── IV Rank ──
+  if (sig.ivRank !== null && sig.ivRank !== undefined) {
+    if (sig.ivRank < 20) tags.push({ label: `LOW IV ${sig.ivRank} — CHEAP ENTRY`, cls: 'bullish', icon: '💰' });
+    else if (sig.ivRank > 50) tags.push({ label: `HIGH IV ${sig.ivRank} — COSTLY`, cls: 'bearish', icon: '⚠' });
+  }
+
+  // ── High prob ──
+  if (sig.prob >= 85) tags.push({ label: `GRADE A · ${sig.prob}% PROB`, cls: 'bullish', icon: '⭐' });
+
+  // ── FII bias ──
+  if (sig.instBias === 'BULLISH') tags.push({ label: 'FII BUYING', cls: 'bullish', icon: '📈' });
+  else if (sig.instBias === 'BEARISH') tags.push({ label: 'FII SELLING', cls: 'bearish', icon: '📉' });
+
+  // Limit to top 4 most important tags
+  const top = tags.slice(0, 4);
+
+  const tagsHtml = top.map(t =>
+    `<span class="sig-key-tag ${t.cls}">${t.icon} ${t.label}</span>`
+  ).join('');
+
+  // Full reason as sub-text
+  const fullReason = sig.reason
+    ? `<div class="sig-full-reason">${sig.reason}</div>` : '';
+
+  return `<div class="sig-key-reasons">${tagsHtml}</div>${fullReason}`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// THEME TOGGLE
+// ══════════════════════════════════════════════════════════════════
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const newTheme = isLight ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', newTheme === 'dark' ? '' : 'light');
+  document.getElementById('themeToggleBtn').textContent = newTheme === 'light' ? '☀️' : '🌙';
+  document.getElementById('themeColorMeta').setAttribute('content', newTheme === 'light' ? '#f0f4fa' : '#080c14');
+  localStorage.setItem('fno_theme', newTheme);
+}
+// Load saved theme
+(function initTheme() {
+  const saved = localStorage.getItem('fno_theme') || 'dark';
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeToggleBtn').textContent = '☀️';
+    document.getElementById('themeColorMeta').setAttribute('content', '#f0f4fa');
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════════
+// ANALYSIS PAGE UPDATER
+// ══════════════════════════════════════════════════════════════════
+function updateAnalysisPage() {
+  // Market status
+  const { nseOpen } = getMarketStatus();
+  const mktEl = document.getElementById('anlMktStatus');
+  if (mktEl) {
+    mktEl.textContent = nseOpen ? 'OPEN' : 'CLOSED';
+    mktEl.style.color = nseOpen ? 'var(--green)' : 'var(--text3)';
+  }
+
+  // Institutional bias
+  const instEl = document.getElementById('anlInstBias');
+  if (instEl) {
+    const b = INST_BIAS?.bias || '–';
+    instEl.textContent = b;
+    instEl.style.color = b === 'BULLISH' ? 'var(--green)' : b === 'BEARISH' ? 'var(--red)' : 'var(--text3)';
+  }
+
+  // Signal count
+  const scEl = document.getElementById('anlSigCount');
+  if (scEl) {
+    scEl.textContent = S.signals.length;
+    scEl.style.color = S.signals.length > 0 ? 'var(--green)' : 'var(--text3)';
+  }
+
+  // News headline
+  const newsEl = document.getElementById('anlNewsHeadline');
+  if (newsEl && S_NEWS && S_NEWS.headlines && S_NEWS.headlines.length) {
+    const icon = S_NEWS.sentiment === 'BULLISH' ? '🟢' : S_NEWS.sentiment === 'BEARISH' ? '🔴' : '🟡';
+    newsEl.innerHTML = `<b style="color:var(--text2)">${icon} ${S_NEWS.sentiment}</b> · Geo Risk: ${S_NEWS.geoRisk || 0}<br>${S_NEWS.headlines.slice(0,2).join('<br>')}`;
+  } else if (newsEl) {
+    newsEl.textContent = 'News context will load on next scan';
+  }
+
+  // Signal summary
+  const sumEl = document.getElementById('anlSignalSummary');
+  if (sumEl) {
+    if (!S.signals.length) {
+      sumEl.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">No active signals</div>';
+    } else {
+      const ce = S.signals.filter(s => s.type === 'CE').length;
+      const pe = S.signals.filter(s => s.type === 'PE').length;
+      const highProb = S.signals.filter(s => s.prob >= 80).length;
+      const avgProb = Math.round(S.signals.reduce((a,s) => a + s.prob, 0) / S.signals.length);
+      sumEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <div style="background:var(--green-bg);border:1px solid #00f5a025;border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">CE CALLS</div>
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)">${ce}</div>
+          </div>
+          <div style="background:var(--red-bg);border:1px solid #ff3d5a25;border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">PE PUTS</div>
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--red)">${pe}</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">HIGH PROB ≥80%</div>
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">${highProb}</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">AVG PROBABILITY</div>
+            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--blue)">${avgProb}%</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  // Index grid
+  const idxEl = document.getElementById('anlIndexGrid');
+  if (idxEl) {
+    const idxList = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'];
+    const rows = idxList.map(sym => {
+      const p = S.livePrice[sym];
+      if (!p) return null;
+      const prev = S.livePrev[sym] || p;
+      const chg = p - prev;
+      const pct = prev > 0 ? (chg/prev*100).toFixed(2) : '0.00';
+      const col = chg >= 0 ? 'var(--green)' : 'var(--red)';
+      const arrow = chg >= 0 ? '▲' : '▼';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;font-family:var(--font-mono);font-weight:600;color:var(--text)">${sym}</span>
+        <span style="font-size:13px;font-family:var(--font-mono);font-weight:700;color:var(--text)">₹${p.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
+        <span style="font-size:11px;font-family:var(--font-mono);font-weight:600;color:${col}">${arrow} ${Math.abs(pct)}%</span>
+      </div>`;
+    }).filter(Boolean);
+
+    if (rows.length) {
+      idxEl.innerHTML = `<div class="card-body" style="padding-top:4px;padding-bottom:4px">${rows.join('')}</div>`;
+    } else {
+      idxEl.innerHTML = '<div class="card-body"><div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">Connect Angel One to see live index data</div></div>';
+    }
+  }
+}
+
+// Update analysis page when it becomes active
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (document.getElementById('page-analysis').classList.contains('active')) {
+      updateAnalysisPage();
+    }
+  });
+});
+// Also refresh every 10s if analysis page is visible
+setInterval(() => {
+  if (document.getElementById('page-analysis').classList.contains('active')) {
+    updateAnalysisPage();
+  }
+}, 10000);
+
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
