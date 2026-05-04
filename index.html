@@ -315,8 +315,14 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
       <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
     </div>
-    <!-- Filter chips + Clear button -->
-    <div style="display:flex;align-items:center;gap:0;border-bottom:1px solid var(--border)">
+    <!-- Open / Closed tab switcher -->
+    <div style="display:flex;align-items:center;border-bottom:2px solid var(--border);margin:0 0 0 0">
+      <button id="tabOpenBtn" onclick="switchSignalTab('open')" style="flex:1;padding:9px 0;border:none;background:transparent;color:var(--green);font-family:var(--font-mono);font-size:12px;font-weight:700;border-bottom:2px solid var(--green);margin-bottom:-2px;cursor:pointer;letter-spacing:.05em">⚡ OPEN <span id="tabOpenCount" style="font-size:10px;background:var(--green);color:#000;border-radius:8px;padding:1px 6px;margin-left:4px">0</span></button>
+      <button id="tabClosedBtn" onclick="switchSignalTab('closed')" style="flex:1;padding:9px 0;border:none;background:transparent;color:var(--text3);font-family:var(--font-mono);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.05em">🔒 CLOSED <span id="tabClosedCount" style="font-size:10px;background:var(--bg4);color:var(--text3);border-radius:8px;padding:1px 6px;margin-left:4px">0</span></button>
+      <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:8px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;white-space:nowrap">🗑</button>
+    </div>
+    <!-- Filter chips (only for Open tab) -->
+    <div id="filterRow" style="display:flex;align-items:center;gap:0;border-bottom:1px solid var(--border)">
       <div class="chips" id="filterChips" style="flex:1;border-bottom:none">
         <button class="chip on" onclick="setFilt('ALL',this)">ALL</button>
         <button class="chip" onclick="setFilt('INDEX',this)">INDEX</button>
@@ -325,7 +331,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         <button class="chip" onclick="setFilt('PE',this)">PE ONLY</button>
         <button class="chip" onclick="setFilt('HIGH',this)">HIGH PROB</button>
       </div>
-      <button onclick="clearSignals()" style="flex-shrink:0;padding:6px 14px;margin-right:10px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--red);font-size:11px;font-family:var(--font-mono);font-weight:600;cursor:pointer;white-space:nowrap">🗑 CLEAR</button>
     </div>
     <!-- Signal feed -->
     <div id="sigFeed">
@@ -584,18 +589,19 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 // ══════════════════════════════════════════════════════════════════
 // FNO STOCKS
 // ══════════════════════════════════════════════════════════════════
+// Lot sizes sourced from https://dhan.co/nse-fno-lot-size/ (May 2025)
 const FNO_STOCKS = [
   // ── NIFTY 50 ──
   {sym:'RELIANCE',name:'Reliance Industries',lot:250,grp:'NIFTY50'},
-  {sym:'TCS',name:'Tata Consultancy Services',lot:150,grp:'NIFTY50,IT'},
+  {sym:'TCS',name:'Tata Consultancy Services',lot:175,grp:'NIFTY50,IT'},
   {sym:'HDFCBANK',name:'HDFC Bank',lot:550,grp:'NIFTY50,BANK'},
-  {sym:'INFY',name:'Infosys',lot:300,grp:'NIFTY50,IT'},
+  {sym:'INFY',name:'Infosys',lot:400,grp:'NIFTY50,IT'},
   {sym:'ICICIBANK',name:'ICICI Bank',lot:700,grp:'NIFTY50,BANK'},
   {sym:'HINDUNILVR',name:'Hindustan Unilever',lot:300,grp:'NIFTY50,FMCG'},
   {sym:'KOTAKBANK',name:'Kotak Mahindra Bank',lot:400,grp:'NIFTY50,BANK'},
   {sym:'SBIN',name:'State Bank of India',lot:1500,grp:'NIFTY50,BANK'},
   {sym:'BHARTIARTL',name:'Bharti Airtel',lot:950,grp:'NIFTY50,TELECOM'},
-  {sym:'ITC',name:'ITC Ltd',lot:1600,grp:'NIFTY50,FMCG'},
+  {sym:'ITC',name:'ITC Ltd',lot:3200,grp:'NIFTY50,FMCG'},
   {sym:'BAJFINANCE',name:'Bajaj Finance',lot:125,grp:'NIFTY50,NBFC'},
   {sym:'LT',name:'Larsen & Toubro',lot:175,grp:'NIFTY50'},
   {sym:'ASIANPAINT',name:'Asian Paints',lot:200,grp:'NIFTY50'},
@@ -821,7 +827,7 @@ const FNO_STOCKS = [
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const S = {
-  scanning:false, scanInt:null, signals:[], filter:'ALL',
+  scanning:false, scanInt:null, signals:[], closedSignals:[], filter:'ALL', signalTab:'open',
   notif:false, connected:false,
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
@@ -1824,19 +1830,19 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // Index fallback — ATM structural estimate only
-  if (!usedReal) {
-    if (isIndex) {
-      // Use PDH/ORB proximity to pick slightly OTM or ATM strike
-      const offsets = [0, 0, step, -step]; // bias towards ATM
-      const off = offsets[Math.floor(Math.random()*offsets.length)];
-      strike  = Math.round((baseP + off)/step)*step;
-      const otm = Math.abs(off)/baseP;
-      premium = Math.max(10, Math.round(baseP * 0.008 * (1 - otm*2)));
-    } else {
-      return null; // stocks: no real premium → skip
-    }
-  }
+  // No real premium from option chain → skip (no guessing)
+  if (!usedReal) return null;
+
+
+
+
+
+
+
+
+
+
+
 
   if (premium * lot > S.config.maxPrem) return null;
 
@@ -1850,12 +1856,12 @@ async function generateSignal(symbolObj, isIndex) {
     slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
   }
   const slPct = S.config.slPct / 100;
-  const sl    = Math.max(1, Math.round(premium * (1 - slPct)));
+  const sl    = parseFloat(Math.max(0.01, premium * (1 - slPct)).toFixed(2));
   const riskPts   = premium - sl;
 
   // Enforce RR ≥ 1:2
-  const minTarget = premium + 2 * riskPts;
-  const cfgTarget = Math.round(premium * (1 + S.config.profitPct/100));
+  const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
+  const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = Math.max(minTarget, cfgTarget);
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
 
@@ -1949,10 +1955,15 @@ async function updateSignalLivePrices() {
 
   // Apply updates to signals and re-render if anything changed
   let changed = false;
+  const slHitIds = [];
   S.signals.forEach(sig => {
     if (sig.optionToken && optionLTPs[sig.optionToken] !== undefined) {
       sig.livePremium = optionLTPs[sig.optionToken];
       changed = true;
+      // Check SL hit
+      if (sig.livePremium > 0 && sig.livePremium <= sig.sl) {
+        slHitIds.push(sig.id);
+      }
     }
     // Fix: always match by symbol name (S.livePrice is keyed by sym, not numeric token)
     if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
@@ -1960,6 +1971,29 @@ async function updateSignalLivePrices() {
       changed = true;
     }
   });
+
+  // Move SL-hit signals to closedSignals
+  if (slHitIds.length) {
+    slHitIds.forEach(id => {
+      const idx = S.signals.findIndex(s => s.id === id);
+      if (idx !== -1) {
+        const sig = S.signals[idx];
+        sig.status = 'CLOSED_SL';
+        sig.closedPnl = Math.round((sig.livePremium - (sig.entryPremium||sig.premium)) * sig.lot * (sig.lots||1));
+        sig.closedAt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+        S.closedSignals.push(sig);
+        S.signals.splice(idx, 1);
+        toast('warn', `🔒 SL Hit: ${sig.sym}`, `${sig.type} · SL ₹${Number(sig.sl).toFixed(2)} reached · Moved to Closed`);
+        addLog(`SL hit: ${sig.sym} ${sig.strike} ${sig.type} · premium ₹${sig.livePremium?.toFixed(2)} ≤ SL ₹${Number(sig.sl).toFixed(2)}`, 'warn');
+      }
+    });
+    // Persist
+    try { localStorage.setItem('fno_closed_signals', JSON.stringify(S.closedSignals)); } catch(e) {}
+    try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
+    document.getElementById('mSigs').textContent = S.signals.length;
+    renderSignals();
+    return; // renderSignals already called
+  }
 
   if (changed) {
     // Update signal cards in-place without full re-render (smooth, no flicker)
@@ -2081,7 +2115,8 @@ async function runScan() {
   addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
 
   let newSigs = 0;
-  const IDX = [{sym:'NIFTY',lot:75},{sym:'BANKNIFTY',lot:30},{sym:'FINNIFTY',lot:40},{sym:'MIDCAP',lot:75}];
+  // Lot sizes from https://dhan.co/nse-fno-lot-size/
+  const IDX = [{sym:'NIFTY',lot:75},{sym:'BANKNIFTY',lot:15},{sym:'FINNIFTY',lot:65},{sym:'MIDCAP',lot:75}];
   for (const idx of IDX) {
     if (!S.config.indices.includes(idx.sym)) continue;
     const sig = await generateSignal(idx, true);
@@ -2149,6 +2184,27 @@ setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
 // Runs independently of scanner — keeps prices live even after scan stops
 setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
 
+function switchSignalTab(tab) {
+  S.signalTab = tab;
+  const openBtn   = document.getElementById('tabOpenBtn');
+  const closedBtn = document.getElementById('tabClosedBtn');
+  const filterRow = document.getElementById('filterRow');
+  if (tab === 'open') {
+    openBtn.style.color   = 'var(--green)';
+    openBtn.style.borderBottom = '2px solid var(--green)';
+    closedBtn.style.color = 'var(--text3)';
+    closedBtn.style.borderBottom = 'none';
+    filterRow.style.display = 'flex';
+  } else {
+    closedBtn.style.color = 'var(--amber)';
+    closedBtn.style.borderBottom = '2px solid var(--amber)';
+    openBtn.style.color   = 'var(--text3)';
+    openBtn.style.borderBottom = 'none';
+    filterRow.style.display = 'none';
+  }
+  renderSignals();
+}
+
 function setFilt(f, el) {
   S.filter = f;
   document.querySelectorAll('#filterChips .chip').forEach(c => c.classList.remove('on'));
@@ -2158,6 +2214,48 @@ function setFilt(f, el) {
 
 function renderSignals() {
   const feed = document.getElementById('sigFeed');
+
+  // Update tab counts
+  document.getElementById('tabOpenCount').textContent   = S.signals.length;
+  document.getElementById('tabClosedCount').textContent = S.closedSignals.length;
+
+  // Render closed tab
+  if (S.signalTab === 'closed') {
+    const closed = S.closedSignals;
+    if (!closed.length) {
+      feed.innerHTML = `<div class="empty"><div class="empty-icon">🔒</div><div class="empty-title">No Closed Signals</div><div class="empty-sub">Signals move here when Stop Loss is hit</div></div>`;
+      return;
+    }
+    feed.innerHTML = closed.slice().reverse().map(s => {
+      const logoUrl = s.isIndex ? '' : `https://images.dhan.co/symbol/${s.sym}.png`;
+      const logoHtml = s.isIndex
+        ? `<div style="width:28px;height:28px;border-radius:50%;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`
+        : `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:28px;height:28px;border-radius:50%;object-fit:contain;background:#fff;flex-shrink:0"><div style="display:none;width:28px;height:28px;border-radius:50%;background:var(--bg4);align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`;
+      const pnl = s.closedPnl || 0;
+      return `<div class="sig-card" style="opacity:0.75;border-left:3px solid var(--red)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          ${logoHtml}
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="sig-type ${s.type.toLowerCase()}" style="font-size:10px">${s.type}</span>
+              <span class="sig-name">${s.sym} ${s.strike}</span>
+              <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:#ff444420;color:var(--red);border:1px solid #ff444440;margin-left:auto">🔒 SL HIT</span>
+            </div>
+            <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:2px">${s.time} · Entry ₹${(s.entryPremium||s.premium).toFixed(2)} · SL ₹${Number(s.sl).toFixed(2)}</div>
+          </div>
+        </div>
+        <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px">
+          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">ENTRY</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text)">₹${(s.entryPremium||s.premium).toFixed(2)}</div></div>
+          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">SL HIT</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Number(s.sl).toFixed(2)}</div></div>
+          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">P&L</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--red)">${pnl>=0?'+':''}₹${Math.abs(pnl).toLocaleString('en-IN')}</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--font-mono)">Lot ${s.lot} × ${s.lots} lots · ${s.expiry}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  // Open tab
   let sigs = [...S.signals];
   if (S.filter === 'INDEX') sigs = sigs.filter(s => s.isIndex);
   else if (S.filter === 'STOCK') sigs = sigs.filter(s => !s.isIndex);
@@ -2199,10 +2297,16 @@ function renderSignals() {
     const setupColor = {'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)'}[s.setupType||'MOMENTUM']||'var(--blue)';
     const biasIcon   = s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
     const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
+    // Stock logo from Dhan CDN
+    const logoUrl  = `https://images.dhan.co/symbol/${s.sym}.png`;
+    const logoHtml = s.isIndex
+      ? `<div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">${s.sym.charAt(0)}</div>`
+      : `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:26px;height:26px;border-radius:50%;object-fit:contain;background:#fff;padding:1px;flex-shrink:0"><div style="display:none;width:26px;height:26px;border-radius:50%;background:var(--bg4);align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`;
     return `
     <div class="sig-card" onclick="openDrawer('${s.id}')">
       <div class="sig-bar ${s.type.toLowerCase()}"></div>
       <div class="sig-r1">
+        ${logoHtml}
         <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
         <span class="sig-name">${s.sym} ${s.strike}</span>
         <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
@@ -2228,12 +2332,12 @@ function renderSignals() {
       <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${Math.round(s.target)}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${Number(s.target).toFixed(2)}</div>
           <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Math.round(s.sl)}</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Number(s.sl).toFixed(2)}</div>
         </div>
         <div class="sig-cell">
           <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
@@ -2271,7 +2375,7 @@ function openDrawer(idStr) {
     <div class="drawer-grid">
       <div class="drawer-cell">
         <div class="drawer-cell-label">Premium</div>
-        <div class="drawer-cell-val" style="color:var(--amber)">₹${sig.premium}</div>
+        <div class="drawer-cell-val" style="color:var(--amber)">₹${Number(sig.premium).toFixed(2)}</div>
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Probability</div>
@@ -2279,11 +2383,11 @@ function openDrawer(idStr) {
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--green)">₹${Math.round(sig.target)}</div>
+        <div class="drawer-cell-val" style="color:var(--green)">₹${Number(sig.target).toFixed(2)}</div>
       </div>
       <div class="drawer-cell">
         <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
-        <div class="drawer-cell-val" style="color:var(--red)">₹${Math.round(sig.sl)}</div>
+        <div class="drawer-cell-val" style="color:var(--red)">₹${Number(sig.sl).toFixed(2)}</div>
       </div>
     </div>
 
@@ -2437,9 +2541,19 @@ try {
   }
 } catch(e) {}
 
+try {
+  const savedClosed = localStorage.getItem('fno_closed_signals');
+  if (savedClosed) {
+    S.closedSignals = JSON.parse(savedClosed);
+    renderSignals(); // re-render to update tab counts
+  }
+} catch(e) {}
+
 function clearSignals() {
   S.signals = [];
+  S.closedSignals = [];
   localStorage.removeItem('fno_signals');
+  localStorage.removeItem('fno_closed_signals');
   document.getElementById('mSigs').textContent = '0';
   renderSignals();
   S.newSigCount = 0;
