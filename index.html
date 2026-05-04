@@ -859,7 +859,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:100000,profitPct:30,slPct:10,minProb:70,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:100000,profitPct:30,slPct:10,minProb:60,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
   niftyBaseline: null,   // locked at first Nifty price of session for relStrength calc
@@ -1779,6 +1779,196 @@ function evaluateExit(entryPremium, currentPremium, currentVol, avgOptionVol) {
   return { action:'HOLD', reason:'Position healthy' };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// NEW MODULES FROM ADVANCED STRATEGY DOCUMENT
+// ══════════════════════════════════════════════════════════════════
+
+// ── MODULE N1: GAP ANALYSIS ENGINE ───────────────────────────────
+// Classifies today's gap and outputs continuation/reversal probability.
+// Returns { gapPct, gapType, direction, continuationProb, reversalProb }
+function analyzeGap(prevClose, openPrice, pcr, volRatio, iv) {
+  if (!prevClose || !openPrice || prevClose <= 0) return null;
+  const gapPct = ((openPrice - prevClose) / prevClose) * 100;
+  const absGap = Math.abs(gapPct);
+
+  const gapType = absGap <= 0.3 ? 'NORMAL OPEN'
+                : absGap <= 0.8 ? 'MILD GAP'
+                : absGap <= 1.5 ? 'LARGE GAP'
+                : 'EXTREME GAP';
+
+  const direction = gapPct > 0 ? 'GAP UP' : gapPct < 0 ? 'GAP DOWN' : 'FLAT';
+
+  // Base continuation probability by gap size
+  // Large/extreme gaps have higher reversal tendency (liquidity sweep, short-covering)
+  let contBase = absGap <= 0.3 ? 55
+               : absGap <= 0.8 ? 50
+               : absGap <= 1.5 ? 40
+               : 32; // extreme gaps frequently reverse
+
+  // Adjust for PCR
+  if (pcr !== null) {
+    if (direction === 'GAP UP' && pcr < 0.8)  contBase += 8;  // low PCR = bullish
+    if (direction === 'GAP UP' && pcr > 1.2)  contBase -= 10; // high PCR = likely reversal
+    if (direction === 'GAP DOWN' && pcr > 1.2) contBase += 8;
+    if (direction === 'GAP DOWN' && pcr < 0.8) contBase -= 10;
+  }
+
+  // Volume spike suggests institutional conviction for continuation
+  if (volRatio !== null) {
+    if (volRatio >= 2.0) contBase += 8;
+    else if (volRatio >= 1.5) contBase += 4;
+    else if (volRatio < 0.8) contBase -= 6; // low vol gap = weak, likely fills
+  }
+
+  // IV expansion on gap = market pricing in move → continuation more likely
+  if (iv !== null && iv > 18) contBase += 5;
+
+  const continuationProb = Math.min(85, Math.max(20, Math.round(contBase)));
+  const reversalProb     = 100 - continuationProb;
+
+  return { gapPct: parseFloat(gapPct.toFixed(2)), gapType, direction, continuationProb, reversalProb };
+}
+
+// ── MODULE N2: IV VELOCITY ────────────────────────────────────────
+// Measures rate of change of IV vs theta burn — key edge detector.
+// ivVelocity > 0.6 × theta means IV expanding faster than decay → buy edge
+// Returns { ivVelocity, thetaBurnDay, thetaBurn15m, ivExpanding, edgePresent }
+function calcIVVelocity(currentIV, prevIV, theta, premium) {
+  if (!currentIV || !prevIV || prevIV <= 0) return null;
+  const ivChange   = currentIV - prevIV;
+  const ivVelocity = parseFloat(ivChange.toFixed(2));
+
+  // Theta per 15 minutes = daily theta / (6.5 hr × 4 slots)
+  const thetaBurnDay = Math.abs(theta || 0);
+  const thetaBurn15m = parseFloat((thetaBurnDay / 26).toFixed(4));
+
+  // IV expanding = IV velocity > 0 meaningfully
+  const ivExpanding  = ivVelocity > 0.3;
+
+  // Edge present when IV velocity > 0.6 × theta (IV expanding faster than decay)
+  const edgePresent  = thetaBurnDay > 0
+    ? Math.abs(ivVelocity) > 0.6 * thetaBurnDay
+    : ivExpanding;
+
+  return { ivVelocity, thetaBurnDay, thetaBurn15m, ivExpanding, edgePresent };
+}
+
+// ── MODULE N3: PREMIUM-MATCHED PUT FINDER ────────────────────────
+// Finds the PE strike where |PE premium - CE premium| is minimum.
+// This creates a proper synthetic pair for straddle analysis.
+// Returns the matched PUT strike and its premium.
+function findPremiumMatchedPut(atmCEPremium, strikeList) {
+  if (!atmCEPremium || !strikeList?.length) return null;
+  let best = null, bestDiff = Infinity;
+  for (const s of strikeList) {
+    if (!s.PE_ltp || s.PE_ltp <= 0) continue;
+    const diff = Math.abs(s.PE_ltp - atmCEPremium);
+    if (diff < bestDiff) { bestDiff = diff; best = s; }
+  }
+  return best ? { strike: best.strike, premium: best.PE_ltp, diff: bestDiff } : null;
+}
+
+// ── MODULE N4: EDGE SCORES (0–100 each) ──────────────────────────
+// Call Edge, Put Edge, Straddle Edge derived from all available data.
+// Returns { callEdge, putEdge, straddleEdge, recommendation }
+function calcEdgeScores(p) {
+  const { bias, rsi, pcr, volRatio, aboveVwap, ivVelocity, gapAnalysis,
+          oiBuildup, ivRank, daysToExpiry, orbConfirm, pdhBreak, pdlBreak } = p;
+
+  let ce = 40, pe = 40, st = 40; // base
+
+  // Bias
+  if (bias === 'BULLISH')  { ce += 18; pe -= 10; }
+  if (bias === 'BEARISH')  { pe += 18; ce -= 10; }
+
+  // RSI
+  if (rsi !== null) {
+    if (rsi < 35)       { ce += 12; st += 5; }
+    else if (rsi > 65)  { pe += 12; st += 5; }
+  }
+
+  // PCR
+  if (pcr !== null) {
+    if (pcr < 0.8)  { ce += 10; pe -= 5; }
+    if (pcr > 1.2)  { pe += 10; ce -= 5; }
+  }
+
+  // VWAP
+  if (aboveVwap === true)  { ce += 8; }
+  if (aboveVwap === false) { pe += 8; }
+
+  // Volume surge
+  if (volRatio !== null && volRatio >= 1.8) { ce += 6; pe += 6; st += 10; }
+
+  // IV Velocity — expanding IV boosts straddle
+  if (ivVelocity?.ivExpanding) { st += 15; ce += 5; pe += 5; }
+  if (ivVelocity?.edgePresent) st += 10;
+
+  // Gap analysis
+  if (gapAnalysis) {
+    if (gapAnalysis.direction === 'GAP UP' && gapAnalysis.continuationProb > 55)   ce += 10;
+    if (gapAnalysis.direction === 'GAP DOWN' && gapAnalysis.continuationProb > 55) pe += 10;
+    if (gapAnalysis.reversalProb > 60) st += 8; // reversal = uncertain = straddle
+    if (gapAnalysis.gapType === 'EXTREME GAP') st += 12; // extreme gap = volatility play
+  }
+
+  // OI buildup
+  if (oiBuildup === 'LONG_BUILDUP')   { ce += 8; }
+  if (oiBuildup === 'SHORT_BUILDUP')  { pe += 8; }
+  if (oiBuildup === 'SHORT_COVERING') { ce += 5; st += 4; }
+  if (oiBuildup === 'LONG_UNWINDING') { pe += 5; st += 4; }
+
+  // IV cheap = straddle entry
+  if (ivRank !== null && ivRank < 25) st += 10;
+
+  // Near expiry = straddle bleeds fast = penalise
+  if (daysToExpiry !== null && daysToExpiry <= 2) st -= 15;
+
+  // Structure breakouts
+  if (pdhBreak) ce += 8;
+  if (pdlBreak) pe += 8;
+  if (orbConfirm === true) { ce += 5; pe += 5; st += 5; }
+
+  // Clamp 0–100
+  const clamp = v => Math.min(100, Math.max(0, Math.round(v)));
+  ce = clamp(ce); pe = clamp(pe); st = clamp(st);
+
+  // Recommendation
+  const max = Math.max(ce, pe, st);
+  const recommendation = st === max && st >= 55 ? 'LONG STRADDLE'
+                       : ce === max ? 'CALL BUY'
+                       : pe === max ? 'PUT BUY'
+                       : 'NO TRADE';
+
+  return { callEdge: ce, putEdge: pe, straddleEdge: st, recommendation };
+}
+
+// ── MODULE N5: ANGEL ONE SYMBOL FORMAT ───────────────────────────
+// Angel One trading symbol format: NIFTY25MAY24500CE or RELIANCE25MAY1280CE
+// Format: UNDERLYING + DDMMMYY + STRIKE + CE/PE
+function toAngelSymbol(underlying, expiryDate, strike, type) {
+  if (!expiryDate) return `${underlying}${strike}${type}`;
+  const d    = new Date(expiryDate);
+  const dd   = String(d.getDate()).padStart(2, '0');
+  const mon  = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()];
+  const yy   = String(d.getFullYear()).slice(2);
+  return `${underlying}${dd}${mon}${yy}${strike}${type}`;
+}
+
+// ── MODULE N6: IV CRUSH RISK ──────────────────────────────────────
+// High IV before event = risk of IV crush after event resolves.
+// Returns { risk:'HIGH'|'MEDIUM'|'LOW', reason }
+function calcIVCrushRisk(iv, ivRank, daysToExpiry, isEventDay) {
+  if (!iv) return { risk: 'UNKNOWN', reason: 'No IV data' };
+  if (ivRank !== null && ivRank > 70 && daysToExpiry <= 3)
+    return { risk: 'HIGH', reason: `IV rank ${ivRank.toFixed(0)} — likely post-event crush` };
+  if (iv > 25 && daysToExpiry <= 2)
+    return { risk: 'HIGH', reason: `IV ${iv.toFixed(1)}% near expiry — theta+crush combo` };
+  if (iv > 20 || (ivRank !== null && ivRank > 50))
+    return { risk: 'MEDIUM', reason: `Elevated IV — monitor post-event` };
+  return { risk: 'LOW', reason: 'IV at normal levels' };
+}
+
 // ── RA Scorer ──
 // Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
 // Now consumes outputs from all Signal Engine modules above.
@@ -1789,137 +1979,119 @@ function scoreRA(p) {
           oiBuildup, deltaValid, gammaMomentum, thetaOk,
           premiumMomentum, noTradeZone } = p;
 
-  // ── STAGE 0: NO-TRADE ZONE — only block if ALL three conditions confirmed ──
+  // ── STAGE 0: NO-TRADE ZONE — extremely tight conditions only ──
   if (noTradeZone === true)
-    return { score:0, grade:'REJECT', reason:'No-trade zone: price stuck at VWAP, volume dry, OI flat' };
+    return { score:0, grade:'REJECT', reason:'No-trade zone: price stuck flat, volume dead, OI frozen' };
 
-  // ── STAGE 0B: THETA BLOCK — only when expiry is tomorrow AND theta very high ──
+  // ── STAGE 1: THETA — only block genuine same-day zero-DTE ──
   if (thetaOk === false)
-    return { score:0, grade:'REJECT', reason:'Theta crush: same-day expiry with very high decay' };
+    return { score:0, grade:'REJECT', reason:'Same-day expiry with extreme theta — skip' };
 
-  // ── STAGE 1: BIAS ALIGNMENT — only hard-block when we have confirmed EMA data ──
-  // NEUTRAL bias: allow both CE and PE (market is ranging — momentum play)
-  if (bias === 'BEARISH' && type === 'CE')
-    return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
-  if (bias === 'BULLISH' && type === 'PE')
-    return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
+  // ── STAGE 2: HARD BIAS — only block when config is CE/PE fixed + bias strongly opposes ──
+  // When type=BOTH: bias-first selection already handled upstream, so both already aligned
+  if (S.config.type === 'CE' && bias === 'BEARISH')
+    return { score:0, grade:'REJECT', reason:'Config=CE only, trend BEARISH — skip' };
+  if (S.config.type === 'PE' && bias === 'BULLISH')
+    return { score:0, grade:'REJECT', reason:'Config=PE only, trend BULLISH — skip' };
 
-  // ── STAGE 2: STRUCTURE — skip if price is AT resistance without confirmed breakout ──
-  // Only reject when we actually have PDH/PDL data (not when both are null)
-  if (atStructure && !pdhBreak && !pdlBreak && p.pdh && p.pdl)
-    return { score:0, grade:'REJECT', reason:'Price at S/R — waiting for breakout' };
+  // ── STAGE 3: VOLUME — only block truly dead market ──
+  if (volRatio !== null && volRatio < 0.15)
+    return { score:0, grade:'REJECT', reason:`Volume ${volRatio.toFixed(2)}x — market frozen` };
 
-  // ── STAGE 3: VOLUME — only reject if severely illiquid ──
-  if (volRatio !== null && volRatio < 0.25)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio.toFixed(1)}x — severely illiquid` };
+  // ── No more hard blocks — everything else is scored ──
 
-  // ── STAGE 4: EXPIRY — block same-day only ──
-  if (daysToExpiry !== null && daysToExpiry <= 0)
-    return { score:0, grade:'REJECT', reason:'Expiry today — no entry' };
-
-  // ── STAGE 5: SCORE ──
-  // Base score 20 — ensures signals pass even when some data is unavailable
-  let score = 20;
+  // ── SCORE — starts at 40 so signals generate even with sparse data ──
+  let score = 40;
   const reasons = [];
 
   // ── Bias (0–20 pts) ──
   if (type === 'CE' && bias === 'BULLISH')       { score += 20; reasons.push('BULLISH trend'); }
   else if (type === 'PE' && bias === 'BEARISH')  { score += 20; reasons.push('BEARISH trend'); }
-  else if (bias === 'NEUTRAL')                   { score += 8;  } // neutral = small bonus
+  else if (bias === 'NEUTRAL')                   { score += 8;  reasons.push('Neutral — momentum play'); }
+  // opposing bias (BEARISH+CE or BULLISH+PE) only reaches here when config=BOTH — penalise softly
+  else                                           { score -= 5; }
 
-  // ── RSI (0–18 pts) ──
+  // ── RSI (0–15 pts, no penalty) ──
   if (rsi !== null) {
     if (type === 'CE') {
-      if      (rsi < 30)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
-      else if (rsi < 40)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
-      else if (rsi < 50)  { score += 5; }
-      else if (rsi > 70)  { score -= 5; } // overbought for CE — soft demerit
+      if      (rsi < 30)  { score += 15; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
+      else if (rsi < 45)  { score += 8;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
+      else if (rsi < 55)  { score += 3; }
     } else {
-      if      (rsi > 70)  { score += 18; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
-      else if (rsi > 60)  { score += 12; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
-      else if (rsi > 50)  { score += 5; }
-      else if (rsi < 30)  { score -= 5; }
+      if      (rsi > 70)  { score += 15; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
+      else if (rsi > 55)  { score += 8;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
+      else if (rsi > 45)  { score += 3; }
     }
   }
 
-  // ── OI Buildup (0–15 pts) ──
+  // ── OI Buildup (0–12 pts) ──
   if (oiBuildup && oiBuildup !== 'NEUTRAL') {
-    const aligned = (type === 'CE' && (oiBuildup === 'LONG_BUILDUP'  || oiBuildup === 'SHORT_COVERING'))
-                 || (type === 'PE' && (oiBuildup === 'SHORT_BUILDUP' || oiBuildup === 'LONG_UNWINDING'));
+    const aligned = (type==='CE' && (oiBuildup==='LONG_BUILDUP'||oiBuildup==='SHORT_COVERING'))
+                 || (type==='PE' && (oiBuildup==='SHORT_BUILDUP'||oiBuildup==='LONG_UNWINDING'));
     if (aligned) {
-      const strong = oiBuildup === 'LONG_BUILDUP' || oiBuildup === 'SHORT_BUILDUP';
-      score += strong ? 15 : 8;
+      score += oiBuildup==='LONG_BUILDUP'||oiBuildup==='SHORT_BUILDUP' ? 12 : 7;
       reasons.push(oiBuildup.replace(/_/g,' '));
     }
-    // Opposing OI: no negative — just no reward
-  } else if (oiDelta !== null) {
-    if      (oiDelta > 0.40) { score += 15; reasons.push('Strong OI buildup'); }
-    else if (oiDelta > 0.20) { score += 8;  reasons.push('OI buildup'); }
-    else if (oiDelta > 0.10) { score += 3; }
+  } else if (oiDelta !== null && oiDelta > 0.15) {
+    score += 8; reasons.push('OI buildup');
   }
 
-  // ── VWAP (0–10 pts) — soft only, no penalty ──
+  // ── VWAP (0–8 pts) ──
   if (aboveVwap !== null) {
-    if ((type === 'CE' && aboveVwap) || (type === 'PE' && !aboveVwap)) {
-      score += 10; reasons.push(type === 'CE' ? 'Above VWAP ✓' : 'Below VWAP ✓');
+    if ((type==='CE' && aboveVwap) || (type==='PE' && !aboveVwap)) {
+      score += 8; reasons.push(type==='CE' ? 'Above VWAP' : 'Below VWAP');
     }
-    // Wrong side: no penalty — just no reward
   }
 
-  // ── PCR (0–10 pts) ──
+  // ── PCR (0–8 pts) ──
   if (pcr !== null) {
-    if      (type === 'CE' && pcr < 0.70)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
-    else if (type === 'CE' && pcr < 0.90)  { score += 5; }
-    else if (type === 'PE' && pcr > 1.10)  { score += 10; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
-    else if (type === 'PE' && pcr > 0.90)  { score += 5; }
+    if      (type==='CE' && pcr < 0.80)  { score += 8; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
+    else if (type==='CE' && pcr < 0.95)  { score += 4; }
+    else if (type==='PE' && pcr > 1.10)  { score += 8; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
+    else if (type==='PE' && pcr > 0.95)  { score += 4; }
   }
 
   // ── Volume (0–8 pts) ──
   if (volRatio !== null) {
     if      (volRatio >= 2.0) { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
-    else if (volRatio >= 1.5) { score += 5; reasons.push(`Vol ${volRatio.toFixed(1)}x`); }
+    else if (volRatio >= 1.5) { score += 5; }
     else if (volRatio >= 1.0) { score += 2; }
   }
 
-  // ── Greeks (reward only) ──
-  if (deltaValid === true)     { score += 8;  reasons.push('Delta 0.5–0.7 ✓'); }
-  if (gammaMomentum === true)  { score += 8;  reasons.push('High gamma ATM ⚡'); }
-  if (premiumMomentum === true){ score += 7;  reasons.push('Premium momentum ✓'); }
+  // ── Greeks reward only (0–8 pts each) ──
+  if (deltaValid === true)      { score += 8; reasons.push('Delta 0.5–0.7 ✓'); }
+  if (gammaMomentum === true)   { score += 8; reasons.push('High gamma ATM ⚡'); }
+  if (premiumMomentum === true) { score += 6; reasons.push('Premium momentum'); }
 
-  // ── IV Rank (0–6 pts) ──
-  if (ivRank !== null) {
-    if      (ivRank < 20) { score += 6; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 35) { score += 3; }
-  }
+  // ── Structure (additive) ──
+  if (orbConfirm === true)  { score += 8; reasons.push('ORB breakout ✓'); }
+  if (pdhBreak)             { score += 6; reasons.push(`PDH break ✓`); }
+  if (pdlBreak)             { score += 6; reasons.push(`PDL break ✓`); }
 
-  // ── Structure bonuses (additive) ──
-  if (orbConfirm === true) { score += 8; reasons.push('ORB breakout ✓'); }
-  if (pdhBreak)            { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
-  if (pdlBreak)            { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
-
-  // ── Relative Strength (0–6 pts, no penalty) ──
+  // ── Relative Strength (0–5 pts) ──
   if (relStrength !== null) {
-    if      (type === 'CE' && relStrength > 0.5)  { score += 6; reasons.push('RS+ vs Nifty'); }
-    else if (type === 'PE' && relStrength < -0.5) { score += 6; reasons.push('RS− vs Nifty'); }
+    if      (type==='CE' && relStrength > 0.5)  { score += 5; reasons.push('RS+ vs Nifty'); }
+    else if (type==='PE' && relStrength < -0.5) { score += 5; reasons.push('RS− vs Nifty'); }
   }
 
-  // ── FII/DII (0–5 pts, no penalty) ──
-  if      (type === 'CE' && instBias === 'BULLISH')  { score += 5; reasons.push('FII buying ✓'); }
-  else if (type === 'PE' && instBias === 'BEARISH')  { score += 5; reasons.push('FII selling ✓'); }
+  // ── FII/DII (0–5 pts) ──
+  if      (type==='CE' && instBias==='BULLISH') { score += 5; reasons.push('FII buying'); }
+  else if (type==='PE' && instBias==='BEARISH') { score += 5; reasons.push('FII selling'); }
 
-  // ── News (0–5 pts, no penalty) ──
-  if (newsScore !== null) {
-    if (type === 'CE' && newsScore > 65)   { score += 5; }
-    else if (type === 'PE' && newsScore < 35) { score += 5; }
-  }
+  // ── IV Rank (0–5 pts) ──
+  if (ivRank !== null && ivRank < 30) { score += 5; reasons.push(`IV cheap`); }
 
-  // ── Near-expiry softener ──
-  if (daysToExpiry !== null && daysToExpiry <= 2) score = Math.floor(score * 0.85);
+  // ── Near-expiry softener (not a blocker) ──
+  if (daysToExpiry !== null && daysToExpiry <= 1) score = Math.floor(score * 0.90);
 
-  // ── Convert to display probability (55–92%) ──
-  const clamped = Math.min(120, Math.max(0, score));
-  const prob    = Math.min(92, 55 + Math.round(clamped * 0.30));
-  const grade   = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
+  // ── Map score to probability 60–92% ──
+  // Score of 40 (base, no data) → 60% prob → grade C → passes minProb 60
+  // Score of 60 → 66% prob → grade C
+  // Score of 80 → 72% prob → grade C
+  // Score of 100 → 78% prob → grade B
+  const clamped = Math.min(150, Math.max(0, score));
+  const prob    = Math.min(92, 60 + Math.round(clamped * 0.22));
+  const grade   = prob >= 85 ? 'A' : prob >= 75 ? 'B' : prob >= 60 ? 'C' : 'REJECT';
 
   return { score: clamped, prob, grade, reasons };
 }
@@ -2084,12 +2256,14 @@ async function generateSignal(symbolObj, isIndex) {
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
   let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
   let CE_OI = null, PE_OI = null, OI_change = null, prevOI = null;
-  let impliedVol = null, deltaVal = null, thetaVal = null, gammaVal = null;
+  let impliedVol = null, prevIV = null, deltaVal = null, thetaVal = null, gammaVal = null;
   let optionVol = null, avgOptionVol = null, prevPremium = null;
+  let allStrikes = [];
 
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
+      allStrikes = oc.strikes;
       const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
         strike      = atm.strike;
@@ -2102,13 +2276,11 @@ async function generateSignal(symbolObj, isIndex) {
                     ? (type==='CE' ? (CE_OI ?? 0) : (PE_OI ?? 0)) - OI_change
                     : null;
         impliedVol  = atm.iv      ?? null;
+        prevIV      = atm.prevIV  ?? (impliedVol ? impliedVol * 0.95 : null);
         optionVol    = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
         avgOptionVol = optionVol !== null ? optionVol * 0.70 : null;
-        // prevPremium: use close price from quote (more realistic than fake 8% gap)
         prevPremium  = type === 'CE' ? (atm.CE_close ?? (ltpOp ? ltpOp * 0.97 : null))
                                      : (atm.PE_close ?? (ltpOp ? ltpOp * 0.97 : null));
-
-        // Approximate Greeks from IV using Black-Scholes approximation
         if (ltpOp && ltpOp > 0 && impliedVol) {
           const { delta, theta, gamma } = approximateGreeks(
             baseP, strike, impliedVol / 100,
@@ -2121,22 +2293,43 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // Fallback premium — use ATM structural estimate for both indices AND stocks
   if (!usedReal) {
-    if (isIndex) {
-      premium = Math.max(10, Math.round(baseP * 0.008));
-    } else {
-      // Stock fallback: estimate ATM premium as ~0.6% of spot (typical for weekly options)
-      premium = Math.max(5, Math.round(baseP * 0.006));
-    }
+    if (isIndex) premium = Math.max(10, Math.round(baseP * 0.008));
+    else premium = Math.max(5, Math.round(baseP * 0.006));
   }
 
-  // maxPrem gate removed — capital gate below handles affordability
+  // ── STEP 7C: NEW ADVANCED MODULES ──
+  // Premium-matched PUT for straddle analysis
+  const atmCEPremium = allStrikes.length
+    ? (allStrikes.find(s => s.isATM)?.CE_ltp ?? premium) : premium;
+  const matchedPut = allStrikes.length
+    ? findPremiumMatchedPut(atmCEPremium, allStrikes) : null;
+
+  // Gap Analysis — uses real prev close from server, works for both stocks and indices
+  const prevClose   = analysis?.prevClose ?? pdh ?? (baseP * 0.995);
+  const openPrice   = analysis?.open ?? baseP;
+  const gapAnalysis = analyzeGap(prevClose, openPrice, livePCR, volRatio, impliedVol);
+
+  // IV Velocity
+  const ivVelocity  = calcIVVelocity(impliedVol, prevIV, Math.abs(thetaVal || 0), premium);
+
+  // IV Crush Risk
+  const ivCrushRisk = calcIVCrushRisk(impliedVol, ivRank, daysToExp, false);
+
+  // Angel One symbol format e.g. RELIANCE29MAY251280CE
+  const expiryDateObj = (() => { const d = new Date(); d.setDate(d.getDate() + daysToExp); return d; })();
+  const angelSymbolStr = toAngelSymbol(symbolObj.sym, expiryDateObj, strike, type);
+
+  // Synthetic straddle price (CE + matched PE premium)
+  const straddlePrice = matchedPut
+    ? parseFloat((atmCEPremium + matchedPut.premium).toFixed(2)) : null;
+  const requiredMove  = straddlePrice
+    ? parseFloat((straddlePrice / baseP * 100).toFixed(2)) : null;
 
   // ── STEP 8: RUN ALL SIGNAL ENGINE MODULES ──
   const eiVolume   = volume    ?? 0;
   const eiAvgVol   = avgVolume ? avgVolume : (eiVolume * 0.8) || 1;
-  const prevP      = baseP * 0.995; // approximate prev price from live (no tick history here)
+  const prevP      = baseP * 0.995;
 
   const emaTrend        = detectTrend(baseP, vwap, ema20, ema50, eiVolume, eiAvgVol);
   const oiBuildup       = classifyOIBuildup(baseP, prevP, OI_change ?? 0, prevOI ?? 1);
@@ -2146,13 +2339,18 @@ async function generateSignal(symbolObj, isIndex) {
   const premiumMomentum = hasPremiumMomentum(premium, prevPremium, optionVol, avgOptionVol);
   const noTradeZone     = isInNoTradeZone(baseP, vwap, eiVolume, eiAvgVol, OI_change ?? 0, prevOI ?? 1);
 
+  // ── STEP 8B: EDGE SCORES ──
+  const edgeScores = calcEdgeScores({
+    bias, rsi, pcr: livePCR, volRatio, aboveVwap, ivVelocity, gapAnalysis,
+    oiBuildup, ivRank, daysToExpiry: daysToExp, orbConfirm, pdhBreak, pdlBreak,
+  });
+
   // ── STEP 9: RUN RA PIPELINE WITH ALL MODULE OUTPUTS ──
   const ra = scoreRA({
     type, rsi, bias, aboveVwap, volRatio, oiDelta: null, pcr: livePCR,
     ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
     orbConfirm, daysToExpiry: daysToExp,
     pdhBreak, pdlBreak, atStructure, relStrength, pdh, pdl,
-    // Signal Engine module outputs:
     oiBuildup, deltaValid, gammaMomentum, thetaOk, premiumMomentum, noTradeZone,
   });
 
@@ -2175,11 +2373,10 @@ async function generateSignal(symbolObj, isIndex) {
   const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
   const target    = parseFloat(Math.max(minTarget, cfgTarget).toFixed(2));
   const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
-  if (parseFloat(rr) < 1.5) return null; // minimum 1:1.5 RR
+  if (parseFloat(rr) < 1.5) return null;
 
   const cap  = premium * lot;
-  // Allow signal even if only 1 lot affordable — let user decide sizing
-  if (cap > S.config.capital * 3) return null; // only skip if wildly unaffordable (3× capital)
+  if (cap > S.config.capital * 3) return null;
   const lots = Math.floor(S.config.capital / cap);
 
   // ── STEP 11: SETUP TYPE + REASON ──
@@ -2212,22 +2409,26 @@ async function generateSignal(symbolObj, isIndex) {
     relStrength, pdh, pdl,
     orb_high: orbHigh, orb_low: orbLow,
     vwap, ema20, ema50,
-    // Greeks (from Black-Scholes approximation on real IV)
+    // Greeks
     delta:   deltaVal   !== null ? parseFloat(deltaVal.toFixed(3))   : null,
     gamma:   gammaVal   !== null ? parseFloat(gammaVal.toFixed(4))   : null,
     theta:   thetaVal   !== null ? parseFloat(thetaVal.toFixed(3))   : null,
     iv:      impliedVol !== null ? parseFloat(impliedVol.toFixed(1)) : null,
-    // OI data
-    CE_OI, PE_OI,
-    oiChange: OI_change,
-    // Signal Engine module outputs (shown on card / drawer)
-    oiBuildup,
-    deltaValid,
-    gammaMomentum,
-    thetaOk,
+    // OI
+    CE_OI, PE_OI, oiChange: OI_change,
+    // Signal Engine modules
+    oiBuildup, deltaValid, gammaMomentum, thetaOk,
     premiumMomentum: premiumMomentum === true,
-    noTradeZone,
-    emaTrend,
+    noTradeZone, emaTrend,
+    // ── NEW ADVANCED FIELDS ──
+    edgeScores,                  // { callEdge, putEdge, straddleEdge, recommendation }
+    gapAnalysis,                 // { gapPct, gapType, direction, continuationProb, reversalProb }
+    ivVelocity,                  // { ivVelocity, thetaBurnDay, thetaBurn15m, ivExpanding, edgePresent }
+    ivCrushRisk,                 // { risk, reason }
+    matchedPut,                  // { strike, premium, diff } — premium-matched PE
+    straddlePrice,               // CE premium + matched PE premium
+    requiredMove,                // % move needed to profit from straddle
+    angelSymbol: angelSymbolStr,     // e.g. RELIANCE29MAY251280CE (Angel One format)
     logo: symbolObj.logo || getLogoUrl(symbolObj.sym) || null,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
     ts:   Date.now(),
@@ -2377,7 +2578,7 @@ function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
   S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
   S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 70;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 60;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
@@ -2733,6 +2934,41 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Advanced Analysis</div>
+
+    ${sig.angelSymbol ? `<div class="drawer-row"><span class="drawer-row-label">Angel One Symbol</span><span class="drawer-row-val" style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">${sig.angelSymbol}</span></div>` : ''}
+
+    ${sig.edgeScores ? `
+    <div class="drawer-row"><span class="drawer-row-label">Call Edge</span><span class="drawer-row-val"><span style="display:inline-block;width:${sig.edgeScores.callEdge}px;max-width:80px;height:6px;background:var(--green);border-radius:3px;margin-right:6px;vertical-align:middle"></span>${sig.edgeScores.callEdge}/100</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Put Edge</span><span class="drawer-row-val"><span style="display:inline-block;width:${sig.edgeScores.putEdge}px;max-width:80px;height:6px;background:var(--red);border-radius:3px;margin-right:6px;vertical-align:middle"></span>${sig.edgeScores.putEdge}/100</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Straddle Edge</span><span class="drawer-row-val"><span style="display:inline-block;width:${sig.edgeScores.straddleEdge}px;max-width:80px;height:6px;background:var(--amber);border-radius:3px;margin-right:6px;vertical-align:middle"></span>${sig.edgeScores.straddleEdge}/100</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Best Trade</span><span class="drawer-row-val" style="color:var(--green);font-weight:600">${sig.edgeScores.recommendation} ✅</span></div>` : ''}
+
+    ${sig.gapAnalysis ? `
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Gap Analysis</div>
+    <div class="drawer-row"><span class="drawer-row-label">Gap Type</span><span class="drawer-row-val">${sig.gapAnalysis.direction} · ${sig.gapAnalysis.gapType}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Gap %</span><span class="drawer-row-val" style="color:${sig.gapAnalysis.gapPct>0?'var(--green)':'var(--red)'}">${sig.gapAnalysis.gapPct > 0 ? '+' : ''}${sig.gapAnalysis.gapPct}%</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Continuation Prob</span><span class="drawer-row-val">${sig.gapAnalysis.continuationProb}%</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Reversal Prob</span><span class="drawer-row-val">${sig.gapAnalysis.reversalProb}%</span></div>` : ''}
+
+    ${sig.ivVelocity ? `
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">IV Velocity</div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Change</span><span class="drawer-row-val" style="color:${sig.ivVelocity.ivVelocity>0?'var(--green)':'var(--red)'}">${sig.ivVelocity.ivVelocity > 0 ? '+' : ''}${sig.ivVelocity.ivVelocity}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Theta/Day</span><span class="drawer-row-val">₹${sig.ivVelocity.thetaBurnDay.toFixed(3)}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Theta/15min</span><span class="drawer-row-val">₹${sig.ivVelocity.thetaBurn15m}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Expanding</span><span class="drawer-row-val" style="color:${sig.ivVelocity.ivExpanding?'var(--green)':'var(--text2)'}">${sig.ivVelocity.ivExpanding ? 'YES ✓' : 'NO'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV > 0.6× Theta</span><span class="drawer-row-val" style="color:${sig.ivVelocity.edgePresent?'var(--green)':'var(--red)'}">${sig.ivVelocity.edgePresent ? 'EDGE ✓' : 'No edge'}</span></div>` : ''}
+
+    ${sig.straddlePrice ? `
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Straddle Data</div>
+    <div class="drawer-row"><span class="drawer-row-label">ATM CE Premium</span><span class="drawer-row-val">₹${sig.premium}</span></div>
+    ${sig.matchedPut ? `<div class="drawer-row"><span class="drawer-row-label">Matched PE Strike</span><span class="drawer-row-val">${sig.matchedPut.strike} PE · ₹${sig.matchedPut.premium}</span></div>` : ''}
+    <div class="drawer-row"><span class="drawer-row-label">Straddle Cost</span><span class="drawer-row-val" style="color:var(--amber)">₹${sig.straddlePrice}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Required Move</span><span class="drawer-row-val">${sig.requiredMove}% to break even</span></div>` : ''}
+
+    ${sig.ivCrushRisk ? `
+    <div class="drawer-row"><span class="drawer-row-label">IV Crush Risk</span><span class="drawer-row-val" style="color:${sig.ivCrushRisk.risk==='HIGH'?'var(--red)':sig.ivCrushRisk.risk==='MEDIUM'?'var(--amber)':'var(--green)'}">${sig.ivCrushRisk.risk} — ${sig.ivCrushRisk.reason}</span></div>` : ''}
 
     <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">Technical Analysis</div>
     <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi !== null ? sig.rsi : '—'}</span></div>
