@@ -111,36 +111,67 @@ body{font-family:var(--font-sans);color:var(--text);display:flex;flex-direction:
 .met-s{font-size:9px;color:var(--text3);margin-top:3px}
 
 /* ── SIGNAL CARD ── */
-.sig-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin:8px 12px 0;padding:13px 14px;position:relative;overflow:hidden;cursor:pointer;transition:all .15s;active:background:var(--bg4)}
-.sig-card:active{background:var(--bg4)}
-.sig-bar{position:absolute;left:0;top:0;bottom:0;width:3px}
-.sig-bar.ce{background:var(--green)}.sig-bar.pe{background:var(--red)}
-.sig-r1{display:flex;align-items:center;gap:7px;margin-bottom:10px}
-.sig-type{font-size:10px;font-family:var(--font-mono);font-weight:700;padding:3px 8px;border-radius:5px}
-.sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #00f5a025}
-.sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #ff3d5a25}
-.sig-name{font-size:14px;font-weight:700;color:var(--text);flex:1;font-family:var(--font-mono)}
-.sig-prob{font-size:12px;font-weight:700;font-family:var(--font-mono)}
+.sig-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:14px;
+  margin:8px 12px 0;padding:0;position:relative;overflow:hidden;
+  cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;
+}
+.sig-card:active{transform:scale(0.985);box-shadow:none}
+.sig-card.ce-card{border-left:3px solid var(--green)}
+.sig-card.pe-card{border-left:3px solid var(--red)}
+/* Card inner padding wrapper */
+.sig-inner{padding:13px 14px 12px 15px}
+/* Removed old sig-bar — replaced by border-left on card */
+.sig-bar{display:none}
+/* Header row */
+.sig-r1{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.sig-type{font-size:10px;font-family:var(--font-mono);font-weight:700;padding:3px 9px;border-radius:6px}
+.sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #00f5a030}
+.sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #ff3d5a30}
+.sig-name{font-size:15px;font-weight:700;color:var(--text);flex:1;font-family:var(--font-mono);letter-spacing:-.01em}
+.sig-prob-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.sig-prob{font-size:18px;font-weight:800;font-family:var(--font-mono);line-height:1}
+.sig-prob-lbl{font-size:7px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+/* Setup + meta pill row */
+.sig-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.sig-pill{font-size:9px;font-family:var(--font-mono);font-weight:600;padding:2px 8px;border-radius:20px;border:1px solid;white-space:nowrap}
+.sig-pill.setup{background:transparent}
+.sig-pill.dim{background:var(--bg4);border-color:var(--border);color:var(--text3)}
+/* Price cells */
+.sig-prices{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+.sig-price-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:9px 11px}
+.sig-price-lbl{font-size:7px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.sig-price-val{font-size:17px;font-weight:700;font-family:var(--font-mono);line-height:1.1}
+.sig-price-entry{font-size:9px;font-family:var(--font-mono);margin-top:3px;color:var(--text3)}
+/* Target / SL / P&L */
+.sig-tsl{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:6px;margin-bottom:9px}
+.sig-tsl-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.sig-tsl-lbl{font-size:7px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.sig-tsl-val{font-size:14px;font-weight:700;font-family:var(--font-mono);line-height:1}
+.sig-tsl-sub{font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-top:2px}
+/* Tags row */
+.sig-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0}
+.sig-tag{font-size:9px;color:var(--text3);padding:2px 7px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);font-family:var(--font-mono)}
+/* WHY section */
+.sig-why{padding:9px 14px 12px 15px;border-top:1px solid var(--border);background:var(--bg3)}
+.sig-why-lbl{font-size:7px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.sig-why-lbl::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--amber);flex-shrink:0}
+.sig-why-tags{display:flex;flex-wrap:wrap;gap:4px}
+.sig-why-tag{font-size:9px;font-family:var(--font-mono);font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid}
+.sig-why-tag.g{color:var(--green);background:var(--green-bg);border-color:#00f5a030}
+.sig-why-tag.r{color:var(--red);background:var(--red-bg);border-color:#ff3d5a30}
+.sig-why-tag.a{color:var(--amber);background:var(--amber-bg);border-color:#ffb62730}
+.sig-why-tag.b{color:var(--blue);background:#3d9bff10;border-color:#3d9bff25}
+/* Prob bar */
+.prob-bar{height:3px;background:var(--border);overflow:hidden}
+.prob-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .6s ease}
+.live-badge{font-size:7px;background:var(--green);color:#000;border-radius:3px;padding:1px 5px;font-weight:700;letter-spacing:.03em}
+.est-badge{font-size:7px;background:var(--text3);color:var(--bg);border-radius:3px;padding:1px 4px;font-weight:700}
+/* Sig grid legacy (kept for closed cards) */
 .sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
 .sig-cell{}
 .sig-label{font-size:8px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;margin-bottom:2px;display:flex;align-items:center;gap:3px}
 .sig-val{font-size:13px;font-weight:700;font-family:var(--font-mono)}
-.sig-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.sig-tag{font-size:9px;color:var(--text3);padding:2px 7px;border-radius:4px;background:var(--bg4);border:1px solid var(--border)}
-/* ── SIGNAL REASON HIGHLIGHT ── */
-.sig-reason{font-size:10px;color:var(--text3);line-height:1.5;padding-top:8px;border-top:1px solid var(--border)}
-.sig-reason-title{font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;display:flex;align-items:center;gap:5px}
-.sig-reason-title::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber)}
-.sig-key-reasons{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
-.sig-key-tag{font-size:9px;font-family:var(--font-mono);font-weight:700;padding:3px 8px;border-radius:5px;border:1px solid}
-.sig-key-tag.bullish{color:var(--green);background:var(--green-bg);border-color:#00f5a030}
-.sig-key-tag.bearish{color:var(--red);background:var(--red-bg);border-color:#ff3d5a30}
-.sig-key-tag.neutral{color:var(--amber);background:var(--amber-bg);border-color:#ffb62730}
-.sig-full-reason{font-size:10px;color:var(--text3);line-height:1.5}
-.prob-bar{height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-top:8px}
-.prob-fill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .6s ease}
-.live-badge{font-size:8px;background:var(--green);color:#000;border-radius:3px;padding:1px 4px;font-weight:700}
-.est-badge{font-size:8px;background:var(--text3);color:var(--bg);border-radius:3px;padding:1px 4px;font-weight:700}
 
 /* ── FILTER CHIPS ── */
 .chips{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;flex-shrink:0}
@@ -2306,68 +2337,86 @@ function renderSignals() {
     const priceChgTxt = priceChg !== null ? ` <span style="color:${s.type==='CE'?(priceChg>=0?'var(--green)':'var(--red)'):(priceChg<=0?'var(--green)':'var(--red)')}">${priceChg>=0?'▲':'▼'}₹${Math.abs(priceChg).toFixed(2)}</span>` : '';
 
     const setupColor = {'ORB BREAKOUT':'var(--cyan)','REVERSAL':'var(--purple)','BREAKOUT':'var(--green)','PULLBACK':'var(--amber)','MOMENTUM':'var(--blue)'}[s.setupType||'MOMENTUM']||'var(--blue)';
-    const biasIcon   = s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡';
-    const instIcon   = s.instBias==='BULLISH'?'📈':s.instBias==='BEARISH'?'📉':'➖';
-    // Stock logo from Dhan CDN
+    const setupBorderColor = {'ORB BREAKOUT':'#22d3ee30','REVERSAL':'#a78bfa30','BREAKOUT':'#00f5a030','PULLBACK':'#ffb62730','MOMENTUM':'#3d9bff30'}[s.setupType||'MOMENTUM']||'#3d9bff30';
     const logoUrl  = `https://images.dhan.co/symbol/${s.sym}.png`;
     const logoHtml = s.isIndex
-      ? `<div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;flex-shrink:0">${s.sym.charAt(0)}</div>`
-      : `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:26px;height:26px;border-radius:50%;object-fit:contain;background:#fff;padding:1px;flex-shrink:0"><div style="display:none;width:26px;height:26px;border-radius:50%;background:var(--bg4);align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`;
+      ? `<div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,${s.type==='CE'?'var(--green),var(--cyan)':'var(--red),var(--purple)'});display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#000;flex-shrink:0">${s.sym.charAt(0)}</div>`
+      : `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:30px;height:30px;border-radius:8px;object-fit:contain;background:#fff;padding:2px;flex-shrink:0"><div style="display:none;width:30px;height:30px;border-radius:8px;background:var(--bg4);align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`;
+
+    // FII label
+    const fiiTxt = s.instBias==='BULLISH'?'FII BUY':s.instBias==='BEARISH'?'FII SELL':'FII NEUT';
+    const fiiCol = s.instBias==='BULLISH'?'var(--green)':s.instBias==='BEARISH'?'var(--red)':'var(--text3)';
+
+    // Age
+    const ageStr = `${ageLabel(s.ts)} · ${s.time}`;
+    const ageCol = ageColor(s.ts);
+
     return `
-    <div class="sig-card" onclick="openDrawer('${s.id}')">
-      <div class="sig-bar ${s.type.toLowerCase()}"></div>
-      <div class="sig-r1">
-        ${logoHtml}
-        <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
-        <span class="sig-name">${s.sym} ${s.strike}</span>
-        <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
-      </div>
-      <div style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap">
-        <span style="font-size:9px;font-family:var(--font-mono);font-weight:700;padding:2px 7px;border-radius:4px;background:${setupColor}18;color:${setupColor};border:1px solid ${setupColor}30">${s.setupType||'SIGNAL'}</span>
-        <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${biasIcon} ${s.bias||'NEUTRAL'}</span>
-        <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">${instIcon} FII</span>
-        ${s.analysis?.vwap ? `<span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)">VWAP ${s.analysis.vwap.toLocaleString('en-IN',{maximumFractionDigits:0})}</span>` : ''}
-      </div>
-      <div class="sig-grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">
-        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Option Premium <span class="live-badge">LIVE</span></div>
-          <div id="sig-prem-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
+    <div class="sig-card ${s.type.toLowerCase()}-card" onclick="openDrawer('${s.id}')">
+      <div class="sig-inner">
+        <!-- ROW 1: logo + symbol + prob -->
+        <div class="sig-r1">
+          ${logoHtml}
+          <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
+          <div style="flex:1;min-width:0">
+            <div class="sig-name">${s.sym} <span style="font-weight:500;color:var(--text2);font-size:12px">${s.strike}</span></div>
+            <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:1px">${s.expiry} · <span style="color:${ageCol}">${ageStr}</span></div>
+          </div>
+          <div class="sig-prob-wrap">
+            <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+            <span class="sig-prob-lbl">probability</span>
+          </div>
         </div>
-        <div class="sig-cell" style="background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 10px">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Share Price <span class="live-badge">LIVE</span></div>
-          <div id="sig-price-${s.id}" style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${priceColor}">${dispPrice ? '₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}) : '–'}</div>
-          <div style="font-size:10px;color:${entryColor};margin-top:3px;font-family:var(--font-mono)">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChgTxt}</div>
+
+        <!-- ROW 2: setup + bias + FII meta pills -->
+        <div class="sig-meta">
+          <span class="sig-pill setup" style="color:${setupColor};background:${setupColor}12;border-color:${setupBorderColor}">${s.setupType||'SIGNAL'}</span>
+          <span class="sig-pill dim">${s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡'} ${s.bias||'NEUTRAL'}</span>
+          <span class="sig-pill dim" style="color:${fiiCol};border-color:${s.instBias!=='NEUTRAL'?fiiCol+'40':'var(--border)'}">${fiiTxt}</span>
+          ${s.rsi!==null?`<span class="sig-pill dim">RSI ${s.rsi}</span>`:''}
+          ${s.volRatio!==null&&s.volRatio>=1.5?`<span class="sig-pill dim" style="color:var(--amber)">Vol ${s.volRatio}×</span>`:''}
+        </div>
+
+        <!-- ROW 3: Option Premium + Share Price -->
+        <div class="sig-prices">
+          <div class="sig-price-box">
+            <div class="sig-price-lbl">Option Premium <span class="live-badge">LIVE</span></div>
+            <div id="sig-prem-${s.id}" class="sig-price-val" style="color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+            <div class="sig-price-entry">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
+          </div>
+          <div class="sig-price-box">
+            <div class="sig-price-lbl">Share Price <span class="live-badge">LIVE</span></div>
+            <div id="sig-price-${s.id}" class="sig-price-val" style="color:${priceColor}">${dispPrice?'₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}</div>
+            <div class="sig-price-entry">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChgTxt}</div>
+          </div>
+        </div>
+
+        <!-- ROW 4: Target / SL / PnL -->
+        <div class="sig-tsl">
+          <div class="sig-tsl-box" style="border-color:#00f5a020">
+            <div class="sig-tsl-lbl">Target</div>
+            <div class="sig-tsl-val" style="color:var(--green)">₹${Number(s.target).toFixed(2)}</div>
+            <div class="sig-tsl-sub">RR ${s.rr||'–'}:1</div>
+          </div>
+          <div class="sig-tsl-box" style="border-color:#ff3d5a20">
+            <div class="sig-tsl-lbl">Stop Loss</div>
+            <div class="sig-tsl-val" style="color:var(--red)">₹${Number(s.sl).toFixed(2)}</div>
+            <div class="sig-tsl-sub">Lot ${s.lot} × ${s.lots}</div>
+          </div>
+          <div class="sig-tsl-box" style="border-color:${pnl===null?'var(--border)':pnl>=0?'#00f5a025':'#ff3d5a25'}">
+            <div class="sig-tsl-lbl">Live P&amp;L</div>
+            <div id="sig-pnl-${s.id}" class="sig-tsl-val" style="color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'};font-size:${Math.abs(pnl||0)>=10000?'12px':'14px'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
+            <div class="sig-tsl-sub">Capital ₹${(s.capital||0).toLocaleString('en-IN')}</div>
+          </div>
         </div>
       </div>
-      <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹${Number(s.target).toFixed(2)}</div>
-          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono)">RR ${s.rr||'–'}:1</div>
-        </div>
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss</div>
-          <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Number(s.sl).toFixed(2)}</div>
-        </div>
-        <div class="sig-cell">
-          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Live P&L</div>
-          <div id="sig-pnl-${s.id}" style="font-size:18px;font-weight:700;font-family:var(--font-mono);color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
-        </div>
+
+      <!-- WHY SECTION — parsed from actual scored reasons, zero duplication -->
+      <div class="sig-why">
+        <div class="sig-why-lbl">Why this signal</div>
+        <div class="sig-why-tags">${buildWhyTags(s)}</div>
       </div>
-      <div class="sig-tags">
-        <span class="sig-tag">${s.expiry}</span>
-        ${s.rsi!==null?`<span class="sig-tag">RSI ${s.rsi}</span>`:''}
-        <span class="sig-tag">IV ${s.ivRank}</span>
-        ${s.pcr!==null?`<span class="sig-tag">PCR ${s.pcr}</span>`:''}
-        ${s.volRatio!==null?`<span class="sig-tag">Vol ${s.volRatio}x</span>`:''}
-        ${s.relStrength!==null?`<span class="sig-tag" style="color:${s.relStrength>0?'var(--green)':'var(--red)'}">RS${s.relStrength>0?'+':''  }${s.relStrength?.toFixed(1)}</span>`:''}
-        <span class="sig-tag" style="color:${ageColor(s.ts)}">${ageLabel(s.ts)} · ${s.time}</span>
-      </div>
-      <div class="sig-reason">
-        <div class="sig-reason-title">WHY THIS SIGNAL</div>
-        ${buildKeyReasons(s)}
-      </div>
+
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
     </div>`;
   }).join('');
@@ -2532,80 +2581,67 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// SIGNAL REASON HIGHLIGHTS — extracts top conditions from signal data
+// BUILD WHY TAGS — parses sig.reason (actual scoring output) into
+// colored pills. Zero duplication with the card's meta row.
 // ══════════════════════════════════════════════════════════════════
-function buildKeyReasons(sig) {
-  const isCE = sig.type === 'CE';
-  const tags = [];
+function buildWhyTags(sig) {
+  if (!sig.reason) return `<span class="sig-why-tag a">MOMENTUM SETUP</span>`;
 
-  // ── Primary setup type ──
-  const setupColors = {
-    'ORB BREAKOUT': 'bullish', 'BREAKOUT': 'bullish',
-    'REVERSAL': 'neutral', 'PULLBACK': 'neutral', 'MOMENTUM': 'neutral',
-  };
-  tags.push({ label: sig.setupType || 'MOMENTUM', cls: setupColors[sig.setupType] || 'neutral', icon: '📐' });
+  // sig.reason is "BULLISH trend · RSI 28 deeply oversold · Strong OI buildup · Above VWAP ✓"
+  const parts = sig.reason.split(/\s*·\s*/).map(s => s.trim()).filter(Boolean);
 
-  // ── RSI condition ──
-  if (sig.rsi !== null && sig.rsi !== undefined) {
-    if (sig.rsi < 30)       tags.push({ label: `RSI ${sig.rsi} OVERSOLD`, cls: 'bullish', icon: '📊' });
-    else if (sig.rsi > 70)  tags.push({ label: `RSI ${sig.rsi} OVERBOUGHT`, cls: 'bearish', icon: '📊' });
-    else if (sig.rsi < 40)  tags.push({ label: `RSI ${sig.rsi} WEAK`, cls: 'neutral', icon: '📊' });
-    else if (sig.rsi > 60)  tags.push({ label: `RSI ${sig.rsi} STRONG`, cls: 'neutral', icon: '📊' });
+  // Deduplicate by label (case-insensitive key)
+  const seen = new Set();
+  const unique = parts.filter(p => {
+    const k = p.toLowerCase().replace(/[\d.]+/g, '#');
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  // Classify each part into a color
+  function classify(txt) {
+    const t = txt.toLowerCase();
+    // Green — bullish signals
+    if (/bullish trend/.test(t))       return 'g';
+    if (/oversold/.test(t))            return 'g';
+    if (/oi buildup/.test(t))          return 'g';
+    if (/above vwap/.test(t) && sig.type==='CE') return 'g';
+    if (/below vwap/.test(t) && sig.type==='PE') return 'g';
+    if (/orb breakout/.test(t)||/orb.*✓/.test(t)) return 'g';
+    if (/pdh.*break/.test(t))          return 'g';
+    if (/fii buy/.test(t)||/fii selling.*✓/.test(t)) return (sig.type==='CE'?'g':'g');
+    if (/rs\+.*nifty/.test(t)||/rs\+/.test(t)) return 'g';
+    if (/iv rank.*cheap/.test(t)||/cheap/.test(t)) return 'g';
+    if (/pcr.*bullish/.test(t))        return 'g';
+    if (/vol.*surge/.test(t)||/\d+\.?\d*x surge/.test(t)) return 'g';
+    // Red — bearish signals
+    if (/bearish trend/.test(t))       return 'r';
+    if (/overbought/.test(t))          return 'r';
+    if (/below vwap.*✗/.test(t)||(/below vwap/.test(t)&&sig.type==='CE')) return 'r';
+    if (/above vwap.*✗/.test(t)||(/above vwap/.test(t)&&sig.type==='PE')) return 'r';
+    if (/pdl.*break/.test(t))          return 'r';
+    if (/pcr.*bearish/.test(t))        return 'r';
+    if (/rs-.*nifty/.test(t)||/rs−/.test(t)) return 'r';
+    if (/✗/.test(txt))                 return 'r';
+    // Blue — neutral positive
+    if (/neutral trend/.test(t))       return 'b';
+    if (/vwap/.test(t))                return 'b';
+    if (/pcr/.test(t))                 return 'b';
+    if (/iv rank/.test(t))             return 'b';
+    if (/rs/.test(t))                  return 'b';
+    // Amber — default
+    return 'a';
   }
 
-  // ── Bias / market direction ──
-  if (sig.bias === 'BULLISH') tags.push({ label: 'MARKET BULLISH', cls: 'bullish', icon: '🟢' });
-  else if (sig.bias === 'BEARISH') tags.push({ label: 'MARKET BEARISH', cls: 'bearish', icon: '🔴' });
-
-  // ── Volume surge ──
-  if (sig.volRatio !== null && sig.volRatio !== undefined) {
-    if (sig.volRatio >= 2) tags.push({ label: `VOL ${sig.volRatio}× SURGE`, cls: 'bullish', icon: '🔥' });
-    else if (sig.volRatio >= 1.5) tags.push({ label: `VOL ${sig.volRatio}× ABOVE AVG`, cls: 'neutral', icon: '📈' });
+  // Format label — capitalize nicely, replace ✓ with nothing (implied positive)
+  function fmt(txt) {
+    return txt.replace(/✓/g,'').replace(/✗/g,'✕').trim();
   }
 
-  // ── PDH/PDL breakout ──
-  if (sig.pdh && sig.livePrice > sig.pdh * 1.003)
-    tags.push({ label: `ABOVE PDH ${Number(sig.pdh).toFixed(0)}`, cls: 'bullish', icon: '🔓' });
-  if (sig.pdl && sig.livePrice < sig.pdl * 0.997)
-    tags.push({ label: `BELOW PDL ${Number(sig.pdl).toFixed(0)}`, cls: 'bearish', icon: '🔓' });
-
-  // ── ORB ──
-  if (sig.orb_high && isCE && sig.livePrice > sig.orb_high)
-    tags.push({ label: 'ORB HIGH CLEARED', cls: 'bullish', icon: '🚀' });
-  if (sig.orb_low && !isCE && sig.livePrice < sig.orb_low)
-    tags.push({ label: 'ORB LOW BROKEN', cls: 'bearish', icon: '📉' });
-
-  // ── Relative strength vs Nifty ──
-  if (sig.relStrength !== null && sig.relStrength !== undefined) {
-    if (sig.relStrength > 1) tags.push({ label: `RS +${sig.relStrength.toFixed(1)} VS NIFTY`, cls: 'bullish', icon: '💪' });
-    else if (sig.relStrength < -1) tags.push({ label: `RS ${sig.relStrength.toFixed(1)} VS NIFTY`, cls: 'bearish', icon: '⬇' });
-  }
-
-  // ── IV Rank ──
-  if (sig.ivRank !== null && sig.ivRank !== undefined) {
-    if (sig.ivRank < 20) tags.push({ label: `LOW IV ${sig.ivRank} — CHEAP ENTRY`, cls: 'bullish', icon: '💰' });
-    else if (sig.ivRank > 50) tags.push({ label: `HIGH IV ${sig.ivRank} — COSTLY`, cls: 'bearish', icon: '⚠' });
-  }
-
-  // ── High prob ──
-  if (sig.prob >= 85) tags.push({ label: `GRADE A · ${sig.prob}% PROB`, cls: 'bullish', icon: '⭐' });
-
-  // ── FII bias ──
-  if (sig.instBias === 'BULLISH') tags.push({ label: 'FII BUYING', cls: 'bullish', icon: '📈' });
-  else if (sig.instBias === 'BEARISH') tags.push({ label: 'FII SELLING', cls: 'bearish', icon: '📉' });
-
-  // Limit to top 4 most important tags
-  const top = tags.slice(0, 4);
-
-  const tagsHtml = top.map(t =>
-    `<span class="sig-key-tag ${t.cls}">${t.icon} ${t.label}</span>`
+  return unique.map(p =>
+    `<span class="sig-why-tag ${classify(p)}">${fmt(p)}</span>`
   ).join('');
-
-  // Full reason as sub-text
-  const fullReason = sig.reason
-    ? `<div class="sig-full-reason">${sig.reason}</div>` : '';
-
-  return `<div class="sig-key-reasons">${tagsHtml}</div>${fullReason}`;
 }
 
 // ══════════════════════════════════════════════════════════════════
