@@ -894,14 +894,14 @@ app.post('/option-chain', async (req, res) => {
       return res.json({ status: false, message: `No NFO instruments found for ${sym}` });
     }
 
-    // Batch quote fetch (Angel allows up to 50 tokens)
+    // Batch quote fetch using FULL mode to get IV, OI, and volume (Angel allows up to 50 tokens)
     const batchSize = 50;
     const allFetched = [];
     for (let i = 0; i < tokens.length; i += batchSize) {
       const batch = tokens.slice(i, i + batchSize);
       const qResp = await axios.post(
         `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
-        { mode: 'LTP', exchangeTokens: { NFO: batch } },
+        { mode: 'FULL', exchangeTokens: { NFO: batch } },
         { headers: getHeaders(true), timeout: 20000 }
       );
       if (qResp.data.status && qResp.data.data?.fetched) {
@@ -909,25 +909,58 @@ app.post('/option-chain', async (req, res) => {
       }
     }
 
-    const closeMap = {};
+    // Build maps: ltp, close, iv, oi, oi_change, volume for each token
+    const closeMap = {}, ivMap = {}, oiMap = {}, oiChangeMap = {}, volMap = {}, prevIVMap = {};
     allFetched.forEach(q => {
-      ltpMap[String(q.symbolToken)]   = parseFloat(q.ltp   || q.close || 0);
-      closeMap[String(q.symbolToken)] = parseFloat(q.close || q.ltp   || 0);
+      const tok = String(q.symbolToken);
+      ltpMap[tok]      = parseFloat(q.ltp   || q.close || 0);
+      closeMap[tok]    = parseFloat(q.close || q.ltp   || 0);
+      // FULL mode fields: impliedVol (%), openInterest, netChangeInOpenInterest, tradeVolume
+      ivMap[tok]       = q.impliedVol      != null ? parseFloat(q.impliedVol)             : null;
+      prevIVMap[tok]   = q.prevImpliedVol  != null ? parseFloat(q.prevImpliedVol)         : null;
+      oiMap[tok]       = q.openInterest    != null ? parseInt(q.openInterest,    10)       : null;
+      oiChangeMap[tok] = q.netChangeInOpenInterest != null
+                           ? parseInt(q.netChangeInOpenInterest, 10) : null;
+      volMap[tok]      = q.tradeVolume     != null ? parseInt(q.tradeVolume,     10)       : null;
     });
 
     const result = strikeList.map(strike => {
-      const m = strikeMap[strike];
+      const m   = strikeMap[strike];
+      const cTok = m.CE_token ? String(m.CE_token) : null;
+      const pTok = m.PE_token ? String(m.PE_token) : null;
+
+      // Derive a single ATM IV: prefer CE iv, fall back to PE iv
+      const atmIV = (cTok && ivMap[cTok] != null) ? ivMap[cTok]
+                  : (pTok && ivMap[pTok] != null) ? ivMap[pTok]
+                  : null;
+      const atmPrevIV = (cTok && prevIVMap[cTok] != null) ? prevIVMap[cTok]
+                      : (pTok && prevIVMap[pTok] != null) ? prevIVMap[pTok]
+                      : null;
+
       return {
         strike,
-        isATM:    strike === atmStrike,
-        CE_ltp:   m.CE_token ? (ltpMap[m.CE_token]   || 0)    : null,
-        PE_ltp:   m.PE_token ? (ltpMap[m.PE_token]   || 0)    : null,
-        CE_close: m.CE_token ? (closeMap[m.CE_token] || null) : null,
-        PE_close: m.PE_token ? (closeMap[m.PE_token] || null) : null,
-        CE_token: m.CE_token || null,
-        PE_token: m.PE_token || null,
-        CE_sym:   m.CE_sym   || null,
-        PE_sym:   m.PE_sym   || null,
+        isATM:         strike === atmStrike,
+        // Prices
+        CE_ltp:        cTok ? (ltpMap[cTok]   || 0)    : null,
+        PE_ltp:        pTok ? (ltpMap[pTok]   || 0)    : null,
+        CE_close:      cTok ? (closeMap[cTok] || null) : null,
+        PE_close:      pTok ? (closeMap[pTok] || null) : null,
+        // Implied volatility (same series, use ATM blended)
+        iv:            atmIV,
+        prevIV:        atmPrevIV,
+        // Open Interest
+        CE_oi:         cTok ? (oiMap[cTok]       ?? null) : null,
+        PE_oi:         pTok ? (oiMap[pTok]       ?? null) : null,
+        CE_oi_change:  cTok ? (oiChangeMap[cTok] ?? null) : null,
+        PE_oi_change:  pTok ? (oiChangeMap[pTok] ?? null) : null,
+        // Volume
+        CE_volume:     cTok ? (volMap[cTok]      ?? null) : null,
+        PE_volume:     pTok ? (volMap[pTok]      ?? null) : null,
+        // Tokens / symbols
+        CE_token:      m.CE_token || null,
+        PE_token:      m.PE_token || null,
+        CE_sym:        m.CE_sym   || null,
+        PE_sym:        m.PE_sym   || null,
       };
     });
 

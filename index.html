@@ -2242,7 +2242,7 @@ async function generateSignal(symbolObj, isIndex) {
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
   const ivRank  = null; // requires 52-week IV history
   const now = new Date();
-  const daysToThursday = (4 - now.getDay() + 7) % 7 || 7;
+  const daysToThursday = (4 - now.getDay() + 7) % 7; // 0 on expiry Thursday, correct for same-day theta
   const daysToExp = S.config.expiry === 'WEEKLY' ? daysToThursday
                   : S.config.expiry === 'NEXT'   ? daysToThursday + 7
                   : daysToThursday + 14;
@@ -2276,7 +2276,7 @@ async function generateSignal(symbolObj, isIndex) {
                     ? (type==='CE' ? (CE_OI ?? 0) : (PE_OI ?? 0)) - OI_change
                     : null;
         impliedVol  = atm.iv      ?? null;
-        prevIV      = atm.prevIV  ?? (impliedVol ? impliedVol * 0.95 : null);
+        prevIV      = atm.prevIV ?? null; // only use real server-provided prevIV; null = no IV velocity calc
         optionVol    = type === 'CE' ? (atm.CE_volume ?? null) : (atm.PE_volume ?? null);
         avgOptionVol = optionVol !== null ? optionVol * 0.70 : null;
         prevPremium  = type === 'CE' ? (atm.CE_close ?? (ltpOp ? ltpOp * 0.97 : null))
@@ -2294,8 +2294,31 @@ async function generateSignal(symbolObj, isIndex) {
   }
 
   if (!usedReal) {
-    if (isIndex) premium = Math.max(10, Math.round(baseP * 0.008));
-    else premium = Math.max(5, Math.round(baseP * 0.006));
+    // Estimate premium via Black-Scholes using typical IV per underlying type.
+    // This is far more accurate than a flat % of spot, especially across
+    // different expiry lengths and price levels.
+    const fallbackIV = isIndex
+      ? (symbolObj.sym === 'BANKNIFTY' ? 0.16 : 0.13) // NIFTY ~13%, BankNifty ~16%
+      : 0.30;                                           // stocks typically 25-35%
+    const fallbackT = Math.max(daysToExp, 1) / 365;
+    const fb = approximateGreeks(baseP, strike, fallbackIV, fallbackT, type);
+    // BSM price for CE: S*N(d1) - K*e^(-rT)*N(d2); for PE use put-call parity
+    const r = 0.065, sqrtT = Math.sqrt(fallbackT);
+    const d1 = (Math.log(baseP / strike) + (r + 0.5 * fallbackIV * fallbackIV) * fallbackT) / (fallbackIV * sqrtT);
+    const d2 = d1 - fallbackIV * sqrtT;
+    function ncdf(x) {
+      const a = [0, 0.319381530, -0.356563782, 1.781477937, -1.821255978, 1.330274429];
+      const t2 = 1 / (1 + 0.2316419 * Math.abs(x));
+      const poly = t2 * (a[1] + t2 * (a[2] + t2 * (a[3] + t2 * (a[4] + t2 * a[5]))));
+      const pdf  = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+      const cdf  = 1 - pdf * poly;
+      return x >= 0 ? cdf : 1 - cdf;
+    }
+    const Nd1 = ncdf(d1), Nd2 = ncdf(d2);
+    const bsmCE = baseP * Nd1 - strike * Math.exp(-r * fallbackT) * Nd2;
+    const bsmPE = bsmCE + strike * Math.exp(-r * fallbackT) - baseP; // put-call parity
+    const bsmRaw = type === 'CE' ? bsmCE : bsmPE;
+    premium = Math.max(isIndex ? 10 : 5, Math.round(bsmRaw));
   }
 
   // ── STEP 7C: NEW ADVANCED MODULES ──
