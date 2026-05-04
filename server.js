@@ -412,17 +412,9 @@ app.post('/market-bias', async (req, res) => {
     const vwap = vwapDen > 0 ? parseFloat((vwapNum / vwapDen).toFixed(2)) : null;
     const aboveVwap = vwap ? ltp > vwap : null;
 
-    // Today's open = first candle's open price (for gap analysis)
-    const todayOpen  = todayCandles.length ? parseFloat(todayCandles[0][1]) : null;
-    // Previous close = last candle of prev day (for gap %)
-    const prevDayCandles = raw.filter(c => c[0].slice(0,10) === prevDay).sort((a,b) => a[0].localeCompare(b[0]));
-    const prevClose   = prevDayCandles.length ? parseFloat(prevDayCandles[prevDayCandles.length-1][4]) : (pdl ?? null);
-
     res.json({
       status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap,
       pdh, pdl, orb_high, orb_low, volRatio,
-      open: todayOpen,
-      prevClose,
       candleCount: raw.length
     });
   } catch (err) {
@@ -553,10 +545,7 @@ async function fetchMarketBiasData(symbolToken, exchange = 'NSE') {
   let vwapNum=0, vwapDen=0;
   todayCandles.forEach(c => { const tp=(parseFloat(c[2])+parseFloat(c[3])+parseFloat(c[4]))/3; const vol=parseFloat(c[5]); vwapNum+=tp*vol; vwapDen+=vol; });
   const vwap = vwapDen > 0 ? parseFloat((vwapNum/vwapDen).toFixed(2)) : null;
-  const todayOpen = todayCandles.length ? parseFloat(todayCandles[0][1]) : null;
-  const prevCl    = prevCandles.length  ? parseFloat(prevCandles[prevCandles.length-1][4]) : (pdl ?? null);
-  return { status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap: vwap ? ltp>vwap : null,
-           pdh, pdl, orb_high, orb_low, volRatio, open: todayOpen, prevClose: prevCl, candleCount: raw.length };
+  return { status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap: vwap ? ltp>vwap : null, pdh, pdl, orb_high, orb_low, volRatio, candleCount: raw.length };
 }
 
 async function fetchFiiDiiData() {
