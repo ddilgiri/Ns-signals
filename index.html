@@ -363,12 +363,10 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         <button onclick="closeWatchlistEdit()" style="width:100%;margin-top:12px;padding:13px;border-radius:10px;border:none;background:var(--green);color:#000;font-size:14px;font-weight:700;cursor:pointer">Done</button>
       </div>
     </div>
-    <!-- Metrics — compact single row showing only signal count -->
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px 4px">
-      <div class="met" style="flex:1"><div class="met-l">Active Signals</div><div class="met-v a" id="mSigs">0</div></div>
-      <div id="mScanSt" style="display:none"></div>
-      <div id="mSessionPnl" style="display:none"></div>
-    </div>
+    <!-- hidden state holders -->
+    <div id="mSigs" style="display:none">0</div>
+    <div id="mScanSt" style="display:none"></div>
+    <div id="mSessionPnl" style="display:none"></div>
     <!-- Open / Closed tab switcher -->
     <div style="display:flex;align-items:center;border-bottom:2px solid var(--border);margin:0 0 0 0">
       <button id="tabOpenBtn" onclick="switchSignalTab('open')" style="flex:1;padding:9px 0;border:none;background:transparent;color:var(--green);font-family:var(--font-mono);font-size:12px;font-weight:700;border-bottom:2px solid var(--green);margin-bottom:-2px;cursor:pointer;letter-spacing:.05em">⚡ OPEN <span id="tabOpenCount" style="font-size:10px;background:var(--green);color:#000;border-radius:8px;padding:1px 6px;margin-left:4px">0</span></button>
@@ -2437,8 +2435,11 @@ function renderSignals() {
             <div class="sig-name">${s.sym} <span style="font-weight:500;color:var(--text2);font-size:12px">${s.strike}</span></div>
             <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:1px">${s.expiry} · <span style="color:${ageCol}">${ageStr}</span></div>
           </div>
-          <div class="sig-prob-wrap">
-            <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+          <div class="sig-prob-wrap" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <button onclick="event.stopPropagation();exitSignal('${s.id}')" style="padding:3px 9px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:9px;font-weight:700;font-family:var(--font-mono);cursor:pointer;letter-spacing:.03em;line-height:1.4">✕ EXIT</button>
+              <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+            </div>
             <span class="sig-prob-lbl">probability</span>
           </div>
         </div>
@@ -2485,10 +2486,6 @@ function renderSignals() {
       </div>
 
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
-      <!-- Exit button -->
-      <div style="padding:10px 14px 12px;border-top:1px solid var(--border)">
-        <button onclick="event.stopPropagation();exitSignal('${s.id}')" style="width:100%;padding:9px;border-radius:10px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:12px;font-weight:700;font-family:var(--font-mono);cursor:pointer;letter-spacing:.05em;transition:all .15s" onmousedown="this.style.background='var(--red-bg)'" onmouseup="this.style.background='transparent'">✕ EXIT POSITION</button>
-      </div>
     </div>`;
   }).join('');
 }
