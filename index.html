@@ -365,9 +365,9 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
     </div>
     <!-- Metrics -->
     <div class="metrics-grid">
-      <div class="met"><div class="met-l">Capital</div><div class="met-v" id="mCap">₹30K</div></div>
       <div class="met"><div class="met-l">Signals</div><div class="met-v a" id="mSigs">0</div></div>
       <div class="met"><div class="met-l">Scan</div><div class="met-v" id="mScanSt" style="font-size:12px;color:var(--text3)">IDLE</div></div>
+      <div class="met"><div class="met-l">Session P&L</div><div class="met-v" id="mSessionPnl" style="color:var(--text3)">–</div></div>
     </div>
     <!-- Open / Closed tab switcher -->
     <div style="display:flex;align-items:center;border-bottom:2px solid var(--border);margin:0 0 0 0">
@@ -400,38 +400,88 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
   <div class="page" id="page-analysis">
     <div class="disc">⚠ Signals are algorithmic only. Options involve risk. Always use stop-loss. Not SEBI-registered advice.</div>
 
-    <div class="sec-head">MARKET SENTIMENT</div>
-    <div class="card" style="margin-top:0">
-      <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Market</div>
-            <div id="anlMktStatus" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">CLOSED</div>
+    <!-- Capital + P&L row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px 0">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 13px">
+        <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">Capital</div>
+        <div id="anlCapDeployed" style="font-size:20px;font-weight:800;font-family:var(--font-mono);color:var(--blue)">₹0</div>
+        <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">of ₹<span id="anlCapTotal">30,000</span> budget</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 13px">
+        <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">Session P&amp;L</div>
+        <div id="anlSessionPnl" style="font-size:20px;font-weight:800;font-family:var(--font-mono);color:var(--text3)">–</div>
+        <div id="anlSessionPnlSub" style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">live open positions</div>
+      </div>
+    </div>
+
+    <!-- P&L Breakdown bar -->
+    <div style="padding:8px 12px 0">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:9px 13px 6px;font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">P&amp;L Breakdown</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr)">
+          <div style="padding:9px 10px;text-align:center;border-right:1px solid var(--border)">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:4px">OPEN</div>
+            <div id="anlPnlOpen" style="font-size:15px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">0</div>
           </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">FII/DII</div>
-            <div id="anlInstBias" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">–</div>
+          <div style="padding:9px 10px;text-align:center;border-right:1px solid var(--border)">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:4px">MAX PROFIT</div>
+            <div id="anlPnlProfit" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--green)">₹0</div>
           </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Signals</div>
-            <div id="anlSigCount" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">0</div>
+          <div style="padding:9px 10px;text-align:center;border-right:1px solid var(--border)">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:4px">MAX LOSS</div>
+            <div id="anlPnlLoss" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹0</div>
+          </div>
+          <div style="padding:9px 10px;text-align:center">
+            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:4px">SL HIT</div>
+            <div id="anlHitRate" style="font-size:15px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">0</div>
           </div>
         </div>
-        <div id="anlNewsHeadline" style="font-size:10px;color:var(--text3);font-family:var(--font-mono);line-height:1.6;padding:8px 10px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)">News context loading...</div>
       </div>
     </div>
 
-    <div class="sec-head">ACTIVE SIGNALS SUMMARY</div>
-    <div class="card" style="margin-top:0">
-      <div class="card-body" id="anlSignalSummary">
-        <div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">No active signals</div>
+    <!-- Sentiment row -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 12px 0">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+        <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Market</div>
+        <div id="anlMktStatus" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">CLOSED</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+        <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">FII Flow</div>
+        <div id="anlInstBias" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text3)">–</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center">
+        <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">CE / PE</div>
+        <div id="anlSigCount" style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">0/0</div>
       </div>
     </div>
 
-    <div class="sec-head">INDEX PERFORMANCE</div>
-    <div id="anlIndexGrid" class="card" style="margin-top:0">
-      <div class="card-body">
-        <div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">Connect Angel One to see live index data</div>
+    <!-- FII/DII detail -->
+    <div style="padding:8px 12px 0">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:9px 13px 6px;font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">FII / DII Activity</div>
+        <div id="anlFiiDetail" style="padding:10px 13px">
+          <div style="font-size:11px;color:var(--text3);text-align:center;padding:4px 0">Connect Angel One to load</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Index Performance -->
+    <div style="padding:8px 12px 0">
+      <div id="anlIndexGrid" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:9px 13px 6px;font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">Index Performance</div>
+        <div style="padding:10px 13px">
+          <div style="font-size:11px;color:var(--text3);text-align:center;padding:4px 0">Connect Angel One to see live data</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open Positions detail -->
+    <div style="padding:8px 12px 10px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="padding:9px 13px 6px;font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">Open Positions</div>
+        <div id="anlOpenPositions" style="padding:10px 13px">
+          <div style="font-size:11px;color:var(--text3);text-align:center;padding:4px 0">No open signals</div>
+        </div>
       </div>
     </div>
 
@@ -2062,7 +2112,27 @@ async function updateSignalLivePrices() {
         pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + Math.abs(pnl).toLocaleString('en-IN');
         pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
       }
+      // Update live premium pill in why-tags
+      const livePill = document.getElementById(`sig-livepill-${sig.id}`);
+      if (livePill && sig.livePremium > 0) {
+        const chg = sig.livePremium - (sig.entryPremium || sig.premium);
+        const chgStr = Math.abs(chg) < 0.01 ? '' : (chg >= 0 ? ` ▲₹${chg.toFixed(2)}` : ` ▼₹${Math.abs(chg).toFixed(2)}`);
+        livePill.className = `sig-why-tag ${chg > 0 ? 'g' : chg < 0 ? 'r' : 'b'}`;
+        livePill.textContent = `₹${sig.livePremium.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${chgStr} LIVE`;
+      }
     });
+    // Update session P&L in header
+    const totalPnl = S.signals.reduce((sum, sig) => {
+      if (sig.livePremium > 0 && sig.entryPremium > 0) {
+        return sum + Math.round((sig.livePremium - sig.entryPremium) * sig.lot * sig.lots);
+      }
+      return sum;
+    }, 0);
+    const pnlHdr = document.getElementById('mSessionPnl');
+    if (pnlHdr && S.signals.length) {
+      pnlHdr.textContent = (totalPnl >= 0 ? '+₹' : '-₹') + Math.abs(totalPnl).toLocaleString('en-IN');
+      pnlHdr.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
     // Save updated signals to localStorage
     try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
   }
@@ -2114,7 +2184,9 @@ function saveConfig() {
   S.config.indices = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'].filter((_,i) =>
     document.getElementById(['idx-NIFTY','idx-BANKNIFTY','idx-FINNIFTY','idx-MIDCAP'][i])?.checked
   );
-  document.getElementById('mCap').textContent = '₹' + (S.config.capital>=100000?(S.config.capital/100000).toFixed(1)+'L':(S.config.capital/1000).toFixed(0)+'K');
+  // Capital now shown in analysis tab — update mSessionPnl in header instead
+  const pnlHdrEl = document.getElementById('mSessionPnl');
+  if (pnlHdrEl) { pnlHdrEl.textContent = '–'; pnlHdrEl.style.color = 'var(--text3)'; }
   addLog(`Config saved: ₹${S.config.capital.toLocaleString('en-IN')} · ${S.config.profitPct}% target · ${S.config.slPct}% SL`, 'ok');
   toast('ok', '✅ Config Saved', `Capital: ₹${S.config.capital.toLocaleString('en-IN')}`);
 }
@@ -2275,23 +2347,34 @@ function renderSignals() {
         : `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:28px;height:28px;border-radius:50%;object-fit:contain;background:#fff;flex-shrink:0"><div style="display:none;width:28px;height:28px;border-radius:50%;background:var(--bg4);align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text3);flex-shrink:0">${s.sym.charAt(0)}</div>`;
       const pnl = s.closedPnl || 0;
       return `<div class="sig-card" style="opacity:0.75;border-left:3px solid var(--red)">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:12px 14px 0">
           ${logoHtml}
           <div style="flex:1">
             <div style="display:flex;align-items:center;gap:6px">
               <span class="sig-type ${s.type.toLowerCase()}" style="font-size:10px">${s.type}</span>
               <span class="sig-name">${s.sym} ${s.strike}</span>
-              <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:4px;background:#ff444420;color:var(--red);border:1px solid #ff444440;margin-left:auto">🔒 SL HIT</span>
+              <span style="font-size:9px;font-family:var(--font-mono);padding:2px 7px;border-radius:20px;background:#ff444420;color:var(--red);border:1px solid #ff444440;margin-left:auto">🔒 SL HIT</span>
             </div>
-            <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);margin-top:2px">${s.time} · Entry ₹${(s.entryPremium||s.premium).toFixed(2)} · SL ₹${Number(s.sl).toFixed(2)}</div>
+            <div style="font-size:9px;color:var(--text3);font-family:var(--font-mono);margin-top:3px">${s.expiry} · ${s.time}</div>
           </div>
         </div>
-        <div class="sig-grid" style="grid-template-columns:repeat(3,1fr);gap:6px">
-          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">ENTRY</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--text)">₹${(s.entryPremium||s.premium).toFixed(2)}</div></div>
-          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">SL HIT</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Number(s.sl).toFixed(2)}</div></div>
-          <div class="sig-cell"><div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-bottom:2px">P&L</div><div style="font-size:13px;font-weight:700;font-family:var(--font-mono);color:var(--red)">${pnl>=0?'+':''}₹${Math.abs(pnl).toLocaleString('en-IN')}</div></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 14px 12px">
+          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:9px 10px">
+            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Entry</div>
+            <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--text)">₹${(s.entryPremium||s.premium).toFixed(2)}</div>
+            <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-top:2px">Lot ${s.lot} × ${s.lots}</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid #ff3d5a20;border-radius:10px;padding:9px 10px">
+            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">SL Hit</div>
+            <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:var(--red)">₹${Number(s.sl).toFixed(2)}</div>
+            <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-top:2px">Capital ₹${(s.capital||0).toLocaleString('en-IN')}</div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid ${pnl>=0?'#00f5a020':'#ff3d5a20'};border-radius:10px;padding:9px 10px">
+            <div style="font-size:7px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">P&amp;L</div>
+            <div style="font-size:14px;font-weight:700;font-family:var(--font-mono);color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':'-'}₹${Math.abs(pnl).toLocaleString('en-IN')}</div>
+            <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);margin-top:2px">RR ${s.rr||'–'}:1</div>
+          </div>
         </div>
-        <div style="font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--font-mono)">Lot ${s.lot} × ${s.lots} lots · ${s.expiry}</div>
       </div>`;
     }).join('');
     return;
@@ -2368,16 +2451,7 @@ function renderSignals() {
           </div>
         </div>
 
-        <!-- ROW 2: setup + bias + FII meta pills -->
-        <div class="sig-meta">
-          <span class="sig-pill setup" style="color:${setupColor};background:${setupColor}12;border-color:${setupBorderColor}">${s.setupType||'SIGNAL'}</span>
-          <span class="sig-pill dim">${s.bias==='BULLISH'?'🟢':s.bias==='BEARISH'?'🔴':'🟡'} ${s.bias||'NEUTRAL'}</span>
-          <span class="sig-pill dim" style="color:${fiiCol};border-color:${s.instBias!=='NEUTRAL'?fiiCol+'40':'var(--border)'}">${fiiTxt}</span>
-          ${s.rsi!==null?`<span class="sig-pill dim">RSI ${s.rsi}</span>`:''}
-          ${s.volRatio!==null&&s.volRatio>=1.5?`<span class="sig-pill dim" style="color:var(--amber)">Vol ${s.volRatio}×</span>`:''}
-        </div>
-
-        <!-- ROW 3: Option Premium + Share Price -->
+        <!-- ROW 2: Option Premium + Share Price -->
         <div class="sig-prices">
           <div class="sig-price-box">
             <div class="sig-price-lbl">Option Premium <span class="live-badge">LIVE</span></div>
@@ -2391,7 +2465,7 @@ function renderSignals() {
           </div>
         </div>
 
-        <!-- ROW 4: Target / SL / PnL -->
+        <!-- ROW 3: Target / SL / PnL -->
         <div class="sig-tsl">
           <div class="sig-tsl-box" style="border-color:#00f5a020">
             <div class="sig-tsl-lbl">Target</div>
@@ -2406,15 +2480,17 @@ function renderSignals() {
           <div class="sig-tsl-box" style="border-color:${pnl===null?'var(--border)':pnl>=0?'#00f5a025':'#ff3d5a25'}">
             <div class="sig-tsl-lbl">Live P&amp;L</div>
             <div id="sig-pnl-${s.id}" class="sig-tsl-val" style="color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'};font-size:${Math.abs(pnl||0)>=10000?'12px':'14px'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
-            <div class="sig-tsl-sub">Capital ₹${(s.capital||0).toLocaleString('en-IN')}</div>
+            <div class="sig-tsl-sub">₹${(s.capital||0).toLocaleString('en-IN')} capital</div>
           </div>
         </div>
       </div>
 
-      <!-- WHY SECTION — parsed from actual scored reasons, zero duplication -->
+      <!-- WHY TAGS — no label, tags explain themselves; live premium injected too -->
       <div class="sig-why">
-        <div class="sig-why-lbl">Why this signal</div>
-        <div class="sig-why-tags">${buildWhyTags(s)}</div>
+        <div class="sig-why-tags">
+          <span id="sig-livepill-${s.id}" class="sig-why-tag b">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} LIVE</span>
+          ${buildWhyTags(s)}
+        </div>
       </div>
 
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
@@ -2681,55 +2757,105 @@ function updateAnalysisPage() {
   const instEl = document.getElementById('anlInstBias');
   if (instEl) {
     const b = INST_BIAS?.bias || '–';
-    instEl.textContent = b;
+    const net = INST_BIAS?.fiiNet;
+    instEl.textContent = net !== undefined ? `${b} ${net >= 0 ? '+' : ''}₹${Math.abs(net).toFixed(0)}Cr` : b;
     instEl.style.color = b === 'BULLISH' ? 'var(--green)' : b === 'BEARISH' ? 'var(--red)' : 'var(--text3)';
   }
 
-  // Signal count
+  // CE/PE count
   const scEl = document.getElementById('anlSigCount');
   if (scEl) {
-    scEl.textContent = S.signals.length;
-    scEl.style.color = S.signals.length > 0 ? 'var(--green)' : 'var(--text3)';
+    const ce = S.signals.filter(s => s.type === 'CE').length;
+    const pe = S.signals.filter(s => s.type === 'PE').length;
+    scEl.textContent = `${ce}/${pe}`;
+    scEl.style.color = (ce + pe) > 0 ? 'var(--green)' : 'var(--text3)';
   }
 
-  // News headline
-  const newsEl = document.getElementById('anlNewsHeadline');
-  if (newsEl && S_NEWS && S_NEWS.headlines && S_NEWS.headlines.length) {
-    const icon = S_NEWS.sentiment === 'BULLISH' ? '🟢' : S_NEWS.sentiment === 'BEARISH' ? '🔴' : '🟡';
-    newsEl.innerHTML = `<b style="color:var(--text2)">${icon} ${S_NEWS.sentiment}</b> · Geo Risk: ${S_NEWS.geoRisk || 0}<br>${S_NEWS.headlines.slice(0,2).join('<br>')}`;
-  } else if (newsEl) {
-    newsEl.textContent = 'News context will load on next scan';
+  // Capital deployed
+  const capEl = document.getElementById('anlCapDeployed');
+  const capTotalEl = document.getElementById('anlCapTotal');
+  const budget = S.config?.capital || 30000;
+  if (capTotalEl) capTotalEl.textContent = budget.toLocaleString('en-IN');
+  const deployed = S.signals.reduce((s, sig) => s + (sig.capital || 0), 0);
+  if (capEl) {
+    capEl.textContent = '₹' + deployed.toLocaleString('en-IN');
+    const pct = budget > 0 ? Math.round(deployed / budget * 100) : 0;
+    capEl.style.color = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--amber)' : 'var(--blue)';
+    const capAvailEl = document.getElementById('anlCapAvail') || capEl.nextElementSibling;
+    if (capAvailEl) capAvailEl.innerHTML = `${pct}% of ₹<span id="anlCapTotal">${budget.toLocaleString('en-IN')}</span> budget`;
   }
 
-  // Signal summary
-  const sumEl = document.getElementById('anlSignalSummary');
-  if (sumEl) {
-    if (!S.signals.length) {
-      sumEl.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">No active signals</div>';
+  // Session P&L
+  const sessionPnl = S.signals.reduce((sum, sig) => {
+    if (sig.livePremium > 0 && sig.entryPremium > 0) return sum + Math.round((sig.livePremium - sig.entryPremium) * sig.lot * sig.lots);
+    return sum;
+  }, 0);
+  const closedPnl = S.closedSignals.reduce((sum, s) => sum + (s.closedPnl || 0), 0);
+  const totalSessionPnl = sessionPnl + closedPnl;
+  const pnlEl = document.getElementById('anlSessionPnl');
+  const pnlSubEl = document.getElementById('anlSessionPnlSub');
+  if (pnlEl) {
+    if (!S.signals.length && !S.closedSignals.length) {
+      pnlEl.textContent = '–'; pnlEl.style.color = 'var(--text3)';
     } else {
-      const ce = S.signals.filter(s => s.type === 'CE').length;
-      const pe = S.signals.filter(s => s.type === 'PE').length;
-      const highProb = S.signals.filter(s => s.prob >= 80).length;
-      const avgProb = Math.round(S.signals.reduce((a,s) => a + s.prob, 0) / S.signals.length);
-      sumEl.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
-          <div style="background:var(--green-bg);border:1px solid #00f5a025;border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">CE CALLS</div>
-            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--green)">${ce}</div>
+      pnlEl.textContent = (totalSessionPnl >= 0 ? '+₹' : '-₹') + Math.abs(totalSessionPnl).toLocaleString('en-IN');
+      pnlEl.style.color = totalSessionPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+  }
+  if (pnlSubEl) pnlSubEl.textContent = `${S.signals.length} open · ${S.closedSignals.length} closed`;
+
+  // P&L breakdown
+  const maxProfit = S.signals.reduce((s, sig) => s + Math.max(0, (sig.target - (sig.entryPremium||sig.premium)) * sig.lot * sig.lots), 0);
+  const maxLoss = S.signals.reduce((s, sig) => s + Math.max(0, ((sig.entryPremium||sig.premium) - sig.sl) * sig.lot * sig.lots), 0);
+  const el = id => document.getElementById(id);
+  if (el('anlPnlOpen')) el('anlPnlOpen').textContent = S.signals.length;
+  if (el('anlPnlProfit')) el('anlPnlProfit').textContent = '+₹' + maxProfit.toLocaleString('en-IN', {maximumFractionDigits:0});
+  if (el('anlPnlLoss')) el('anlPnlLoss').textContent = '-₹' + maxLoss.toLocaleString('en-IN', {maximumFractionDigits:0});
+  if (el('anlHitRate')) el('anlHitRate').textContent = S.closedSignals.length;
+
+  // FII/DII detail
+  const fiiEl = document.getElementById('anlFiiDetail');
+  if (fiiEl && INST_BIAS && INST_BIAS.fiiNet !== undefined) {
+    const d = INST_BIAS;
+    const fiiCol = d.fiiNet >= 0 ? 'var(--green)' : 'var(--red)';
+    const diiCol = d.diiNet >= 0 ? 'var(--green)' : 'var(--red)';
+    fiiEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">FII NET (₹Cr)</div>
+          <div style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${fiiCol}">${d.fiiNet >= 0 ? '+' : ''}${Number(d.fiiNet||0).toFixed(0)}</div>
+          <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">Buy ₹${Number(d.fiiBuy||0).toFixed(0)} · Sell ₹${Number(d.fiiSell||0).toFixed(0)}</div>
+        </div>
+        <div>
+          <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">DII NET (₹Cr)</div>
+          <div style="font-size:16px;font-weight:700;font-family:var(--font-mono);color:${diiCol}">${d.diiNet >= 0 ? '+' : ''}${Number(d.diiNet||0).toFixed(0)}</div>
+          <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:2px">Buy ₹${Number(d.diiBuy||0).toFixed(0)} · Sell ₹${Number(d.diiSell||0).toFixed(0)}</div>
+        </div>
+      </div>
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:8px">Date: ${d.date || '–'}</div>`;
+  }
+
+  // Open positions detail
+  const posEl = document.getElementById('anlOpenPositions');
+  if (posEl) {
+    if (!S.signals.length) {
+      posEl.innerHTML = '<div style="font-size:11px;color:var(--text3);text-align:center;padding:4px 0">No open signals</div>';
+    } else {
+      posEl.innerHTML = S.signals.map(sig => {
+        const lp = sig.livePremium || sig.entryPremium || sig.premium;
+        const pnl = sig.entryPremium > 0 ? Math.round((lp - sig.entryPremium) * sig.lot * sig.lots) : null;
+        const pnlCol = pnl === null ? 'var(--text3)' : pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:9px;margin-right:5px">${sig.type}</span>
+            <span style="font-size:12px;font-weight:600;font-family:var(--font-mono);color:var(--text)">${sig.sym} ${sig.strike}</span>
           </div>
-          <div style="background:var(--red-bg);border:1px solid #ff3d5a25;border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">PE PUTS</div>
-            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--red)">${pe}</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">HIGH PROB ≥80%</div>
-            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--amber)">${highProb}</div>
-          </div>
-          <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center">
-            <div style="font-size:8px;font-family:var(--font-mono);color:var(--text3);margin-bottom:3px">AVG PROBABILITY</div>
-            <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);color:var(--blue)">${avgProb}%</div>
+          <div style="text-align:right">
+            <div style="font-size:12px;font-weight:700;font-family:var(--font-mono);color:${pnlCol}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
+            <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3)">₹${lp.toFixed(2)} · ${sig.prob}%</div>
           </div>
         </div>`;
+      }).join('') + `<div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);padding-top:6px">Capital deployed ₹${deployed.toLocaleString('en-IN')}</div>`;
     }
   }
 
@@ -2738,14 +2864,14 @@ function updateAnalysisPage() {
   if (idxEl) {
     const idxList = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP'];
     const rows = idxList.map(sym => {
-      const p = S.livePrice[sym];
+      const p = S.livePrice?.[sym];
       if (!p) return null;
-      const prev = S.livePrev[sym] || p;
+      const prev = S.livePrev?.[sym] || p;
       const chg = p - prev;
       const pct = prev > 0 ? (chg/prev*100).toFixed(2) : '0.00';
       const col = chg >= 0 ? 'var(--green)' : 'var(--red)';
       const arrow = chg >= 0 ? '▲' : '▼';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:12px;font-family:var(--font-mono);font-weight:600;color:var(--text)">${sym}</span>
         <span style="font-size:13px;font-family:var(--font-mono);font-weight:700;color:var(--text)">₹${p.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
         <span style="font-size:11px;font-family:var(--font-mono);font-weight:600;color:${col}">${arrow} ${Math.abs(pct)}%</span>
@@ -2753,9 +2879,7 @@ function updateAnalysisPage() {
     }).filter(Boolean);
 
     if (rows.length) {
-      idxEl.innerHTML = `<div class="card-body" style="padding-top:4px;padding-bottom:4px">${rows.join('')}</div>`;
-    } else {
-      idxEl.innerHTML = '<div class="card-body"><div style="font-size:11px;color:var(--text3);text-align:center;padding:10px 0">Connect Angel One to see live index data</div></div>';
+      idxEl.innerHTML = `<div style="padding:9px 13px 6px;font-size:8px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)">Index Performance</div><div style="padding:4px 13px 6px">${rows.join('')}</div>`;
     }
   }
 }

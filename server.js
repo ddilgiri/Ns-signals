@@ -95,6 +95,54 @@ function getHeaders(needsAuth = false) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// HELPER: AUTO-REFRESH TOKEN on 401/403 using stored refresh token
+// ─────────────────────────────────────────────────────────────────────
+async function refreshToken() {
+  if (!SESSION.refreshToken || !SESSION.apiKey || !SESSION.clientCode) return false;
+  try {
+    log('Refreshing expired Angel One token...', 'INFO');
+    const r = await axios.post(
+      `${ANGEL_API}/rest/auth/angelbroking/jwt/v1/generateTokens`,
+      { refreshToken: SESSION.refreshToken },
+      { headers: getHeaders(false), timeout: 15000 }
+    );
+    if (r.data?.status && r.data?.data?.jwtToken) {
+      SESSION.jwtToken = r.data.data.jwtToken;
+      SESSION.refreshToken = r.data.data.refreshToken || SESSION.refreshToken;
+      SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
+      log('Token refreshed successfully', 'OK');
+      return true;
+    }
+    return false;
+  } catch (err) {
+    log(`Token refresh failed: ${err.message}`, 'WARN');
+    return false;
+  }
+}
+
+// Wrapper: auto-retry once after token refresh on 401/403
+async function angelRequest(method, url, data, options = {}) {
+  try {
+    const cfg = { headers: getHeaders(true), timeout: 20000, ...options };
+    return method === 'GET'
+      ? await axios.get(url, cfg)
+      : await axios.post(url, data, cfg);
+  } catch (err) {
+    const status = err.response?.status;
+    if ((status === 401 || status === 403) && SESSION.refreshToken) {
+      const refreshed = await refreshToken();
+      if (refreshed) {
+        const cfg = { headers: getHeaders(true), timeout: 20000, ...options };
+        return method === 'GET'
+          ? await axios.get(url, cfg)
+          : await axios.post(url, data, cfg);
+      }
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // ROUTE: HEALTH CHECK
 // ─────────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -199,16 +247,15 @@ app.post('/quote', async (req, res) => {
   }
 
   try {
-    const response = await axios.post(
+    const response = await angelRequest('POST',
       `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
-      req.body,
-      { headers: getHeaders(true), timeout: 15000 }
+      req.body
     );
     res.json(response.data);
   } catch (error) {
     const msg = error.response?.data?.message || error.message;
     log(`Quote error: ${msg}`, 'WARN');
-    res.status(500).json({ status: false, message: msg });
+    res.status(error.response?.status || 500).json({ status: false, message: msg });
   }
 });
 
@@ -221,15 +268,14 @@ app.post('/candles', async (req, res) => {
   }
 
   try {
-    const response = await axios.post(
+    const response = await angelRequest('POST',
       `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
-      req.body,
-      { headers: getHeaders(true), timeout: 20000 }
+      req.body
     );
     res.json(response.data);
   } catch (error) {
     const msg = error.response?.data?.message || error.message;
-    res.status(500).json({ status: false, message: msg });
+    res.status(error.response?.status || 500).json({ status: false, message: msg });
   }
 });
 
@@ -359,6 +405,59 @@ app.post('/market-bias', async (req, res) => {
 // Returns: { fiiBuy, fiiSell, fiiNet, diiBuy, diiSell, diiNet, date }
 // ─────────────────────────────────────────────────────────────────────
 const FII_DII_CACHE = { data: null, fetchTime: 0 };
+let NSE_COOKIE = '';
+
+// Establish NSE session cookie first (prevents 403 on Railway/cloud)
+async function getNSECookie() {
+  if (NSE_COOKIE) return NSE_COOKIE;
+  try {
+    const r = await axios.get('https://www.nseindia.com/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+      },
+      timeout: 12000,
+    });
+    const cookies = r.headers['set-cookie'];
+    if (cookies) {
+      NSE_COOKIE = cookies.map(c => c.split(';')[0]).join('; ');
+      log(`NSE session established`, 'INFO');
+    }
+    return NSE_COOKIE;
+  } catch (err) {
+    log(`NSE session failed: ${err.message}`, 'WARN');
+    return '';
+  }
+}
+
+async function fetchNSEFiiDii() {
+  const cookie = await getNSECookie();
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Referer': 'https://www.nseindia.com/',
+    'Origin': 'https://www.nseindia.com',
+    'Connection': 'keep-alive',
+    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+  };
+  if (cookie) headers['Cookie'] = cookie;
+
+  const r = await axios.get('https://www.nseindia.com/api/fiidiiTradeReact', {
+    headers,
+    timeout: 12000,
+  });
+  return r.data || [];
+}
 
 app.get('/fii-dii', async (req, res) => {
   if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
@@ -369,21 +468,15 @@ app.get('/fii-dii', async (req, res) => {
   }
 
   try {
-    // NSE FII/DII activity — public endpoint
-    const r = await axios.get(
-      'https://www.nseindia.com/api/fiidiiTradeReact',
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.nseindia.com/',
-        },
-        timeout: 10000
-      }
-    );
+    let raw;
+    try {
+      raw = await fetchNSEFiiDii();
+    } catch (firstErr) {
+      log(`FII/DII first attempt failed (${firstErr.response?.status||firstErr.message}), resetting cookie and retrying...`, 'WARN');
+      NSE_COOKIE = ''; // Force fresh cookie
+      raw = await fetchNSEFiiDii();
+    }
 
-    const raw  = r.data || [];
     const today = raw.find(d => d.category === 'FII/FPI *') || raw[0];
     const dii   = raw.find(d => d.category === 'DII') || raw[1];
 
@@ -410,9 +503,14 @@ app.get('/fii-dii', async (req, res) => {
     log(`FII: ₹${result.fiiNet}Cr · DII: ₹${result.diiNet}Cr · ${result.instBias}`, 'INFO');
     res.json(result);
   } catch (err) {
-    // FII/DII is non-critical — return neutral if unavailable
-    const fallback = { status: true, fiiNet: 0, diiNet: 0, instBias: 'NEUTRAL', message: 'FII/DII unavailable — using NEUTRAL' };
-    res.json(fallback);
+    const status = err.response?.status;
+    log(`FII/DII fetch failed: ${status || err.message}`, 'WARN');
+    // Return stale cache if available, else neutral fallback
+    if (FII_DII_CACHE.data) {
+      log('Serving stale FII/DII cache', 'INFO');
+      return res.json({ ...FII_DII_CACHE.data, stale: true });
+    }
+    res.json({ status: true, fiiNet: 0, diiNet: 0, fiiBuy: 0, fiiSell: 0, diiBuy: 0, diiSell: 0, instBias: 'NEUTRAL', message: 'FII/DII unavailable' });
   }
 });
 
