@@ -1745,7 +1745,8 @@ function scoreRA(p) {
     }
   }
 
-  // OI buildup (0–15 pts) — from Angel One option chain
+  // OI buildup (0–15 pts) — only scores if real OI data provided by server
+  // oiDelta is null when Angel One SmartAPI doesn't return OI — skipped cleanly
   if (oiDelta !== null) {
     if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
     else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
@@ -1765,12 +1766,13 @@ function scoreRA(p) {
     }
   }
 
-  // IV Rank (0–8 pts) — buy when cheap
+  // IV Rank (0–8 pts) — derived from real option chain IV when available; null = skip
+  // Low IV rank = options are cheap = favourable for buying
   if (ivRank !== null) {
-    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 30)  { score += 5; }
+    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank} cheap`); }
+    else if (ivRank < 30)  { score += 5; reasons.push(`IV rank ${ivRank} moderate`); }
     else if (ivRank < 40)  { score += 2; }
-    else                   { score -= 5; } // expensive — soft penalty
+    else                   { score -= 5; reasons.push(`IV rank ${ivRank} expensive`); }
   }
 
   // Volume surge (0–8 pts)
@@ -1823,12 +1825,14 @@ function scoreRA(p) {
   // Expiry time decay
   if (daysToExpiry <= 2) score = Math.floor(score * 0.75);
 
-  // ── Map raw score to 60–92 display probability ──
-  // Score range roughly −40 to +100. Need ~50+ to pass.
+  // ── Map raw score → display probability (60–92%) ──
+  // Without random oiDelta/ivRank, real max score ≈ 87 pts (bias+RSI+PCR+vol+VWAP+ORB+PDH+FII+RS)
+  // Calibrated so a strong signal (score≥70) reliably reaches ≥78% (B grade)
+  // and an exceptional signal (score≥85) reaches ≥85% (A grade)
   const clamped = Math.min(100, Math.max(0, score));
-  const prob = Math.min(92, 60 + Math.round(clamped * 0.32));
+  const prob = Math.min(92, 60 + Math.round(clamped * 0.37));
 
-  // Grade
+  // Grade thresholds
   const grade = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
 
   return { score:clamped, prob, grade, reasons };
@@ -1854,7 +1858,25 @@ function detectSetup(type, analysis, baseP, step, rsi) {
 }
 
 async function generateSignal(symbolObj, isIndex) {
-  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
+  // ── TYPE ASSIGNMENT: bias-driven when config=BOTH, never random ──
+  // Fetch analysis early just to determine type direction
+  let earlyBias = 'NEUTRAL';
+  if (S.config.type === 'BOTH' && S.connected && NSE_TOKENS[symbolObj.sym]) {
+    const ea = await fetchMarketAnalysis(symbolObj.sym);
+    earlyBias = ea?.bias ?? 'NEUTRAL';
+  }
+  let type;
+  if (S.config.type !== 'BOTH') {
+    type = S.config.type;
+  } else if (earlyBias === 'BULLISH') {
+    type = 'CE';
+  } else if (earlyBias === 'BEARISH') {
+    type = 'PE';
+  } else {
+    // NEUTRAL: use PCR as tiebreaker; >1.0 = bearish pressure → PE, else CE
+    const niftyPCR = S.livePCR['NIFTY'] || S.livePCR['BANKNIFTY'] || null;
+    type = (niftyPCR !== null && niftyPCR > 1.0) ? 'PE' : 'CE';
+  }
   const lot  = symbolObj.lot || 75;
 
   // ── STEP 1: SPOT PRICE — must be real (live) ──
@@ -1898,23 +1920,71 @@ async function generateSignal(symbolObj, isIndex) {
     : null;
 
   // ── STEP 5: RELATIVE STRENGTH vs Nifty ──
-  // pct change of stock vs pct change of Nifty (both from live prices vs entry)
+  // Compares stock % move vs Nifty % move, both using live prices vs EMA20 baseline.
+  // Uses live Nifty price dynamically — no hardcoded baseline.
   let relStrength = null;
-  if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
-    // Use EMA20 as proxy for stock's "fair value" baseline when available
-    const base = ema20 || baseP;
-    const stockChg = (baseP - base) / base * 100;
+  const liveNifty = S.livePrice['NIFTY'];
+  if (!isIndex && liveNifty && liveNifty > 0) {
+    // Nifty baseline: use its EMA20 from analysis cache if available, else previous live snapshot
+    const niftyAnalysis = ANALYSIS_CACHE['NIFTY']?.data;
+    const niftyBase = niftyAnalysis?.ema20 || S.livePrev?.['NIFTY'] || liveNifty;
+    const niftyChg = niftyBase > 0 ? (liveNifty - niftyBase) / niftyBase * 100 : 0;
+    // Stock baseline: EMA20 from its own analysis (most accurate fair-value proxy)
+    const stockBase = ema20 || S.livePrev?.[symbolObj.sym] || baseP;
+    const stockChg = stockBase > 0 ? (baseP - stockBase) / stockBase * 100 : 0;
     relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
-  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
+  // ── STEP 6: DERIVATIVES — real data only, null if unavailable ──
   const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  // OI delta and IV rank: still estimated (Angel One doesn't provide historical OI via free SmartAPI)
-  // but we mark them as null-possible to avoid fabrication in scoring
-  const oiDelta   = Math.random() * 0.55;   // from OI gainers if available, else estimated
-  const ivRank    = 8 + Math.random() * 32; // from option chain IV surface if available
-  const daysToExp = 2 + Math.floor(Math.random() * 5);
+
+  // OI delta: null — Angel One SmartAPI free tier does not provide historical OI series.
+  // Passing null causes scoreRA to skip the OI pts cleanly (no fabrication).
+  const oiDelta = null;
+
+  // IV Rank: derive from option chain if available (CE vs PE IV spread as proxy).
+  // If option chain has IV data use it; otherwise null — never random.
+  let ivRank = null;
+  try {
+    const SYM_MAP2 = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
+    const ocSym2 = SYM_MAP2[symbolObj.sym] || symbolObj.sym;
+    const ocData = OC_CACHE[ocSym2]?.data || null;
+    if (ocData?.strikes?.length) {
+      const atm = ocData.strikes.find(r => r.isATM) || ocData.strikes[Math.floor(ocData.strikes.length / 2)];
+      // Some brokers return IV on option chain; use CE_iv or PE_iv if present
+      const iv = type === 'CE' ? (atm?.CE_iv ?? atm?.iv ?? null) : (atm?.PE_iv ?? atm?.iv ?? null);
+      if (iv && iv > 0) {
+        // Approximate IV rank: compare current IV against a 52-wk typical range
+        // Conservative estimate: typical NSE index IV range 10–60, stocks 15–80
+        const ivMin = isIndex ? 10 : 15;
+        const ivMax = isIndex ? 60 : 80;
+        ivRank = Math.round(Math.min(100, Math.max(0, (iv - ivMin) / (ivMax - ivMin) * 100)));
+      }
+    }
+  } catch(e) { ivRank = null; }
+
+  // Days to expiry: calculate real calendar days from today to next expiry
+  // Weekly = Thursday of current week; Next = following Thursday; Monthly = last Thursday of month
+  const daysToExp = (() => {
+    const now = new Date();
+    const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const day = ist.getDay(); // 0=Sun, 4=Thu
+    let daysToThursday;
+    if (S.config.expiry === 'WEEKLY') {
+      // Days until this week's Thursday (if already past Thu, next Thu)
+      daysToThursday = (4 - day + 7) % 7;
+      if (daysToThursday === 0) daysToThursday = 7; // already Thursday, use next week
+    } else if (S.config.expiry === 'NEXT') {
+      daysToThursday = ((4 - day + 7) % 7) + 7; // next week's Thursday
+    } else {
+      // Monthly: last Thursday of current month
+      const lastDay = new Date(ist.getFullYear(), ist.getMonth() + 1, 0);
+      const lastThursday = lastDay.getDate() - ((lastDay.getDay() - 4 + 7) % 7);
+      const expDate = new Date(ist.getFullYear(), ist.getMonth(), lastThursday);
+      daysToThursday = Math.max(1, Math.round((expDate - ist) / 86400000));
+    }
+    return Math.max(1, daysToThursday);
+  })();
 
   // ── STEP 7: NEWS ──
   const newsScore = S_NEWS?.sentimentScore ?? null;
@@ -2015,10 +2085,10 @@ async function generateSignal(symbolObj, isIndex) {
     livePremium: premium, livePrice: baseP,
     reason,
     rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
-    ivRank:    Math.round(ivRank),
+    ivRank:    ivRank !== null ? Math.round(ivRank) : null,
     pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
     volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
-    oi:        Math.round(oiDelta*100),
+    oi:        null, // OI delta not available from Angel One SmartAPI free tier
     bias, instBias: INST_BIAS.bias, setupType,
     relStrength,
     pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
@@ -2571,11 +2641,11 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi ?? '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank !== null ? sig.ivRank : '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr ?? '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio !== null ? sig.volRatio+'x' : '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">${sig.oi !== null ? '+'+sig.oi+'%' : 'N/A'}</span></div>
 
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
       <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
