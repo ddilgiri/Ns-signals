@@ -102,9 +102,9 @@ async function refreshToken() {
   try {
     log('Refreshing expired Angel One token...', 'INFO');
     const r = await axios.post(
-      `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
+      `${ANGEL_API}/rest/auth/angelbroking/jwt/v1/generateTokens`,
       { refreshToken: SESSION.refreshToken },
-      { headers: getHeaders(true), timeout: 15000 }
+      { headers: getHeaders(false), timeout: 15000 }
     );
     if (r.data?.status && r.data?.data?.jwtToken) {
       SESSION.jwtToken = r.data.data.jwtToken;
@@ -146,12 +146,23 @@ async function angelRequest(method, url, data, options = {}) {
 // ROUTE: HEALTH CHECK
 // ─────────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
+  const cacheEntries = Object.keys(BIAS_CACHE).length;
+  const freshEntries = Object.values(BIAS_CACHE).filter(e => (Date.now() - e.fetchTime) < BIAS_TTL).length;
   res.json({
     status: 'ok',
     authenticated: isAuthenticated(),
     client: SESSION.clientCode || null,
     tokenExpiry: SESSION.expiresAt ? new Date(SESSION.expiresAt).toLocaleTimeString('en-IN') : null,
+    biasCache: { total: cacheEntries, fresh: freshEntries },
   });
+});
+
+// Clear bias cache (useful after token refresh or when debugging)
+app.post('/clear-cache', (req, res) => {
+  const n = Object.keys(BIAS_CACHE).length;
+  Object.keys(BIAS_CACHE).forEach(k => delete BIAS_CACHE[k]);
+  log(`Bias cache cleared (${n} entries removed)`, 'INFO');
+  res.json({ status: true, message: `Cleared ${n} cache entries` });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -280,8 +291,58 @@ app.post('/candles', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// ROUTE: MARKET BIAS — EMA20/50 + PDH/PDL via candle data
-// Returns: { bias:'BULLISH'|'BEARISH'|'NEUTRAL', ema20, ema50, pdh, pdl, orb_high, orb_low }
+// MARKET BIAS — in-memory cache (5 min TTL per symbol)
+// Prevents repeated candle API calls that trigger Angel One 403 throttling
+// ─────────────────────────────────────────────────────────────────────
+const BIAS_CACHE = {};      // { [symbolToken]: { data, fetchTime } }
+const BIAS_TTL   = 5 * 60 * 1000; // 5 minutes
+
+// Simple rate-limit queue: max 1 candle request per 600ms to stay within Angel One limits
+let _lastCandleCall = 0;
+async function throttledCandleRequest(payload, exchange) {
+  const now = Date.now();
+  const gap = now - _lastCandleCall;
+  if (gap < 600) await new Promise(r => setTimeout(r, 600 - gap));
+  _lastCandleCall = Date.now();
+
+  // Use angelRequest wrapper so 401/403 auto-triggers token refresh + retry
+  return angelRequest('POST',
+    `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
+    payload
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// HELPERS: EMA, RSI (defined once, reused)
+// ─────────────────────────────────────────────────────────────────────
+function calcEMA(data, period) {
+  if (data.length < period) return null;
+  const k = 2 / (period + 1);
+  let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < data.length; i++) e = data[i] * k + e * (1 - k);
+  return parseFloat(e.toFixed(2));
+}
+
+function calcRSI14(closes) {
+  if (closes.length < 15) return 50;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= 14; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gains += d; else losses -= d;
+  }
+  let ag = gains / 14, al = losses / 14;
+  for (let i = 15; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    ag = (ag * 13 + Math.max(d, 0)) / 14;
+    al = (al * 13 + Math.max(-d, 0)) / 14;
+  }
+  return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2));
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: MARKET BIAS — EMA20/50 + RSI + PDH/PDL + VWAP + ORB
+// Cached per-symbol for 5 minutes. Uses angelRequest wrapper for
+// automatic token refresh on 401/403. Rate-limited to avoid throttling.
 // ─────────────────────────────────────────────────────────────────────
 app.post('/market-bias', async (req, res) => {
   if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
@@ -289,95 +350,103 @@ app.post('/market-bias', async (req, res) => {
   const { symbolToken, exchange = 'NSE' } = req.body;
   if (!symbolToken) return res.status(400).json({ status: false, message: 'symbolToken required' });
 
+  // ── Serve from cache if fresh ──
+  const cached = BIAS_CACHE[symbolToken];
+  if (cached && (Date.now() - cached.fetchTime) < BIAS_TTL) {
+    return res.json(cached.data);
+  }
+
   try {
-    const now   = new Date();
-    const ist   = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const now  = new Date();
+    const ist  = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const today = ist.toISOString().slice(0, 10);
 
-    // Get previous trading day
+    // Previous trading day (skip weekends)
     const prev = new Date(ist);
-    prev.setDate(prev.getDate() - (prev.getDay() === 1 ? 3 : prev.getDay() === 0 ? 2 : 1));
+    let daysBack = 1;
+    if (prev.getDay() === 1) daysBack = 3; // Monday → Friday
+    else if (prev.getDay() === 0) daysBack = 2; // Sunday → Friday
+    prev.setDate(prev.getDate() - daysBack);
     const prevDay = prev.toISOString().slice(0, 10);
 
-    // Fetch 15m candles for last 10 days (enough for EMA50)
+    // Fetch 10 days of 15m candles (enough for EMA50 = ~50 × 26 bars/day)
+    // Reduced from 14 days → faster, fewer bytes, less throttle risk
     const fromDate = new Date(ist);
-    fromDate.setDate(fromDate.getDate() - 14);
+    fromDate.setDate(fromDate.getDate() - 10);
     const from = fromDate.toISOString().slice(0, 10) + ' 09:15';
     const to   = today + ' 15:30';
 
-    const candleResp = await axios.post(
-      `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
-      { exchange, symboltoken: symbolToken, interval: 'FIFTEEN_MINUTE', fromdate: from, todate: to },
-      { headers: getHeaders(true), timeout: 20000 }
-    );
+    let candleResp;
+    try {
+      candleResp = await throttledCandleRequest(
+        { exchange, symboltoken: symbolToken, interval: 'FIFTEEN_MINUTE', fromdate: from, todate: to },
+        exchange
+      );
+    } catch (firstErr) {
+      const status = firstErr.response?.status;
+      if (status === 403 || status === 429) {
+        // Rate limited — wait 2s and retry once
+        log(`Candle 403/429 for ${symbolToken} — waiting 2s then retrying`, 'WARN');
+        await new Promise(r => setTimeout(r, 2000));
+        _lastCandleCall = Date.now();
+        candleResp = await angelRequest('POST',
+          `${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,
+          { exchange, symboltoken: symbolToken, interval: 'FIFTEEN_MINUTE', fromdate: from, todate: to }
+        );
+      } else {
+        throw firstErr;
+      }
+    }
 
     const raw = candleResp.data?.data || [];
-    if (raw.length < 10) return res.json({ status: false, message: 'Insufficient candle data' });
+    if (raw.length < 10) {
+      // Return neutral result (don't error — scanner will use NEUTRAL bias)
+      const neutral = { status: true, bias: 'NEUTRAL', ltp: null, ema20: null, ema50: null,
+        rsi: 50, vwap: null, aboveVwap: null, pdh: null, pdl: null,
+        orb_high: null, orb_low: null, volRatio: 1, candleCount: raw.length, fromCache: false };
+      BIAS_CACHE[symbolToken] = { data: neutral, fetchTime: Date.now() };
+      return res.json(neutral);
+    }
 
     // raw format: [datetime, open, high, low, close, volume]
     const closes = raw.map(c => parseFloat(c[4]));
-    const highs  = raw.map(c => parseFloat(c[2]));
-    const lows   = raw.map(c => parseFloat(c[3]));
     const vols   = raw.map(c => parseFloat(c[5]));
-    const dates  = raw.map(c => c[0].slice(0, 10));
 
-    // EMA calculation
-    function ema(data, period) {
-      const k = 2 / (period + 1);
-      let e = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
-      for (let i = period; i < data.length; i++) e = data[i] * k + e * (1 - k);
-      return parseFloat(e.toFixed(2));
-    }
-
-    const ema20 = closes.length >= 20 ? ema(closes, 20) : null;
-    const ema50 = closes.length >= 50 ? ema(closes, 50) : null;
+    // EMAs
+    const ema20 = calcEMA(closes, 20);
+    const ema50 = calcEMA(closes, 50);
     const ltp   = closes[closes.length - 1];
 
     // Market bias from EMA structure
     let bias = 'NEUTRAL';
     if (ema20 && ema50) {
-      if (ltp > ema20 && ema20 > ema50) bias = 'BULLISH';
+      if (ltp > ema20 && ema20 > ema50)      bias = 'BULLISH';
       else if (ltp < ema20 && ema20 < ema50) bias = 'BEARISH';
     } else if (ema20) {
       bias = ltp > ema20 ? 'BULLISH' : 'BEARISH';
     }
 
-    // PDH/PDL (Previous Day High/Low)
-    const prevCandles = raw.filter(c => c[0].slice(0,10) === prevDay);
+    // PDH/PDL
+    const prevCandles  = raw.filter(c => c[0].slice(0, 10) === prevDay);
     const pdh = prevCandles.length ? Math.max(...prevCandles.map(c => parseFloat(c[2]))) : null;
     const pdl = prevCandles.length ? Math.min(...prevCandles.map(c => parseFloat(c[3]))) : null;
 
-    // ORB (Opening Range Breakout) — first 30 min of today
-    const todayCandles = raw.filter(c => c[0].slice(0,10) === today);
-    const orbCandles = todayCandles.slice(0, 2); // first 2 x 15m = 30 min
+    // ORB — first 30 min of today (2 × 15m bars)
+    const todayCandles = raw.filter(c => c[0].slice(0, 10) === today);
+    const orbCandles   = todayCandles.slice(0, 2);
     const orb_high = orbCandles.length ? Math.max(...orbCandles.map(c => parseFloat(c[2]))) : null;
     const orb_low  = orbCandles.length ? Math.min(...orbCandles.map(c => parseFloat(c[3]))) : null;
 
-    // Avg volume (last 5 days vs today)
-    const todayVol = todayCandles.reduce((s, c) => s + parseFloat(c[5]), 0);
-    const avgDayVol = vols.reduce((a, b) => a + b, 0) / Math.max(vols.length, 1) * (todayCandles.length || 1);
+    // Volume ratio (today vs per-bar average of last 10 days)
+    const todayVol  = todayCandles.reduce((s, c) => s + parseFloat(c[5]), 0);
+    const avgBarVol = vols.reduce((a, b) => a + b, 0) / Math.max(vols.length, 1);
+    const avgDayVol = avgBarVol * Math.max(todayCandles.length, 1);
     const volRatio  = avgDayVol > 0 ? parseFloat((todayVol / avgDayVol).toFixed(2)) : 1;
 
-    // RSI (14 period on closes)
-    function rsi14(closes) {
-      if (closes.length < 15) return 50;
-      let gains = 0, losses = 0;
-      for (let i = 1; i <= 14; i++) {
-        const d = closes[i] - closes[i - 1];
-        if (d > 0) gains += d; else losses -= d;
-      }
-      let ag = gains / 14, al = losses / 14;
-      for (let i = 15; i < closes.length; i++) {
-        const d = closes[i] - closes[i - 1];
-        ag = (ag * 13 + Math.max(d, 0)) / 14;
-        al = (al * 13 + Math.max(-d, 0)) / 14;
-      }
-      return al === 0 ? 100 : parseFloat((100 - 100 / (1 + ag / al)).toFixed(2));
-    }
+    // RSI-14
+    const rsi = calcRSI14(closes);
 
-    const rsi = rsi14(closes);
-
-    // VWAP (today)
+    // VWAP (today only)
     let vwapNum = 0, vwapDen = 0;
     todayCandles.forEach(c => {
       const tp  = (parseFloat(c[2]) + parseFloat(c[3]) + parseFloat(c[4])) / 3;
@@ -385,18 +454,39 @@ app.post('/market-bias', async (req, res) => {
       vwapNum += tp * vol;
       vwapDen += vol;
     });
-    const vwap = vwapDen > 0 ? parseFloat((vwapNum / vwapDen).toFixed(2)) : null;
+    const vwap      = vwapDen > 0 ? parseFloat((vwapNum / vwapDen).toFixed(2)) : null;
     const aboveVwap = vwap ? ltp > vwap : null;
 
-    res.json({
+    const result = {
       status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap,
       pdh, pdl, orb_high, orb_low, volRatio,
-      candleCount: raw.length
-    });
+      candleCount: raw.length, fromCache: false
+    };
+
+    // Store in cache
+    BIAS_CACHE[symbolToken] = { data: { ...result, fromCache: true }, fetchTime: Date.now() };
+
+    log(`Bias ${symbolToken}: ${bias} RSI=${rsi} EMA20=${ema20} bars=${raw.length}`, 'INFO');
+    res.json(result);
+
   } catch (err) {
-    const msg = err.response?.data?.message || err.message;
-    log(`market-bias error: ${msg}`, 'WARN');
-    res.status(500).json({ status: false, message: msg });
+    const status = err.response?.status;
+    const msg    = err.response?.data?.message || err.message;
+    log(`market-bias error [${status || '?'}] token=${symbolToken}: ${msg}`, 'WARN');
+
+    // If we have a stale cache entry, serve it rather than error
+    if (cached) {
+      log(`Serving stale bias cache for ${symbolToken}`, 'INFO');
+      return res.json({ ...cached.data, fromCache: true, stale: true });
+    }
+
+    // Return neutral so scanner continues rather than blocking all signals
+    res.json({
+      status: true, bias: 'NEUTRAL', ltp: null, ema20: null, ema50: null,
+      rsi: 50, vwap: null, aboveVwap: null, pdh: null, pdl: null,
+      orb_high: null, orb_low: null, volRatio: 1, candleCount: 0,
+      fromCache: false, error: msg
+    });
   }
 });
 
@@ -1010,19 +1100,33 @@ app.post('/refresh', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AUTO TOKEN REFRESH — check every 30 min, refresh when < 1hr left
-// Uses the same refreshToken() helper (correct /secure/ endpoint)
+// AUTO TOKEN REFRESH (every 7 hours)
 // ─────────────────────────────────────────────────────────────────────
 setInterval(async () => {
   if (!SESSION.refreshToken || !SESSION.jwtToken) return;
+
   const hoursLeft = (SESSION.expiresAt - Date.now()) / 3600000;
-  if (hoursLeft < 1) {
-    log('Auto-refreshing JWT token (< 1hr left)...', 'INFO');
-    const ok = await refreshToken();
-    if (ok) log('Token auto-refreshed ✅', 'OK');
-    else log('Auto-refresh failed — client must re-login', 'ERR');
+
+  if (hoursLeft > 0 && hoursLeft < 1) {
+    log('Auto-refreshing JWT token...', 'INFO');
+    try {
+      const response = await axios.post(
+        `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
+        { refreshToken: SESSION.refreshToken },
+        { headers: getHeaders(true), timeout: 15000 }
+      );
+
+      if (response.data.status === true && response.data.data) {
+        SESSION.jwtToken = response.data.data.jwtToken;
+        SESSION.refreshToken = response.data.data.refreshToken;
+        SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
+        log('Token auto-refreshed ✅', 'OK');
+      }
+    } catch (err) {
+      log(`Auto-refresh failed: ${err.message}`, 'ERR');
+    }
   }
-}, 30 * 60 * 1000);
+}, 30 * 60 * 1000); // Check every 30 minutes
 
 // ─────────────────────────────────────────────────────────────────────
 // ROUTE: NEWS SENTIMENT — for internal scanner scoring (not displayed)
