@@ -880,13 +880,18 @@ app.post('/option-ltp', async (req, res) => {
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
     // Find all matching NFO options for this symbol + strike + type
+    // Match by i.name OR by trading symbol prefix (e.g. RELIANCE25MAY3000CE)
     const matches = instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
-      if (!i.name || i.name.toUpperCase() !== sym) return false;
       if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
       if (parseFloat(i.strike) !== strikeNum * 100) return false; // Angel stores strike*100
       if (!i.symbol || !i.symbol.toUpperCase().endsWith(optType)) return false;
-      return true;
+      // Name match
+      if (i.name && i.name.toUpperCase() === sym) return true;
+      // Symbol prefix match
+      const s = i.symbol.toUpperCase();
+      if (s.startsWith(sym) && s.length > sym.length && /[0-9]/.test(s[sym.length])) return true;
+      return false;
     });
 
     if (matches.length === 0) {
@@ -987,8 +992,18 @@ app.post('/option-chain', async (req, res) => {
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
-    // Compute ATM strike
-    const step = spot > 10000 ? 500 : spot > 5000 ? 200 : spot > 2000 ? 100 : spot > 500 ? 50 : 10;
+    // Compute ATM strike — step sizes match NSE standard strike intervals
+    // NIFTY ~24000 → 50, BANKNIFTY ~55000 → 100, FINNIFTY ~25000 → 50
+    // Stocks: >5000 → 100, >2000 → 50, >500 → 20/10
+    // We detect index vs stock by known symbols; default to fine step for stocks
+    const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'];
+    let step;
+    if (sym === 'BANKNIFTY') step = 100;
+    else if (sym === 'NIFTY' || sym === 'FINNIFTY' || sym === 'MIDCPNIFTY') step = 50;
+    else if (spot > 5000) step = 100;
+    else if (spot > 2000) step = 50;
+    else if (spot > 500) step = 10;
+    else step = 5;
     const atmStrike = Math.round(spot / step) * step;
 
     // Build list of strikes to query (ATM ± depth)
@@ -998,11 +1013,17 @@ app.post('/option-chain', async (req, res) => {
     }
 
     // Find all NFO options for this symbol
+    // Angel One instrument master: i.name holds the underlying (e.g. "NIFTY", "RELIANCE")
+    // For reliability, also match by trading symbol prefix (e.g. "RELIANCE25MAY3000CE" starts with "RELIANCE" + digit)
     const allOptions = instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
-      if (!i.name || i.name.toUpperCase() !== sym) return false;
       if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
-      return true;
+      if (i.name && i.name.toUpperCase() === sym) return true;
+      if (i.symbol) {
+        const s = i.symbol.toUpperCase();
+        if (s.startsWith(sym) && s.length > sym.length && /[0-9]/.test(s[sym.length])) return true;
+      }
+      return false;
     });
 
     // Pick best expiry
@@ -1035,8 +1056,10 @@ app.post('/option-chain', async (req, res) => {
       if (peInstr?.token) tokens.push(peInstr.token);
     }
 
+    log(`Option chain ${sym}: ${allOptions.length} instruments found, ${tokens.length} tokens to fetch`, 'INFO');
     if (tokens.length === 0) {
-      return res.json({ status: false, message: `No NFO instruments found for ${sym}` });
+      log(`Option chain FAIL ${sym}: allOptions=${allOptions.length}, spot=${spot}, step=${step}, atm=${atmStrike}`, 'WARN');
+      return res.json({ status: false, message: `No NFO instruments found for ${sym} (spot=${spot}, atm=${atmStrike}, step=${step})` });
     }
 
     // Batch quote fetch (Angel allows up to 50 tokens)
@@ -1054,9 +1077,12 @@ app.post('/option-chain', async (req, res) => {
       }
     }
 
-    // Build result
+    // Build result — prefer ltp, fall back to close (last traded price when market closed)
     const ltpMap = {};
-    allFetched.forEach(q => { ltpMap[String(q.symbolToken)] = parseFloat(q.ltp || q.close || 0); });
+    allFetched.forEach(q => {
+      const price = parseFloat(q.ltp || 0) > 0 ? parseFloat(q.ltp) : parseFloat(q.close || 0);
+      ltpMap[String(q.symbolToken)] = price;
+    });
 
     const result = strikeList.map(strike => {
       const m = strikeMap[strike];

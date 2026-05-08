@@ -1506,7 +1506,7 @@ function getNewsAdjustedProb(baseProb, type) {
 // OPTION CHAIN CACHE
 // ══════════════════════════════════════════════════════════════════
 const OC_CACHE = {};
-const OC_TTL = 30000;
+const OC_TTL = 3 * 60 * 1000; // 3 min — option premiums don't move that fast
 
 async function fetchOptionChain(sym, spotPrice) {
   const now = Date.now();
@@ -1817,7 +1817,15 @@ async function generateSignal(symbolObj, isIndex) {
   const liveP = S.livePrice[symbolObj.sym];
   if (!liveP || liveP <= 0) return null; // no live price → skip entirely
   const baseP = liveP;
-  const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
+  // Step sizes match NSE standard strike intervals
+  let step;
+  const _s = symbolObj.sym;
+  if (_s === 'BANKNIFTY') step = 100;
+  else if (_s === 'NIFTY' || _s === 'FINNIFTY' || _s === 'MIDCAP') step = 50;
+  else if (baseP > 5000) step = 100;
+  else if (baseP > 2000) step = 50;
+  else if (baseP > 500) step = 10;
+  else step = 5;
 
   // ── STEP 2: MARKET ANALYSIS — fetch first so BOTH mode can use bias ──
   let analysis = null;
