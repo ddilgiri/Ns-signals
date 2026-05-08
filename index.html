@@ -1691,18 +1691,20 @@ function scoreRA(p) {
           instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
           pdhBreak, pdlBreak, atStructure, relStrength } = p;
 
-  // ── STAGE 1: BIAS — hard reject if opposing confirmed trend ──
-  // Only hard-reject when we have real EMA data (bias !== 'NEUTRAL')
-  if (bias === 'BEARISH' && type === 'CE') return { score:0, grade:'REJECT', reason:'Trend BEARISH — CE blocked' };
-  if (bias === 'BULLISH' && type === 'PE') return { score:0, grade:'REJECT', reason:'Trend BULLISH — PE blocked' };
+  // ── STAGE 1: BIAS — soft penalty for opposing trend (not a hard reject) ──
+  // Only hard-reject when bias is confirmed AND RSI also opposes (both signals needed)
+  const strongBearishCE = bias === 'BEARISH' && type === 'CE' && rsi !== null && rsi > 55;
+  const strongBullishPE = bias === 'BULLISH' && type === 'PE' && rsi !== null && rsi < 45;
+  if (strongBearishCE) return { score:0, grade:'REJECT', reason:'Trend BEARISH + RSI high — CE blocked' };
+  if (strongBullishPE) return { score:0, grade:'REJECT', reason:'Trend BULLISH + RSI low — PE blocked' };
 
   // ── STAGE 2: LEVEL — PDH/PDL S/R enforcement ──
   // atStructure = price within 0.3% of PDH (CE) or PDL (PE) without breakout
   if (atStructure && !pdhBreak && !pdlBreak)
     return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
 
-  // ── STAGE 3: VOLUME — hard reject if illiquid ──
-  if (volRatio !== null && volRatio < 1.0)
+  // ── STAGE 3: VOLUME — hard reject only truly illiquid (< 0.5x) ──
+  if (volRatio !== null && volRatio < 0.5)
     return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — illiquid, skipping` };
 
   // ── STAGE 4: EXPIRY ──
@@ -1712,9 +1714,11 @@ function scoreRA(p) {
   let score = 0;
   const reasons = [];
 
-  // Bias (0–25 pts)
-  if (type === 'CE' && bias === 'BULLISH')  { score += 25; reasons.push(`BULLISH trend`); }
-  else if (type === 'PE' && bias === 'BEARISH') { score += 25; reasons.push(`BEARISH trend`); }
+  // Bias (0–25 pts, penalty for opposing direction)
+  if (type === 'CE' && bias === 'BULLISH')       { score += 25; reasons.push(`BULLISH trend`); }
+  else if (type === 'PE' && bias === 'BEARISH')  { score += 25; reasons.push(`BEARISH trend`); }
+  else if (type === 'CE' && bias === 'BEARISH')  { score -= 15; reasons.push(`Counter-trend CE`); }  // penalise but allow
+  else if (type === 'PE' && bias === 'BULLISH')  { score -= 15; reasons.push(`Counter-trend PE`); }  // penalise but allow
   else { score += 10; reasons.push(`NEUTRAL trend`); } // neutral allowed
 
   // RSI — real candle data required (not random)
@@ -1842,25 +1846,32 @@ function detectSetup(type, analysis, baseP, step, rsi) {
 }
 
 async function generateSignal(symbolObj, isIndex) {
-  const type = S.config.type === 'BOTH' ? (Math.random() > 0.5 ? 'CE' : 'PE') : S.config.type;
-  const lot  = symbolObj.lot || 75;
-
   // ── STEP 1: SPOT PRICE — must be real (live) ──
   const liveP = S.livePrice[symbolObj.sym];
   if (!liveP || liveP <= 0) return null; // no live price → skip entirely
-
   const baseP = liveP;
   const step  = baseP > 10000 ? 500 : baseP > 5000 ? 200 : baseP > 2000 ? 100 : baseP > 500 ? 50 : baseP > 100 ? 10 : 5;
 
-  // ── STEP 2: MARKET ANALYSIS — fetch, but accept neutral fallback if 403 ──
+  // ── STEP 2: MARKET ANALYSIS — fetch first so BOTH mode can use bias ──
   let analysis = null;
   if (S.connected && NSE_TOKENS[symbolObj.sym]) {
     analysis = await fetchMarketAnalysis(symbolObj.sym);
   }
   // Stocks without token → skip (can't trade without knowing the instrument)
   if (!isIndex && !NSE_TOKENS[symbolObj.sym]) return null;
-  // analysis === null means fetch completely failed (network error, not 403)
-  // Server handles 403 by returning neutral result, so null here = real failure → skip
+
+  // ── STEP 1b: SIGNAL TYPE (after analysis) ──
+  // For BOTH mode: prefer the direction that aligns with current bias
+  let type;
+  if (S.config.type === 'BOTH') {
+    const biasPref = analysis?.bias ?? 'NEUTRAL';
+    if (biasPref === 'BULLISH') type = Math.random() > 0.25 ? 'CE' : 'PE'; // 75% CE
+    else if (biasPref === 'BEARISH') type = Math.random() > 0.25 ? 'PE' : 'CE'; // 75% PE
+    else type = Math.random() > 0.5 ? 'CE' : 'PE'; // neutral → 50/50
+  } else {
+    type = S.config.type;
+  }
+  const lot  = symbolObj.lot || 75;
 
   // ── STEP 3: EXTRACT REAL VALUES ──
   // All null if unavailable — pipeline will handle each gracefully
@@ -1888,13 +1899,13 @@ async function generateSignal(symbolObj, isIndex) {
     : null;
 
   // ── STEP 5: RELATIVE STRENGTH vs Nifty ──
-  // pct change of stock vs pct change of Nifty (both from live prices vs entry)
+  // Use VWAP or EMA20 as baseline for both to avoid stale hardcoded levels
   let relStrength = null;
   if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyChg = (S.livePrice['NIFTY'] - 24200) / 24200 * 100;
-    // Use EMA20 as proxy for stock's "fair value" baseline when available
-    const base = ema20 || baseP;
-    const stockChg = (baseP - base) / base * 100;
+    const niftyBase = analysis?.vwap ? analysis.vwap : S.livePrice['NIFTY'];
+    const niftyChg  = (S.livePrice['NIFTY'] - niftyBase) / niftyBase * 100;
+    const stockBase  = ema20 || baseP;
+    const stockChg   = stockBase > 0 ? (baseP - stockBase) / stockBase * 100 : 0;
     relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
   }
 
@@ -1940,8 +1951,14 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // No real premium from option chain → skip (no guessing)
-  if (!usedReal) return null;
+  // Fallback: if live option chain unavailable, estimate ATM premium using 0.4% of spot
+  // This keeps the signal alive; label will show EST badge instead of LIVE
+  if (!usedReal) {
+    premium = parseFloat((baseP * 0.004).toFixed(2)); // ~0.4% of spot — reasonable ATM estimate
+    if (premium < 1) premium = 1;
+    usedReal = false; // keeps isRealPremium = false so card shows EST badge
+    // Don't hard-skip — continue with estimated premium
+  }
 
 
 
@@ -2187,7 +2204,7 @@ function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
   S.config.profitPct = parseInt(document.getElementById('cfgProfit').value) || 30;
   S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 5;
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 80;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 70;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;

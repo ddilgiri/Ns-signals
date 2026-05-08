@@ -437,11 +437,24 @@ app.post('/market-bias', async (req, res) => {
     const orb_high = orbCandles.length ? Math.max(...orbCandles.map(c => parseFloat(c[2]))) : null;
     const orb_low  = orbCandles.length ? Math.min(...orbCandles.map(c => parseFloat(c[3]))) : null;
 
-    // Volume ratio (today vs per-bar average of last 10 days)
-    const todayVol  = todayCandles.reduce((s, c) => s + parseFloat(c[5]), 0);
-    const avgBarVol = vols.reduce((a, b) => a + b, 0) / Math.max(vols.length, 1);
-    const avgDayVol = avgBarVol * Math.max(todayCandles.length, 1);
-    const volRatio  = avgDayVol > 0 ? parseFloat((todayVol / avgDayVol).toFixed(2)) : 1;
+    // Volume ratio: compare today's total vol vs avg daily vol from prior days only
+    const todayVol    = todayCandles.reduce((s, c) => s + parseFloat(c[5]), 0);
+    const priorCandles = raw.filter(c => c[0].slice(0, 10) !== today);
+    // Group prior candles by date to get per-day volumes, then average those
+    const priorByDay  = {};
+    priorCandles.forEach(c => {
+      const d = c[0].slice(0, 10);
+      priorByDay[d] = (priorByDay[d] || 0) + parseFloat(c[5]);
+    });
+    const priorDayVols = Object.values(priorByDay);
+    const avgPriorDayVol = priorDayVols.length
+      ? priorDayVols.reduce((a, b) => a + b, 0) / priorDayVols.length
+      : 0;
+    // Scale avgPriorDayVol by fraction of day completed so early-session never looks low
+    const barsInFullDay  = 26; // 9:15–15:30 = 26 × 15min bars
+    const dayFraction    = Math.min(todayCandles.length / barsInFullDay, 1);
+    const scaledAvgVol   = avgPriorDayVol * Math.max(dayFraction, 0.15); // floor at 15% so pre-ORB not penalised
+    const volRatio       = scaledAvgVol > 0 ? parseFloat((todayVol / scaledAvgVol).toFixed(2)) : 1;
 
     // RSI-14
     const rsi = calcRSI14(closes);
