@@ -102,9 +102,9 @@ async function refreshToken() {
   try {
     log('Refreshing expired Angel One token...', 'INFO');
     const r = await axios.post(
-      `${ANGEL_API}/rest/auth/angelbroking/jwt/v1/generateTokens`,
+      `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
       { refreshToken: SESSION.refreshToken },
-      { headers: getHeaders(false), timeout: 15000 }
+      { headers: getHeaders(true), timeout: 15000 }
     );
     if (r.data?.status && r.data?.data?.jwtToken) {
       SESSION.jwtToken = r.data.data.jwtToken;
@@ -1010,33 +1010,19 @@ app.post('/refresh', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AUTO TOKEN REFRESH (every 7 hours)
+// AUTO TOKEN REFRESH — check every 30 min, refresh when < 1hr left
+// Uses the same refreshToken() helper (correct /secure/ endpoint)
 // ─────────────────────────────────────────────────────────────────────
 setInterval(async () => {
   if (!SESSION.refreshToken || !SESSION.jwtToken) return;
-
   const hoursLeft = (SESSION.expiresAt - Date.now()) / 3600000;
-
-  if (hoursLeft > 0 && hoursLeft < 1) {
-    log('Auto-refreshing JWT token...', 'INFO');
-    try {
-      const response = await axios.post(
-        `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
-        { refreshToken: SESSION.refreshToken },
-        { headers: getHeaders(true), timeout: 15000 }
-      );
-
-      if (response.data.status === true && response.data.data) {
-        SESSION.jwtToken = response.data.data.jwtToken;
-        SESSION.refreshToken = response.data.data.refreshToken;
-        SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
-        log('Token auto-refreshed ✅', 'OK');
-      }
-    } catch (err) {
-      log(`Auto-refresh failed: ${err.message}`, 'ERR');
-    }
+  if (hoursLeft < 1) {
+    log('Auto-refreshing JWT token (< 1hr left)...', 'INFO');
+    const ok = await refreshToken();
+    if (ok) log('Token auto-refreshed ✅', 'OK');
+    else log('Auto-refresh failed — client must re-login', 'ERR');
   }
-}, 30 * 60 * 1000); // Check every 30 minutes
+}, 30 * 60 * 1000);
 
 // ─────────────────────────────────────────────────────────────────────
 // ROUTE: NEWS SENTIMENT — for internal scanner scoring (not displayed)
