@@ -1032,8 +1032,18 @@ app.post('/option-chain', async (req, res) => {
         .map(i => ({ ...i, _exp: new Date(i.expiry) }))
         .filter(i => i._exp >= now)
         .sort((a,b) => a._exp - b._exp);
-      if (expiry === 'MONTHLY') return sorted.filter(i => i._exp.getMonth() === now.getMonth()).pop();
-      if (expiry === 'NEXT') return sorted[1];
+      if (!sorted.length) return null;
+      if (expiry === 'MONTHLY') {
+        // Monthly = last weekly expiry of current month, else next month
+        const curMonth = now.getMonth();
+        const curYear  = now.getFullYear();
+        const sameMonth = sorted.filter(i => i._exp.getMonth() === curMonth && i._exp.getFullYear() === curYear);
+        if (sameMonth.length) return sameMonth[sameMonth.length - 1]; // last expiry this month
+        const nextMonth = curMonth === 11 ? 0 : curMonth + 1;
+        const nextMonthExp = sorted.filter(i => i._exp.getMonth() === nextMonth);
+        return nextMonthExp.length ? nextMonthExp[nextMonthExp.length - 1] : sorted[sorted.length - 1];
+      }
+      if (expiry === 'NEXT') return sorted[1] || sorted[0];
       return sorted[0]; // WEEKLY = nearest
     };
 
