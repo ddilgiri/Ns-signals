@@ -976,7 +976,7 @@ app.post('/option-chain', async (req, res) => {
   }
 
   try {
-    // Ensure instrument master is loaded
+    // Ensure instrument master is loaded (cache 4 hours)
     if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
       log('Downloading NFO instrument master...', 'INFO');
       const instrResp = await axios.get(
@@ -985,135 +985,204 @@ app.post('/option-chain', async (req, res) => {
       );
       SESSION._instruments = instrResp.data;
       SESSION._instrFetchTime = Date.now();
+      log(`Instrument master loaded — ${SESSION._instruments.length} instruments`, 'OK');
     }
 
-    const instruments = SESSION._instruments;
     const sym = symbol.toUpperCase();
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
-    // Compute ATM strike — step sizes match NSE standard strike intervals
-    // NIFTY ~24000 → 50, BANKNIFTY ~55000 → 100, FINNIFTY ~25000 → 50
-    // Stocks: >5000 → 100, >2000 → 50, >500 → 20/10
-    // We detect index vs stock by known symbols; default to fine step for stocks
-    const INDEX_SYMS = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY'];
-    let step;
-    if (sym === 'BANKNIFTY') step = 100;
-    else if (sym === 'NIFTY' || sym === 'FINNIFTY' || sym === 'MIDCPNIFTY') step = 50;
-    else if (spot > 5000) step = 100;
-    else if (spot > 2000) step = 50;
-    else if (spot > 500) step = 10;
-    else step = 5;
-    const atmStrike = Math.round(spot / step) * step;
-
-    // Build list of strikes to query (ATM ± depth)
-    const strikeList = [];
-    for (let i = -depth; i <= depth; i++) {
-      strikeList.push(atmStrike + i * step);
-    }
-
-    // Find all NFO options for this symbol
-    // Angel One instrument master: i.name holds the underlying (e.g. "NIFTY", "RELIANCE")
-    // For reliability, also match by trading symbol prefix (e.g. "RELIANCE25MAY3000CE" starts with "RELIANCE" + digit)
-    const allOptions = instruments.filter(i => {
+    // ── Step 1: Find all NFO options for this underlying ──
+    const allOptions = SESSION._instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
       if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
+      if (new Date(i.expiry) < now) return false; // skip expired
       if (i.name && i.name.toUpperCase() === sym) return true;
       if (i.symbol) {
         const s = i.symbol.toUpperCase();
-        if (s.startsWith(sym) && s.length > sym.length && /[0-9]/.test(s[sym.length])) return true;
+        // Symbol starts with sym immediately followed by a digit (year of expiry)
+        if (s.startsWith(sym) && s.length > sym.length && /\d/.test(s[sym.length])) return true;
       }
       return false;
     });
 
-    // Pick best expiry
+    if (allOptions.length === 0) {
+      log(`No NFO options found for ${sym}`, 'WARN');
+      return res.json({ status: false, message: `No NFO options found for ${sym}` });
+    }
+
+    // ── Step 2: Pick best expiry ──
     const pickExpiry = (optList) => {
-      const sorted = optList
-        .map(i => ({ ...i, _exp: new Date(i.expiry) }))
-        .filter(i => i._exp >= now)
-        .sort((a,b) => a._exp - b._exp);
+      // Sort by expiry ascending, all future
+      const sorted = [...new Set(optList.map(i => i.expiry))]
+        .map(e => new Date(e))
+        .filter(d => d >= now)
+        .sort((a, b) => a - b);
+
       if (!sorted.length) return null;
+
       if (expiry === 'MONTHLY') {
-        // Monthly = last weekly expiry of current month, else next month
-        const curMonth = now.getMonth();
-        const curYear  = now.getFullYear();
-        const sameMonth = sorted.filter(i => i._exp.getMonth() === curMonth && i._exp.getFullYear() === curYear);
-        if (sameMonth.length) return sameMonth[sameMonth.length - 1]; // last expiry this month
-        const nextMonth = curMonth === 11 ? 0 : curMonth + 1;
-        const nextMonthExp = sorted.filter(i => i._exp.getMonth() === nextMonth);
-        return nextMonthExp.length ? nextMonthExp[nextMonthExp.length - 1] : sorted[sorted.length - 1];
+        const curMonth = now.getMonth(), curYear = now.getFullYear();
+        const thisMonth = sorted.filter(d => d.getMonth() === curMonth && d.getFullYear() === curYear);
+        if (thisMonth.length) return thisMonth[thisMonth.length - 1]; // last expiry this month
+        const next = sorted[0].getMonth(); // fallback: first future month
+        const nextMonthExp = sorted.filter(d => d.getMonth() === next);
+        return nextMonthExp[nextMonthExp.length - 1] || sorted[sorted.length - 1];
       }
       if (expiry === 'NEXT') return sorted[1] || sorted[0];
       return sorted[0]; // WEEKLY = nearest
     };
 
-    // Collect tokens for all strikes CE+PE
+    const chosenExpiryDate = pickExpiry(allOptions);
+    if (!chosenExpiryDate) {
+      return res.json({ status: false, message: `No valid expiry for ${sym}` });
+    }
+
+    const chosenExpiryStr = chosenExpiryDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // ── Step 3: Filter to chosen expiry ──
+    const expiryOptions = allOptions.filter(i => {
+      const d = new Date(i.expiry);
+      return d.toISOString().split('T')[0] === chosenExpiryStr;
+    });
+
+    // ── Step 4: Get all available strikes from instrument master (in rupees) ──
+    // Angel stores strike as (rupees × 100), e.g. 800 rupee strike = "80000"
+    const allStrikes = [...new Set(
+      expiryOptions.map(i => Math.round(parseFloat(i.strike) / 100))
+    )].filter(s => s > 0).sort((a, b) => a - b);
+
+    if (allStrikes.length === 0) {
+      return res.json({ status: false, message: `No strikes found for ${sym} expiry ${chosenExpiryStr}` });
+    }
+
+    // ── Step 5: Find real ATM = available strike CLOSEST to live spot ──
+    const realAtm = allStrikes.reduce((best, s) =>
+      Math.abs(s - spot) < Math.abs(best - spot) ? s : best
+    , allStrikes[0]);
+
+    // ── Step 6: Pick ATM ± depth strikes from the REAL available list ──
+    const atmIdx = allStrikes.indexOf(realAtm);
+    const startIdx = Math.max(0, atmIdx - depth);
+    const endIdx   = Math.min(allStrikes.length - 1, atmIdx + depth);
+    const strikeList = allStrikes.slice(startIdx, endIdx + 1);
+
+    // ── Step 7: Collect tokens for selected strikes ──
     const tokens = [];
-    const strikeMap = {};
+    const strikeMap = {}; // strike -> { CE_token, PE_token, CE_sym, PE_sym }
 
     for (const strike of strikeList) {
-      const strikeVal = strike * 100; // Angel stores strike*100
+      const strikeVal = strike * 100; // back to Angel's format
 
-      const ceInstr = pickExpiry(allOptions.filter(i =>
-        parseFloat(i.strike) === strikeVal && i.symbol && i.symbol.toUpperCase().endsWith('CE')
-      ));
-      const peInstr = pickExpiry(allOptions.filter(i =>
-        parseFloat(i.strike) === strikeVal && i.symbol && i.symbol.toUpperCase().endsWith('PE')
-      ));
+      const ces = expiryOptions.filter(i =>
+        Math.round(parseFloat(i.strike)) === strikeVal &&
+        i.symbol && i.symbol.toUpperCase().endsWith('CE')
+      );
+      const pes = expiryOptions.filter(i =>
+        Math.round(parseFloat(i.strike)) === strikeVal &&
+        i.symbol && i.symbol.toUpperCase().endsWith('PE')
+      );
 
-      strikeMap[strike] = { strike, CE_token: ceInstr?.token, PE_token: peInstr?.token, CE_sym: ceInstr?.symbol, PE_sym: peInstr?.symbol };
-      if (ceInstr?.token) tokens.push(ceInstr.token);
-      if (peInstr?.token) tokens.push(peInstr.token);
+      const ce = ces[0]; // already filtered to single expiry
+      const pe = pes[0];
+
+      strikeMap[strike] = {
+        CE_token: ce?.token || null,
+        PE_token: pe?.token || null,
+        CE_sym:   ce?.symbol || null,
+        PE_sym:   pe?.symbol || null,
+      };
+      if (ce?.token) tokens.push(String(ce.token));
+      if (pe?.token) tokens.push(String(pe.token));
     }
 
-    log(`Option chain ${sym}: ${allOptions.length} instruments found, ${tokens.length} tokens to fetch`, 'INFO');
+    log(`Option chain ${sym}: expiry=${chosenExpiryStr}, realAtm=${realAtm}, strikes=${strikeList.length}, tokens=${tokens.length}`, 'INFO');
+
     if (tokens.length === 0) {
-      log(`Option chain FAIL ${sym}: allOptions=${allOptions.length}, spot=${spot}, step=${step}, atm=${atmStrike}`, 'WARN');
-      return res.json({ status: false, message: `No NFO instruments found for ${sym} (spot=${spot}, atm=${atmStrike}, step=${step})` });
+      return res.json({ status: false, message: `No tokens found for ${sym} strikes` });
     }
 
-    // Batch quote fetch (Angel allows up to 50 tokens)
+    // ── Step 8: Batch fetch LTPs ──
+    const ltpMap = {};
     const batchSize = 50;
-    const allFetched = [];
     for (let i = 0; i < tokens.length; i += batchSize) {
       const batch = tokens.slice(i, i + batchSize);
-      const qResp = await axios.post(
-        `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
-        { mode: 'LTP', exchangeTokens: { NFO: batch } },
-        { headers: getHeaders(true), timeout: 20000 }
-      );
-      if (qResp.data.status && qResp.data.data?.fetched) {
-        allFetched.push(...qResp.data.data.fetched);
+      try {
+        const qResp = await axios.post(
+          `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
+          { mode: 'LTP', exchangeTokens: { NFO: batch } },
+          { headers: getHeaders(true), timeout: 20000 }
+        );
+        if (qResp.data.status && qResp.data.data?.fetched) {
+          qResp.data.data.fetched.forEach(q => {
+            // Use ltp if non-zero, else close (handles pre/post market)
+            const ltp   = parseFloat(q.ltp   || 0);
+            const close = parseFloat(q.close  || 0);
+            const price = ltp > 0 ? ltp : close;
+            ltpMap[String(q.symbolToken)] = price;
+          });
+        }
+      } catch(e) {
+        log(`Batch LTP fetch failed: ${e.message}`, 'WARN');
       }
     }
 
-    // Build result — prefer ltp, fall back to close (last traded price when market closed)
-    const ltpMap = {};
-    allFetched.forEach(q => {
-      const price = parseFloat(q.ltp || 0) > 0 ? parseFloat(q.ltp) : parseFloat(q.close || 0);
-      ltpMap[String(q.symbolToken)] = price;
-    });
-
+    // ── Step 9: Build result ──
     const result = strikeList.map(strike => {
       const m = strikeMap[strike];
+      const ceLtp = m.CE_token ? (ltpMap[String(m.CE_token)] ?? null) : null;
+      const peLtp = m.PE_token ? (ltpMap[String(m.PE_token)] ?? null) : null;
       return {
         strike,
-        isATM: strike === atmStrike,
-        CE_ltp: m.CE_token ? (ltpMap[m.CE_token] || 0) : null,
-        PE_ltp: m.PE_token ? (ltpMap[m.PE_token] || 0) : null,
-        CE_token: m.CE_token || null,
-        PE_token: m.PE_token || null,
-        CE_sym: m.CE_sym || null,
-        PE_sym: m.PE_sym || null,
+        isATM:    strike === realAtm,
+        CE_ltp:   ceLtp,
+        PE_ltp:   peLtp,
+        CE_token: m.CE_token,
+        PE_token: m.PE_token,
+        CE_sym:   m.CE_sym,
+        PE_sym:   m.PE_sym,
       };
     });
 
-    log(`✅ Option chain for ${sym}: ${result.length} strikes fetched`, 'OK');
-    return res.json({ status: true, symbol: sym, spotPrice: spot, atmStrike, strikes: result });
+    log(`✅ Option chain ${sym}: ATM=${realAtm}, ${result.length} strikes, ltps fetched=${Object.keys(ltpMap).length}`, 'OK');
+    return res.json({
+      status: true, symbol: sym, spotPrice: spot,
+      atmStrike: realAtm, expiry: chosenExpiryStr, strikes: result,
+    });
 
   } catch (error) {
     const msg = error.response?.data?.message || error.message;
-    log(`Option chain error: ${msg}`, 'WARN');
+    log(`Option chain error ${symbol}: ${msg}`, 'WARN');
+    res.status(500).json({ status: false, message: msg });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: REFRESH TOKEN
+// ─────────────────────────────────────────────────────────────────────
+app.post('/refresh', async (req, res) => {
+  if (!SESSION.refreshToken) {
+    return res.json({ status: false, message: 'No refresh token available' });
+  }
+
+  try {
+    const response = await axios.post(
+      `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
+      { refreshToken: SESSION.refreshToken },
+      { headers: getHeaders(true), timeout: 15000 }
+    );
+
+    if (response.data.status === true && response.data.data) {
+      SESSION.jwtToken = response.data.data.jwtToken;
+      SESSION.refreshToken = response.data.data.refreshToken;
+      SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
+      log('Token refreshed', 'OK');
+      return res.json({ status: true, message: 'Token refreshed' });
+    }
+
+    res.json({ status: false, message: 'Token refresh failed' });
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message;
     res.status(500).json({ status: false, message: msg });
   }
 });

@@ -922,11 +922,37 @@ const FNO_STOCKS = [
   {sym:'ASTRAL',     name:'Astral Ltd',             lot:425,  grp:'CAPGOODS'},
   {sym:'MANKIND',    name:'Mankind Pharma',         lot:225,  grp:'PHARMA'},
   {sym:'PAGEIND',    name:'Page Industries',        lot:15,   grp:'TEXTILE'},
+  // ── Additional stocks from Dhan May 2026 ──
+  {sym:'PATANJALI',  name:'Patanjali Foods',        lot:900,  grp:'FMCG'},
+  {sym:'NBCC',       name:'NBCC India',             lot:6500, grp:'INFRA'},
+  {sym:'PREMIERENE', name:'Premier Energies',       lot:575,  grp:'ENERGY'},
+  {sym:'NAM-INDIA',  name:'Nippon Life India AMC',  lot:625,  grp:'FINANCE'},
+  {sym:'IEX',        name:'Indian Energy Exchange', lot:3750, grp:'FINANCE'},
+  {sym:'PGEL',       name:'PG Electroplast',        lot:950,  grp:'CAPGOODS'},
+  {sym:'VMM',        name:'Vishal Mega Mart',       lot:4850, grp:'RETAIL'},
+  {sym:'FORCEMOT',   name:'Force Motors',           lot:25,   grp:'AUTO'},
+  {sym:'BAJAJHLDNG', name:'Bajaj Holdings',         lot:50,   grp:'NBFC'},
+  {sym:'LTM',        name:'LTIMindtree (LTM)',      lot:150,  grp:'IT'},
+  {sym:'ADANIPOWER', name:'Adani Power',            lot:3550, grp:'ENERGY'},
+  {sym:'IRFC',       name:'IRFC',                   lot:4250, grp:'FINANCE'},
+  {sym:'MOTILALOFS', name:'Motilal Oswal Fin Svcs', lot:775,  grp:'FINANCE'},
+  {sym:'NAUKRI',     name:'Info Edge (Naukri)',     lot:375,  grp:'NEWAGE'},
+  {sym:'CHOLAFIN',   name:'Cholamandalam Finance',  lot:625,  grp:'NBFC'},
+  {sym:'DMART',      name:'Avenue Supermarts (DMart)',lot:150,grp:'RETAIL'},
+  {sym:'JIOFIN',     name:'Jio Financial Services', lot:2350, grp:'NBFC'},
+  {sym:'GODREJPROP', name:'Godrej Properties',      lot:275,  grp:'REALTY'},
+  {sym:'LODHA',      name:'Lodha Developers',       lot:450,  grp:'REALTY'},
+  {sym:'MFSL',       name:'Max Financial Services', lot:400,  grp:'INSURANCE'},
+  {sym:'CONCOR',     name:'Container Corp of India',lot:1250, grp:'INFRA'},
+  {sym:'GMRAIRPORT', name:'GMR Airports',           lot:6975, grp:'INFRA'},
 ];
 
-// ══════════════════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════════════════
+// De-duplicate FNO_STOCKS by sym (last entry wins, preserves correct lot)
+const FNO_STOCKS_DEDUPED = [];
+const _fnoSeen = new Set();
+[...FNO_STOCKS].reverse().forEach(s => { if (!_fnoSeen.has(s.sym)) { _fnoSeen.add(s.sym); FNO_STOCKS_DEDUPED.unshift(s); } });
+FNO_STOCKS.length = 0;
+FNO_STOCKS.push(...FNO_STOCKS_DEDUPED);
 const S = {
   scanning:false, scanInt:null, signals:[], closedSignals:[], filter:'ALL', signalTab:'open',
   notif:false, connected:false,
@@ -1031,7 +1057,7 @@ const WL_ALL = [
   { sym:'BAJAJ-AUTO', name:'Bajaj Auto',        token:'16669', isIdx:false },
   { sym:'TVSMOTOR',   name:'TVS Motor',         token:'3753',  isIdx:false },
   { sym:'ASHOKLEY',   name:'Ashok Leyland',     token:'212',   isIdx:false },
-  { sym:'MOTHERSON',  name:'Samvardhana Motherson',token:'4204',isIdx:false },
+  { sym:'MOTHERSON',  name:'Samvardhana Motherson',token:'13285',isIdx:false },
   { sym:'BOSCHLTD',   name:'Bosch',             token:'533',   isIdx:false },
   // ── Pharma ──
   { sym:'LUPIN',      name:'Lupin',             token:'10440', isIdx:false },
@@ -1041,7 +1067,7 @@ const WL_ALL = [
   // ── Energy ──
   { sym:'ADANIGREEN', name:'Adani Green',       token:'236921',isIdx:false },
   { sym:'IOC',        name:'Indian Oil',        token:'1624',  isIdx:false },
-  { sym:'HPCL',       name:'HPCL',              token:'1406',  isIdx:false },
+  { sym:'HINDPETRO',  name:'Hindustan Petroleum (HPCL)', token:'1406',  isIdx:false },
   { sym:'GAIL',       name:'GAIL',              token:'1207',  isIdx:false },
   { sym:'TATAPOWER',  name:'Tata Power',        token:'3426',  isIdx:false },
   // ── Metal ──
@@ -1060,7 +1086,6 @@ const WL_ALL = [
   { sym:'VBL',        name:'Varun Beverages',   token:'15459', isIdx:false },
   // ── NBFC ──
   { sym:'CHOLAFIN',   name:'Chola Finance',     token:'685',   isIdx:false },
-  { sym:'BAJAJFINSV', name:'Bajaj Finserv',     token:'16675', isIdx:false },
   { sym:'MUTHOOTFIN', name:'Muthoot Finance',   token:'3596',  isIdx:false },
   // ── Cement ──
   { sym:'ACC',        name:'ACC',               token:'3',     isIdx:false },
@@ -1079,7 +1104,7 @@ const WL_ALL = [
   { sym:'CDSL',       name:'CDSL',              token:'4204',  isIdx:false },
   { sym:'BSE',        name:'BSE',               token:'543154',isIdx:false },
   { sym:'MCX',        name:'MCX',               token:'5120',  isIdx:false },
-  { sym:'ANGELONE',   name:'Angel One',         token:'15083', isIdx:false },
+  { sym:'ANGELONE',   name:'Angel One',         token:'14413', isIdx:false },
   // ── Retail ──
   { sym:'DMART',      name:'DMart',             token:'2882',  isIdx:false },
   { sym:'TRENT',      name:'Trent',             token:'1964',  isIdx:false },
@@ -1620,16 +1645,19 @@ const NSE_TOKENS = {
   PNB:'2730',       BANKBARODA:'4668', FEDERALBNK:'1023', CANBK:'10794',
   MPHASIS:'4503',   COFORGE:'11543', LTIM:'17818',    PERSISTENT:'4825',
   KPITTECH:'11223', 'BAJAJ-AUTO':'16669', TVSMOTOR:'3753', ASHOKLEY:'212',
-  MOTHERSON:'4204', LUPIN:'10440',   AUROPHARMA:'275', BIOCON:'2911',
-  IOC:'1624',       HPCL:'1406',     GAIL:'1207',     TATAPOWER:'3426',
+  MOTHERSON:'13285', LUPIN:'10440',  AUROPHARMA:'275', BIOCON:'2911',
+  IOC:'1624',       HINDPETRO:'1406', GAIL:'1207',    TATAPOWER:'3426',
   HINDALCO:'1363',  VEDL:'3063',     NMDC:'15332',
   DLF:'14732',      GODREJPROP:'17875', GODREJCP:'10099', DABUR:'772',
   COLPAL:'2955',    MARICO:'4067',   VBL:'15459',
   CHOLAFIN:'685',   MUTHOOTFIN:'3596',
   ACC:'3',          AMBUJACEM:'1270', SHREECEM:'3103',
   HAL:'2303',       BEL:'383',       BHEL:'438',
-  ETERNAL:'5097',    INDIGO:'11195',  IRCTC:'13611',
+  ETERNAL:'5097',   INDIGO:'11195',  IRCTC:'13611',
   CONCOR:'4344',    IRB:'19504',     PRESTIGE:'8982',
+  CDSL:'4204',      BSE:'543154',    MCX:'5120',      ANGELONE:'14413',
+  DMART:'2882',     TRENT:'1964',    SUZLON:'12018',  ADANIGREEN:'236921',
+  ADANIPOWER:'533519', IRFC:'335340', IREDA:'543257', RVNL:'542649',
 };
 let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 
@@ -1941,7 +1969,26 @@ async function generateSignal(symbolObj, isIndex) {
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
-      const atm = oc.strikes.find(r => r.isATM) || oc.strikes[Math.floor(oc.strikes.length/2)];
+      // First try the flagged ATM strike
+      let atm = oc.strikes.find(r => r.isATM);
+      // If ATM's LTP is 0 (stale/market closed), find nearest strike with non-zero LTP
+      if (atm) {
+        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
+        if (!ltp || ltp <= 0) {
+          // Look for nearest strike that has live data
+          const withLtp = oc.strikes
+            .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
+            .sort((a, b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
+          if (withLtp.length) atm = withLtp[0];
+        }
+      } else {
+        // No ATM flagged — pick nearest to spot with non-zero LTP
+        const withLtp = oc.strikes
+          .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
+          .sort((a, b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
+        if (withLtp.length) atm = withLtp[0];
+        else atm = oc.strikes[Math.floor(oc.strikes.length / 2)];
+      }
       if (atm) {
         strike = atm.strike;
         const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
