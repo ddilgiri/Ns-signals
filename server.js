@@ -1176,17 +1176,17 @@ function scoreSignal(d, type) {
     const rsi = d.rsi || 50;
     let earned = 0, note = '';
     if (isCE) {
-      if (rsi < 40)       { earned = w;       note = `RSI ${rsi} — oversold, strong CE ✓`; }
-      else if (rsi < 50)  { earned = w * 0.7; note = `RSI ${rsi} — below midline, ok`; }
-      else if (rsi < 60)  { earned = w * 0.4; note = `RSI ${rsi} — neutral zone`; }
-      else if (rsi < 70)  { earned = w * 0.2; note = `RSI ${rsi} — elevated, caution`; }
-      else                { earned = 0;       note = `RSI ${rsi} — overbought, bad for CE`; }
+      if (rsi < 35)       { earned = w;       note = `RSI ${rsi} — oversold, strong CE`; }
+      else if (rsi < 45)  { earned = w * 0.8; note = `RSI ${rsi} — below midline`; }
+      else if (rsi < 60)  { earned = w * 0.6; note = `RSI ${rsi} — neutral`; }
+      else if (rsi < 70)  { earned = w * 0.3; note = `RSI ${rsi} — elevated, caution`; }
+      else                { earned = 0;       note = `RSI ${rsi} — overbought`; }
     } else {
-      if (rsi > 60)       { earned = w;       note = `RSI ${rsi} — overbought, strong PE ✓`; }
-      else if (rsi > 50)  { earned = w * 0.7; note = `RSI ${rsi} — above midline, ok`; }
-      else if (rsi > 40)  { earned = w * 0.4; note = `RSI ${rsi} — neutral zone`; }
-      else if (rsi > 30)  { earned = w * 0.2; note = `RSI ${rsi} — low, caution`; }
-      else                { earned = 0;       note = `RSI ${rsi} — oversold, bad for PE`; }
+      if (rsi > 65)       { earned = w;       note = `RSI ${rsi} — overbought, strong PE`; }
+      else if (rsi > 55)  { earned = w * 0.8; note = `RSI ${rsi} — above midline`; }
+      else if (rsi > 40)  { earned = w * 0.6; note = `RSI ${rsi} — neutral`; }
+      else if (rsi > 30)  { earned = w * 0.3; note = `RSI ${rsi} — low, caution`; }
+      else                { earned = 0;       note = `RSI ${rsi} — oversold`; }
     }
     breakdown.rsi = { earned, max: w, pass: earned >= w * 0.4, note };
   }
@@ -1457,12 +1457,12 @@ app.post('/signal-analysis', async (req, res) => {
     } else if (score >= 75) {
       verdict    = 'STRONG';
       actionNote = 'High conviction — trade with normal size';
-    } else if (score >= 60) {
+    } else if (score >= 58) {
       verdict    = 'MODERATE';
-      actionNote = 'Good setup — trade with half size or wait for one more confirmation';
-    } else if (score >= 45) {
+      actionNote = 'Good setup — consider half position size';
+    } else if (score >= 42) {
       verdict    = 'WEAK';
-      actionNote = 'Marginal setup — watch only, do not trade yet';
+      actionNote = 'Marginal setup — watch, wait for more confirmation';
     } else {
       verdict    = 'AVOID';
       actionNote = 'Poor alignment — skip this signal';
@@ -1482,11 +1482,12 @@ app.post('/signal-analysis', async (req, res) => {
       riskReward   = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : null;
     }
 
-    // ── Key reasons (top 3 contributing factors by earned pts) ────
+    // ── Main reason: single strongest contributing factor ─────────
     const reasons = Object.entries(breakdown)
+      .filter(([, v]) => v.pass !== false && v.earned > 0)
       .sort((a, b) => b[1].earned - a[1].earned)
-      .slice(0, 3)
-      .map(([k, v]) => v.note);
+      .slice(0, 1)
+      .map(([, v]) => v.note.replace(/✓✓|✓|★/g, '').trim());
 
     // ── Warnings (checks that dragged score down) ─────────────────
     const warnings = Object.entries(breakdown)
