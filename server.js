@@ -931,11 +931,24 @@ app.post('/oi-analysis', async (req, res) => {
     const spot = parseFloat(spotPrice);
     const now  = new Date();
 
+    // Shared parseExpiry helper — handles Angel's DDMONYYYY format
+    const MON_OI = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+    function parseExpiryOI(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim().toUpperCase();
+      const m1 = s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);
+      if (m1) { const mon = MON_OI[m1[2]]; if (mon !== undefined) return new Date(+m1[3], mon, +m1[1]); }
+      const m2 = s.match(/^(\d{4})(\d{2})(\d{2})$/); if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+      const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m3) return new Date(+m3[1], +m3[2]-1, +m3[3]);
+      const d = new Date(raw); return isNaN(d) ? null : d;
+    }
+
     // Filter NFO options for this underlying
     const allOptions = SESSION._instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
       if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
-      if (new Date(i.expiry) < now) return false;
+      const expDate = parseExpiryOI(i.expiry);
+      if (!expDate || expDate < now) return false;
       if (i.name && i.name.toUpperCase() === sym) return true;
       if (i.symbol) {
         const s = i.symbol.toUpperCase();
@@ -946,23 +959,25 @@ app.post('/oi-analysis', async (req, res) => {
 
     if (!allOptions.length) return res.json({ status: false, message: `No NFO options for ${sym}` });
 
-    // Pick expiry
-    const sorted = [...new Set(allOptions.map(i => i.expiry))]
-      .map(e => new Date(e)).filter(d => d >= now).sort((a, b) => a - b);
-    let chosenDate;
+    // Pick expiry using parsed dates, keyed by raw string for exact match
+    const uniqueExp = [...new Set(allOptions.map(i => i.expiry))]
+      .map(raw => ({ raw, date: parseExpiryOI(raw) }))
+      .filter(e => e.date && e.date >= now)
+      .sort((a, b) => a.date - b.date);
+
+    let chosenExpRaw;
     if (expiry === 'MONTHLY') {
       const m = now.getMonth(), y = now.getFullYear();
-      const thisMonth = sorted.filter(d => d.getMonth() === m && d.getFullYear() === y);
-      chosenDate = thisMonth[thisMonth.length - 1] || sorted[sorted.length - 1];
+      const thisMonth = uniqueExp.filter(e => e.date.getMonth() === m && e.date.getFullYear() === y);
+      chosenExpRaw = (thisMonth[thisMonth.length - 1] || uniqueExp[uniqueExp.length - 1])?.raw;
     } else if (expiry === 'NEXT') {
-      chosenDate = sorted[1] || sorted[0];
+      chosenExpRaw = (uniqueExp[1] || uniqueExp[0])?.raw;
     } else {
-      chosenDate = sorted[0];
+      chosenExpRaw = uniqueExp[0]?.raw;
     }
-    if (!chosenDate) return res.json({ status: false, message: 'No valid expiry' });
+    if (!chosenExpRaw) return res.json({ status: false, message: 'No valid expiry' });
 
-    const chosenExpiryStr = chosenDate.toISOString().split('T')[0];
-    const expiryOpts = allOptions.filter(i => new Date(i.expiry).toISOString().split('T')[0] === chosenExpiryStr);
+    const expiryOpts = allOptions.filter(i => i.expiry === chosenExpRaw);
 
     // Collect all strikes ± 10 from ATM
     const allStrikes = [...new Set(expiryOpts.map(i => Math.round(parseFloat(i.strike) / 100)))]
@@ -1457,7 +1472,7 @@ app.post('/signal-analysis', async (req, res) => {
     } else if (score >= 75) {
       verdict    = 'STRONG';
       actionNote = 'High conviction — trade with normal size';
-    } else if (score >= 58) {
+    } else if (score >= 60) {
       verdict    = 'MODERATE';
       actionNote = 'Good setup — consider half position size';
     } else if (score >= 42) {
@@ -1590,12 +1605,21 @@ app.get('/mcx', async (req, res) => {
     const tokenMap = {};
 
     for (const comm of MCX_COMMODITIES) {
-      const matches = instruments.filter(i =>
-        i.exch_seg === 'MCX' &&
-        i.name === comm.sym &&
-        i.instrumenttype === 'FUTCOM' &&
-        new Date(i.expiry) >= now
-      ).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+      const matches = instruments.filter(i => {
+        if (i.exch_seg !== 'MCX') return false;
+        if (i.name !== comm.sym) return false;
+        if (i.instrumenttype !== 'FUTCOM') return false;
+        // Parse expiry — Angel uses DDMONYYYY for MCX too
+        const MON2 = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+        const s = String(i.expiry||'').trim().toUpperCase();
+        const m1 = s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);
+        let expDate = m1 ? new Date(+m1[3], MON2[m1[2]]??0, +m1[1]) : new Date(i.expiry);
+        return expDate >= now;
+      }).sort((a, b) => {
+        const MON2 = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+        const parse = r => { const s=String(r).trim().toUpperCase(); const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/); return m?new Date(+m[3],MON2[m[2]]??0,+m[1]):new Date(r); };
+        return parse(a.expiry) - parse(b.expiry);
+      });
 
       if (matches.length > 0) {
         const nearest = matches[0];
@@ -1688,7 +1712,6 @@ app.post('/option-ltp', async (req, res) => {
   }
 
   try {
-    // ── Step 1: Download Angel One NFO instrument master (cached in memory) ──
     if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime||0)) > 4*3600*1000) {
       log('Downloading NFO instrument master...', 'INFO');
       const instrResp = await axios.get(
@@ -1700,91 +1723,77 @@ app.post('/option-ltp', async (req, res) => {
       log(`Instrument master loaded — ${SESSION._instruments.length} instruments`, 'OK');
     }
 
-    const instruments = SESSION._instruments;
+    const MON = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+    function parseExpiry(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim().toUpperCase();
+      const m1 = s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);
+      if (m1) { const mon = MON[m1[2]]; if (mon !== undefined) return new Date(+m1[3], mon, +m1[1]); }
+      const m2 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+      const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m3) return new Date(+m3[1], +m3[2]-1, +m3[3]);
+      const m4 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (m4) return new Date(+m4[3], +m4[2]-1, +m4[1]);
+      const d = new Date(raw); return isNaN(d) ? null : d;
+    }
 
-    // ── Step 2: Find matching NFO option token ──
-    // Angel One trading symbol format: NIFTY24JUL24300CE or RELIANCE24JUL1280CE
-    // We search by name + strike + optiontype + expiry match
-
-    const sym = symbol.toUpperCase();
-    const optType = type.toUpperCase(); // CE or PE
+    const sym       = symbol.toUpperCase();
+    const optType   = type.toUpperCase();
     const strikeNum = parseFloat(strike);
+    const now       = new Date();
 
-    // Build expiry pattern based on requested expiry type
-    // expiry param: 'WEEKLY' | 'NEXT' | 'MONTHLY'
-    const now = new Date();
-    const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-
-    // Find all matching NFO options for this symbol + strike + type
-    // Match by i.name OR by trading symbol prefix (e.g. RELIANCE25MAY3000CE)
-    const matches = instruments.filter(i => {
+    // Find matching NFO options: name OR symbol-prefix, correct strike, correct type
+    const matches = SESSION._instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
-      if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
-      if (parseFloat(i.strike) !== strikeNum * 100) return false; // Angel stores strike*100
-      if (!i.symbol || !i.symbol.toUpperCase().endsWith(optType)) return false;
-      // Name match
-      if (i.name && i.name.toUpperCase() === sym) return true;
-      // Symbol prefix match
+      if (!i.instrumenttype?.includes('OPT')) return false;
+      const expDate = parseExpiry(i.expiry);
+      if (!expDate || expDate < now) return false;
+      if (Math.round(parseFloat(i.strike)) !== Math.round(strikeNum * 100)) return false;
+      if (!i.symbol?.toUpperCase().endsWith(optType)) return false;
+      if (i.name?.toUpperCase() === sym) return true;
       const s = i.symbol.toUpperCase();
-      if (s.startsWith(sym) && s.length > sym.length && /[0-9]/.test(s[sym.length])) return true;
+      if (s.startsWith(sym) && s.length > sym.length && /\d/.test(s[sym.length])) return true;
       return false;
     });
 
-    if (matches.length === 0) {
-      return res.json({ status: false, message: `No NFO instrument found for ${sym} ${strike} ${optType}` });
+    if (!matches.length) {
+      return res.json({ status: false, message: `No NFO instrument for ${sym} ${strike} ${optType}` });
     }
 
-    // Pick the expiry closest to config
-    const sortedMatches = matches.sort((a, b) => {
-      const da = new Date(a.expiry);
-      const db = new Date(b.expiry);
-      return da - db;
-    });
+    // Sort by expiry, pick by config
+    const sorted = matches
+      .map(i => ({ ...i, _exp: parseExpiry(i.expiry) }))
+      .filter(i => i._exp)
+      .sort((a, b) => a._exp - b._exp);
 
     let chosen;
     if (expiry === 'MONTHLY') {
-      // Pick last expiry of the month
-      const thisMonth = now.getMonth();
-      const monthlyMatches = sortedMatches.filter(i => {
-        const d = new Date(i.expiry);
-        return d.getMonth() === thisMonth && d >= now;
-      });
-      chosen = monthlyMatches[monthlyMatches.length - 1] || sortedMatches[0];
+      const curMonth = now.getMonth(), curYear = now.getFullYear();
+      const thisMonth = sorted.filter(i => i._exp.getMonth() === curMonth && i._exp.getFullYear() === curYear);
+      chosen = thisMonth[thisMonth.length - 1] || sorted[sorted.length - 1];
     } else if (expiry === 'NEXT') {
-      // Skip first expiry, pick second
-      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
-      chosen = futureMatches[1] || futureMatches[0] || sortedMatches[0];
+      chosen = sorted[1] || sorted[0];
     } else {
-      // WEEKLY — pick nearest future expiry
-      const futureMatches = sortedMatches.filter(i => new Date(i.expiry) >= now);
-      chosen = futureMatches[0] || sortedMatches[0];
+      chosen = sorted[0];
     }
 
-    if (!chosen) {
-      return res.json({ status: false, message: `No valid expiry found for ${sym} ${strike} ${optType}` });
-    }
+    if (!chosen) return res.json({ status: false, message: `No valid expiry for ${sym} ${strike} ${optType}` });
 
-    log(`Option token: ${chosen.symbol} (token ${chosen.token})`, 'INFO');
+    log(`Option-LTP token: ${chosen.symbol} (${chosen.token})`, 'INFO');
 
-    // ── Step 3: Fetch live LTP for this option token via NFO quote ──
-    const quoteResp = await axios.post(
+    const qResp = await axios.post(
       `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
-      { mode: 'LTP', exchangeTokens: { NFO: [chosen.token] } },
+      { mode: 'LTP', exchangeTokens: { NFO: [String(chosen.token)] } },
       { headers: getHeaders(true), timeout: 15000 }
     );
 
-    const qData = quoteResp.data;
-    if (qData.status && qData.data && qData.data.fetched && qData.data.fetched.length > 0) {
-      const q = qData.data.fetched[0];
-      const ltp = parseFloat(q.ltp || q.close || 0);
+    const qData = qResp.data;
+    if (qData.status && qData.data?.fetched?.length) {
+      const q   = qData.data.fetched[0];
+      const ltp = parseFloat(q.ltp || 0) > 0 ? parseFloat(q.ltp) : parseFloat(q.close || 0);
       log(`✅ Option LTP: ${chosen.symbol} = ₹${ltp}`, 'OK');
-      return res.json({
-        status: true,
-        ltp,
-        symbolToken: chosen.token,
-        tradingSymbol: chosen.symbol,
-        expiry: chosen.expiry,
-      });
+      return res.json({ status: true, ltp, symbolToken: chosen.token, tradingSymbol: chosen.symbol, expiry: chosen.expiry });
     }
 
     return res.json({ status: false, message: 'LTP fetch returned no data' });
@@ -1828,121 +1837,141 @@ app.post('/option-chain', async (req, res) => {
     const spot = parseFloat(spotPrice);
     const now = new Date();
 
+    // ── Parse Angel One expiry — supports multiple date formats ──────
+    // Angel master uses: '29MAY2025' | '2025-05-29' | '29-05-2025' | '20250529'
+    const MON = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+    function parseExpiry(raw) {
+      if (!raw) return null;
+      const s = String(raw).trim().toUpperCase();
+      // DDMONYYYY e.g. 29MAY2025
+      const m1 = s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);
+      if (m1) {
+        const mon = MON[m1[2]];
+        if (mon !== undefined) return new Date(+m1[3], mon, +m1[1]);
+      }
+      // YYYYMMDD e.g. 20250529
+      const m2 = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+      // YYYY-MM-DD or DD-MM-YYYY
+      const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m3) return new Date(+m3[1], +m3[2]-1, +m3[3]);
+      const m4 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (m4) return new Date(+m4[3], +m4[2]-1, +m4[1]);
+      // Last resort: native parse
+      const d = new Date(raw);
+      return isNaN(d) ? null : d;
+    }
+
     // ── Step 1: Find all NFO options for this underlying ──
     const allOptions = SESSION._instruments.filter(i => {
       if (i.exch_seg !== 'NFO') return false;
       if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
-      if (new Date(i.expiry) < now) return false; // skip expired
+      // Parse expiry and skip expired
+      const expDate = parseExpiry(i.expiry);
+      if (!expDate || expDate < now) return false;
+      // Match by underlying name OR trading symbol prefix
       if (i.name && i.name.toUpperCase() === sym) return true;
       if (i.symbol) {
         const s = i.symbol.toUpperCase();
-        // Symbol starts with sym immediately followed by a digit (year of expiry)
         if (s.startsWith(sym) && s.length > sym.length && /\d/.test(s[sym.length])) return true;
       }
       return false;
     });
 
     if (allOptions.length === 0) {
-      log(`No NFO options found for ${sym}`, 'WARN');
+      log(`No NFO options found for ${sym} (checked ${SESSION._instruments?.length} instruments)`, 'WARN');
       return res.json({ status: false, message: `No NFO options found for ${sym}` });
     }
 
-    // ── Step 2: Pick best expiry ──
-    const pickExpiry = (optList) => {
-      // Sort by expiry ascending, all future
-      const sorted = [...new Set(optList.map(i => i.expiry))]
-        .map(e => new Date(e))
-        .filter(d => d >= now)
-        .sort((a, b) => a - b);
+    log(`Option chain ${sym}: ${allOptions.length} options matched`, 'INFO');
 
-      if (!sorted.length) return null;
+    // ── Step 2: Pick best expiry ──────────────────────────────────────
+    // Get unique expiry dates (parsed), sorted ascending
+    const uniqueExpiries = [...new Set(allOptions.map(i => i.expiry))]
+      .map(raw => ({ raw, date: parseExpiry(raw) }))
+      .filter(e => e.date && e.date >= now)
+      .sort((a, b) => a.date - b.date);
 
-      if (expiry === 'MONTHLY') {
-        const curMonth = now.getMonth(), curYear = now.getFullYear();
-        const thisMonth = sorted.filter(d => d.getMonth() === curMonth && d.getFullYear() === curYear);
-        if (thisMonth.length) return thisMonth[thisMonth.length - 1]; // last expiry this month
-        const next = sorted[0].getMonth(); // fallback: first future month
-        const nextMonthExp = sorted.filter(d => d.getMonth() === next);
-        return nextMonthExp[nextMonthExp.length - 1] || sorted[sorted.length - 1];
-      }
-      if (expiry === 'NEXT') return sorted[1] || sorted[0];
-      return sorted[0]; // WEEKLY = nearest
-    };
-
-    const chosenExpiryDate = pickExpiry(allOptions);
-    if (!chosenExpiryDate) {
-      return res.json({ status: false, message: `No valid expiry for ${sym}` });
+    if (!uniqueExpiries.length) {
+      return res.json({ status: false, message: `No valid future expiries for ${sym}` });
     }
 
-    const chosenExpiryStr = chosenExpiryDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    let chosenExpiry;
+    if (expiry === 'MONTHLY') {
+      const curMonth = now.getMonth(), curYear = now.getFullYear();
+      const thisMonth = uniqueExpiries.filter(e => e.date.getMonth() === curMonth && e.date.getFullYear() === curYear);
+      chosenExpiry = thisMonth.length
+        ? thisMonth[thisMonth.length - 1]           // last expiry this month
+        : uniqueExpiries[uniqueExpiries.length - 1]; // fallback: last available
+    } else if (expiry === 'NEXT') {
+      chosenExpiry = uniqueExpiries[1] || uniqueExpiries[0];
+    } else {
+      chosenExpiry = uniqueExpiries[0]; // WEEKLY = nearest
+    }
 
-    // ── Step 3: Filter to chosen expiry ──
-    const expiryOptions = allOptions.filter(i => {
-      const d = new Date(i.expiry);
-      return d.toISOString().split('T')[0] === chosenExpiryStr;
-    });
+    const chosenExpiryRaw = chosenExpiry.raw; // use raw string for exact match
 
-    // ── Step 4: Get all available strikes from instrument master (in rupees) ──
-    // Angel stores strike as (rupees × 100), e.g. 800 rupee strike = "80000"
+    // ── Step 3: Filter to chosen expiry ──────────────────────────────
+    const expiryOptions = allOptions.filter(i => i.expiry === chosenExpiryRaw);
+
+    // ── Step 4: Get all available strikes (Angel stores strike × 100) ─
     const allStrikes = [...new Set(
       expiryOptions.map(i => Math.round(parseFloat(i.strike) / 100))
     )].filter(s => s > 0).sort((a, b) => a - b);
 
     if (allStrikes.length === 0) {
-      return res.json({ status: false, message: `No strikes found for ${sym} expiry ${chosenExpiryStr}` });
+      return res.json({ status: false, message: `No strikes found for ${sym} expiry ${chosenExpiryRaw}` });
     }
 
-    // ── Step 5: Find real ATM = available strike CLOSEST to live spot ──
+    // ── Step 5: Real ATM = closest available strike to spot ───────────
     const realAtm = allStrikes.reduce((best, s) =>
       Math.abs(s - spot) < Math.abs(best - spot) ? s : best
     , allStrikes[0]);
 
-    // ── Step 6: Pick ATM ± depth strikes from the REAL available list ──
-    const atmIdx = allStrikes.indexOf(realAtm);
+    // ── Step 6: ATM ± depth strikes ───────────────────────────────────
+    const atmIdx   = allStrikes.indexOf(realAtm);
     const startIdx = Math.max(0, atmIdx - depth);
     const endIdx   = Math.min(allStrikes.length - 1, atmIdx + depth);
     const strikeList = allStrikes.slice(startIdx, endIdx + 1);
 
-    // ── Step 7: Collect tokens for selected strikes ──
-    const tokens = [];
-    const strikeMap = {}; // strike -> { CE_token, PE_token, CE_sym, PE_sym }
+    // ── Step 7: Collect CE + PE tokens for each strike ─────────────
+    const tokens   = [];
+    const strikeMap = {};
 
     for (const strike of strikeList) {
-      const strikeVal = strike * 100; // back to Angel's format
+      const strikeVal = Math.round(strike * 100); // Angel format
 
       const ces = expiryOptions.filter(i =>
         Math.round(parseFloat(i.strike)) === strikeVal &&
-        i.symbol && i.symbol.toUpperCase().endsWith('CE')
+        i.symbol?.toUpperCase().endsWith('CE')
       );
       const pes = expiryOptions.filter(i =>
         Math.round(parseFloat(i.strike)) === strikeVal &&
-        i.symbol && i.symbol.toUpperCase().endsWith('PE')
+        i.symbol?.toUpperCase().endsWith('PE')
       );
 
-      const ce = ces[0]; // already filtered to single expiry
-      const pe = pes[0];
-
+      const ce = ces[0], pe = pes[0];
       strikeMap[strike] = {
-        CE_token: ce?.token || null,
-        PE_token: pe?.token || null,
-        CE_sym:   ce?.symbol || null,
-        PE_sym:   pe?.symbol || null,
+        CE_token: ce?.token ?? null,
+        PE_token: pe?.token ?? null,
+        CE_sym:   ce?.symbol ?? null,
+        PE_sym:   pe?.symbol ?? null,
       };
       if (ce?.token) tokens.push(String(ce.token));
       if (pe?.token) tokens.push(String(pe.token));
     }
 
-    log(`Option chain ${sym}: expiry=${chosenExpiryStr}, realAtm=${realAtm}, strikes=${strikeList.length}, tokens=${tokens.length}`, 'INFO');
+    log(`Option chain ${sym}: expiry=${chosenExpiryRaw}, ATM=${realAtm}, strikes=${strikeList.length}, tokens=${tokens.length}`, 'INFO');
 
     if (tokens.length === 0) {
-      return res.json({ status: false, message: `No tokens found for ${sym} strikes` });
+      return res.json({ status: false, message: `No tokens found for ${sym} — check instrument name matching` });
     }
 
-    // ── Step 8: Batch fetch LTPs ──
+    // ── Step 8: Batch LTP fetch (NFO exchange) ────────────────────────
     const ltpMap = {};
-    const batchSize = 50;
-    for (let i = 0; i < tokens.length; i += batchSize) {
-      const batch = tokens.slice(i, i + batchSize);
+    const BATCH = 50;
+    for (let i = 0; i < tokens.length; i += BATCH) {
+      const batch = tokens.slice(i, i + BATCH);
       try {
         const qResp = await axios.post(
           `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
@@ -1951,28 +1980,24 @@ app.post('/option-chain', async (req, res) => {
         );
         if (qResp.data.status && qResp.data.data?.fetched) {
           qResp.data.data.fetched.forEach(q => {
-            // Use ltp if non-zero, else close (handles pre/post market)
-            const ltp   = parseFloat(q.ltp   || 0);
-            const close = parseFloat(q.close  || 0);
-            const price = ltp > 0 ? ltp : close;
-            ltpMap[String(q.symbolToken)] = price;
+            const ltp   = parseFloat(q.ltp  || 0);
+            const close = parseFloat(q.close || 0);
+            ltpMap[String(q.symbolToken)] = ltp > 0 ? ltp : close;
           });
         }
       } catch(e) {
-        log(`Batch LTP fetch failed: ${e.message}`, 'WARN');
+        log(`LTP batch failed: ${e.message}`, 'WARN');
       }
     }
 
-    // ── Step 9: Build result ──
+    // ── Step 9: Build result ──────────────────────────────────────────
     const result = strikeList.map(strike => {
       const m = strikeMap[strike];
-      const ceLtp = m.CE_token ? (ltpMap[String(m.CE_token)] ?? null) : null;
-      const peLtp = m.PE_token ? (ltpMap[String(m.PE_token)] ?? null) : null;
       return {
         strike,
         isATM:    strike === realAtm,
-        CE_ltp:   ceLtp,
-        PE_ltp:   peLtp,
+        CE_ltp:   m.CE_token ? (ltpMap[String(m.CE_token)] ?? null) : null,
+        PE_ltp:   m.PE_token ? (ltpMap[String(m.PE_token)] ?? null) : null,
         CE_token: m.CE_token,
         PE_token: m.PE_token,
         CE_sym:   m.CE_sym,
@@ -1980,10 +2005,10 @@ app.post('/option-chain', async (req, res) => {
       };
     });
 
-    log(`✅ Option chain ${sym}: ATM=${realAtm}, ${result.length} strikes, ltps fetched=${Object.keys(ltpMap).length}`, 'OK');
+    log(`✅ ${sym}: ATM=${realAtm}, ltps=${Object.keys(ltpMap).length}/${tokens.length} fetched`, 'OK');
     return res.json({
       status: true, symbol: sym, spotPrice: spot,
-      atmStrike: realAtm, expiry: chosenExpiryStr, strikes: result,
+      atmStrike: realAtm, expiry: chosenExpiryRaw, strikes: result,
     });
 
   } catch (error) {
@@ -2164,15 +2189,25 @@ async function getMCXTokens() {
     }
   }
   const now = new Date();
+  const MON_MCX = {JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+  function parseMcxExp(raw) {
+    if (!raw) return null;
+    const s = String(raw).trim().toUpperCase();
+    const m1 = s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);
+    if (m1) { const mon = MON_MCX[m1[2]]; if (mon !== undefined) return new Date(+m1[3], mon, +m1[1]); }
+    const m2 = s.match(/^(\d{4})(\d{2})(\d{2})$/); if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m3) return new Date(+m3[1], +m3[2]-1, +m3[3]);
+    const d = new Date(raw); return isNaN(d) ? null : d;
+  }
   const tokens = {};
   for (const sym of MCX_SYMBOLS) {
-    // Find MCX futures for this commodity — pick nearest expiry
-    const matches = SESSION._instruments.filter(i =>
-      i.exch_seg === 'MCX' &&
-      i.name && i.name.toUpperCase() === sym &&
-      i.instrumenttype === 'FUTCOM' &&
-      i.expiry && new Date(i.expiry) >= now
-    ).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+    const matches = SESSION._instruments.filter(i => {
+      if (i.exch_seg !== 'MCX') return false;
+      if (!i.name || i.name.toUpperCase() !== sym) return false;
+      if (i.instrumenttype !== 'FUTCOM') return false;
+      const d = parseMcxExp(i.expiry);
+      return d && d >= now;
+    }).sort((a, b) => parseMcxExp(a.expiry) - parseMcxExp(b.expiry));
     if (matches.length > 0) {
       tokens[sym] = matches[0].token;
       log(`MCX ${sym}: token ${matches[0].token} exp ${matches[0].expiry}`, 'INFO');
