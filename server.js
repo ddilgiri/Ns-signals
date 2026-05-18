@@ -340,6 +340,177 @@ function calcRSI14(closes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// HELPERS: MACD, Supertrend, ATR (new indicators)
+// ─────────────────────────────────────────────────────────────────────
+
+// MACD: returns { macdLine, signalLine, histogram, crossover }
+// crossover: 'BULLISH' (macd crossed above signal), 'BEARISH', or 'NONE'
+function calcMACD(closes, fast = 12, slow = 26, signal = 9) {
+  if (closes.length < slow + signal) return null;
+  const emaFast   = [];
+  const emaSlow   = [];
+  const kf = 2 / (fast + 1);
+  const ks = 2 / (slow + 1);
+
+  // Seed fast EMA
+  let ef = closes.slice(0, fast).reduce((a, b) => a + b, 0) / fast;
+  emaFast.push(ef);
+  for (let i = fast; i < closes.length; i++) {
+    ef = closes[i] * kf + ef * (1 - kf);
+    emaFast.push(ef);
+  }
+
+  // Seed slow EMA (same index base as fast, so align: slow starts at index slow-1)
+  let es = closes.slice(0, slow).reduce((a, b) => a + b, 0) / slow;
+  emaSlow.push(es);
+  for (let i = slow; i < closes.length; i++) {
+    es = closes[i] * ks + es * (1 - ks);
+    emaSlow.push(es);
+  }
+
+  // MACD line = fast EMA - slow EMA (aligned from index slow-1 in closes)
+  const offset    = slow - fast; // emaFast has more values
+  const macdLine  = emaSlow.map((s, i) => parseFloat((emaFast[i + offset] - s).toFixed(4)));
+
+  // Signal line = 9-EMA of macdLine
+  if (macdLine.length < signal) return null;
+  const ksig = 2 / (signal + 1);
+  let sig = macdLine.slice(0, signal).reduce((a, b) => a + b, 0) / signal;
+  const sigLine = [sig];
+  for (let i = signal; i < macdLine.length; i++) {
+    sig = macdLine[i] * ksig + sig * (1 - ksig);
+    sigLine.push(sig);
+  }
+
+  const lastMacd   = macdLine[macdLine.length - 1];
+  const lastSig    = sigLine[sigLine.length - 1];
+  const prevMacd   = macdLine[macdLine.length - 2];
+  const prevSig    = sigLine[sigLine.length - 2];
+  const histogram  = parseFloat((lastMacd - lastSig).toFixed(4));
+
+  let crossover = 'NONE';
+  if (prevMacd !== undefined && prevSig !== undefined) {
+    if (prevMacd <= prevSig && lastMacd > lastSig) crossover = 'BULLISH';
+    else if (prevMacd >= prevSig && lastMacd < lastSig) crossover = 'BEARISH';
+  }
+
+  return {
+    macdLine:  parseFloat(lastMacd.toFixed(4)),
+    signalLine: parseFloat(lastSig.toFixed(4)),
+    histogram,
+    crossover,
+    aboveSignal: lastMacd > lastSig,
+  };
+}
+
+// ATR-14: Average True Range — measures volatility
+function calcATR(raw, period = 14) {
+  if (raw.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < raw.length; i++) {
+    const high  = parseFloat(raw[i][2]);
+    const low   = parseFloat(raw[i][3]);
+    const close = parseFloat(raw[i - 1][4]); // previous close
+    trs.push(Math.max(high - low, Math.abs(high - close), Math.abs(low - close)));
+  }
+  // Wilder smoothing
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+  }
+  return parseFloat(atr.toFixed(2));
+}
+
+// Supertrend: period=10, multiplier=3
+// Returns { supertrend, trend: 'UP'|'DOWN', signal: 'BUY'|'SELL'|'HOLD' }
+function calcSupertrend(raw, period = 10, multiplier = 3) {
+  if (raw.length < period + 2) return null;
+
+  const highs  = raw.map(c => parseFloat(c[2]));
+  const lows   = raw.map(c => parseFloat(c[3]));
+  const closes = raw.map(c => parseFloat(c[4]));
+
+  // ATR for each bar (rolling Wilder)
+  const trs = [0]; // index 0 placeholder
+  for (let i = 1; i < raw.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+  }
+
+  // Seed ATR
+  let atr = trs.slice(1, period + 1).reduce((a, b) => a + b, 0) / period;
+  const atrs = new Array(period + 1).fill(0);
+  atrs.push(atr);
+  for (let i = period + 1; i < raw.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+    atrs.push(atr);
+  }
+
+  // Basic upper/lower bands
+  const upperBasic = [], lowerBasic = [];
+  for (let i = 0; i < raw.length; i++) {
+    const hl2 = (highs[i] + lows[i]) / 2;
+    upperBasic.push(hl2 + multiplier * (atrs[i] || 0));
+    lowerBasic.push(hl2 - multiplier * (atrs[i] || 0));
+  }
+
+  // Final bands with Supertrend adjustment
+  const upperFinal = [...upperBasic];
+  const lowerFinal = [...lowerBasic];
+  const st = new Array(raw.length).fill(0);
+  const trend = new Array(raw.length).fill(1); // 1=UP, -1=DOWN
+
+  for (let i = period + 1; i < raw.length; i++) {
+    upperFinal[i] = (upperBasic[i] < upperFinal[i - 1] || closes[i - 1] > upperFinal[i - 1])
+      ? upperBasic[i] : upperFinal[i - 1];
+    lowerFinal[i] = (lowerBasic[i] > lowerFinal[i - 1] || closes[i - 1] < lowerFinal[i - 1])
+      ? lowerBasic[i] : lowerFinal[i - 1];
+
+    if (st[i - 1] === upperFinal[i - 1]) {
+      st[i] = closes[i] > upperFinal[i] ? lowerFinal[i] : upperFinal[i];
+    } else {
+      st[i] = closes[i] < lowerFinal[i] ? upperFinal[i] : lowerFinal[i];
+    }
+    trend[i] = closes[i] > st[i] ? 1 : -1;
+  }
+
+  const lastIdx   = raw.length - 1;
+  const prevTrend = trend[lastIdx - 1];
+  const currTrend = trend[lastIdx];
+  let signal = 'HOLD';
+  if (prevTrend === -1 && currTrend === 1)  signal = 'BUY';
+  if (prevTrend === 1  && currTrend === -1) signal = 'SELL';
+
+  return {
+    supertrend: parseFloat(st[lastIdx].toFixed(2)),
+    trend: currTrend === 1 ? 'UP' : 'DOWN',
+    signal,
+  };
+}
+
+// Max Pain: strike where total option premium loss is maximised (market maker level)
+// Expects array of { strike, CE_ltp, PE_ltp, CE_oi, PE_oi }
+function calcMaxPain(chain) {
+  if (!chain || chain.length === 0) return null;
+  const strikes = chain.map(s => s.strike);
+  let minPain = Infinity, maxPainStrike = null;
+
+  for (const expiry of strikes) {
+    let totalPain = 0;
+    for (const s of chain) {
+      const ceLoss = s.CE_oi ? Math.max(0, expiry - s.strike) * (s.CE_oi || 0) : 0;
+      const peLoss = s.PE_oi ? Math.max(0, s.strike - expiry) * (s.PE_oi || 0) : 0;
+      totalPain += ceLoss + peLoss;
+    }
+    if (totalPain < minPain) { minPain = totalPain; maxPainStrike = expiry; }
+  }
+  return maxPainStrike;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // ROUTE: MARKET BIAS — EMA20/50 + RSI + PDH/PDL + VWAP + ORB
 // Cached per-symbol for 5 minutes. Uses angelRequest wrapper for
 // automatic token refresh on 401/403. Rate-limited to avoid throttling.
@@ -403,7 +574,10 @@ app.post('/market-bias', async (req, res) => {
       // Return neutral result (don't error — scanner will use NEUTRAL bias)
       const neutral = { status: true, bias: 'NEUTRAL', ltp: null, ema20: null, ema50: null,
         rsi: 50, vwap: null, aboveVwap: null, pdh: null, pdl: null,
-        orb_high: null, orb_low: null, volRatio: 1, candleCount: raw.length, fromCache: false };
+        orb_high: null, orb_low: null, volRatio: 1,
+        macd: null, atr: null, supertrend: null, isExpiryDay: false,
+        atrStopLong: null, atrStopShort: null,
+        candleCount: raw.length, fromCache: false };
       BIAS_CACHE[symbolToken] = { data: neutral, fetchTime: Date.now() };
       return res.json(neutral);
     }
@@ -459,6 +633,18 @@ app.post('/market-bias', async (req, res) => {
     // RSI-14
     const rsi = calcRSI14(closes);
 
+    // MACD (12,26,9)
+    const macd = calcMACD(closes);
+
+    // ATR-14 — volatility / stop-loss sizing
+    const atr = calcATR(raw);
+
+    // Supertrend (10, 3)
+    const supertrend = calcSupertrend(raw);
+
+    // Expiry proximity flag — is today an expiry day? (Thursday for weekly NFO/BankNifty)
+    const isExpiryDay = ist.getDay() === 4; // 4 = Thursday
+
     // VWAP (today only)
     let vwapNum = 0, vwapDen = 0;
     todayCandles.forEach(c => {
@@ -473,6 +659,14 @@ app.post('/market-bias', async (req, res) => {
     const result = {
       status: true, bias, ltp, ema20, ema50, rsi, vwap, aboveVwap,
       pdh, pdl, orb_high, orb_low, volRatio,
+      // New indicators
+      macd:        macd  || null,
+      atr:         atr   || null,
+      supertrend:  supertrend || null,
+      isExpiryDay,
+      // ATR-based stop loss levels
+      atrStopLong:  atr && ltp ? parseFloat((ltp - 1.5 * atr).toFixed(2)) : null,
+      atrStopShort: atr && ltp ? parseFloat((ltp + 1.5 * atr).toFixed(2)) : null,
       candleCount: raw.length, fromCache: false
     };
 
@@ -618,9 +812,565 @@ app.get('/fii-dii', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// ROUTE: FULL SIGNAL ANALYSIS — comprehensive RA-style check
+// ROUTE: INDIA VIX — fear gauge, critical macro filter for F&O
+// VIX > 20 = high volatility, options expensive, avoid buying premium
+// VIX < 13 = low volatility, safe to buy premium, trends more reliable
+// Source: NSE public API (no auth required)
+// ─────────────────────────────────────────────────────────────────────
+const VIX_CACHE = { data: null, fetchTime: 0 };
+
+app.get('/india-vix', async (req, res) => {
+  // Cache 5 minutes
+  if (VIX_CACHE.data && (Date.now() - VIX_CACHE.fetchTime) < 5 * 60 * 1000) {
+    return res.json(VIX_CACHE.data);
+  }
+
+  try {
+    const cookie = await getNSECookie();
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json, text/plain, */*',
+      'Referer': 'https://www.nseindia.com/',
+      'Origin': 'https://www.nseindia.com',
+      'sec-ch-ua-platform': '"Windows"',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
+    };
+    if (cookie) headers['Cookie'] = cookie;
+
+    const r = await axios.get('https://www.nseindia.com/api/allIndices', { headers, timeout: 12000 });
+    const indices = r.data?.data || [];
+    const vixEntry = indices.find(i => i.index === 'INDIA VIX');
+
+    if (!vixEntry) {
+      // Fallback: try NSE quote endpoint directly
+      const r2 = await axios.get('https://www.nseindia.com/api/quote-derivative?symbol=INDIAVIX', { headers, timeout: 12000 });
+      const vix2 = r2.data?.underlyingValue || null;
+      if (vix2) {
+        const fallback = buildVixResult(parseFloat(vix2), null, null, null);
+        VIX_CACHE.data = fallback; VIX_CACHE.fetchTime = Date.now();
+        return res.json(fallback);
+      }
+      return res.json({ status: false, message: 'India VIX not found in NSE indices' });
+    }
+
+    const result = buildVixResult(
+      parseFloat(vixEntry.last || 0),
+      parseFloat(vixEntry.change || 0),
+      parseFloat(vixEntry.percentChange || 0),
+      parseFloat(vixEntry.previousClose || 0)
+    );
+    VIX_CACHE.data = result;
+    VIX_CACHE.fetchTime = Date.now();
+    log(`India VIX: ${result.vix} (${result.regime}) chg=${result.changePct}%`, 'INFO');
+    res.json(result);
+
+  } catch (err) {
+    log(`India VIX fetch failed: ${err.message}`, 'WARN');
+    if (VIX_CACHE.data) return res.json({ ...VIX_CACHE.data, stale: true });
+    // Return neutral so scanner doesn't block
+    res.json({ status: true, vix: null, regime: 'UNKNOWN', premiumBuyable: true, message: 'VIX unavailable' });
+  }
+});
+
+function buildVixResult(vix, change, changePct, prevClose) {
+  // Regime classification
+  let regime = 'NORMAL';
+  if (vix !== null) {
+    if (vix < 12)       regime = 'VERY_LOW';    // options cheap, trend stable
+    else if (vix < 16)  regime = 'LOW';
+    else if (vix < 20)  regime = 'NORMAL';
+    else if (vix < 25)  regime = 'ELEVATED';    // options expensive, use caution
+    else if (vix < 30)  regime = 'HIGH';         // avoid buying premium
+    else                regime = 'EXTREME';      // panic mode — avoid directional trades
+  }
+
+  const premiumBuyable = vix === null || vix < 20; // safe to buy options when VIX < 20
+
+  return {
+    status: true, vix, regime, premiumBuyable,
+    change: change !== null ? parseFloat((change || 0).toFixed(2)) : null,
+    changePct: changePct !== null ? parseFloat((changePct || 0).toFixed(2)) : null,
+    prevClose: prevClose || null,
+    // Guidance text
+    guidance: regime === 'VERY_LOW'  ? 'Low IV — good time to buy options'
+            : regime === 'LOW'       ? 'Normal conditions — options fairly priced'
+            : regime === 'NORMAL'    ? 'Watch carefully — IV rising'
+            : regime === 'ELEVATED'  ? 'Options expensive — prefer selling or spreads'
+            : regime === 'HIGH'      ? 'High volatility — avoid naked option buying'
+            : regime === 'EXTREME'   ? 'Extreme fear — directional trades risky'
+            : 'VIX data unavailable',
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: OI ANALYSIS — Open Interest per strike from option chain
+// Body: { symbol, spotPrice, expiry }
+// Returns: { pcr, maxPain, oiBuildup, oiUnwinding, supportStrike, resistStrike }
+// ─────────────────────────────────────────────────────────────────────
+app.post('/oi-analysis', async (req, res) => {
+  if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
+
+  const { symbol, spotPrice, expiry = 'WEEKLY' } = req.body;
+  if (!symbol || !spotPrice) return res.status(400).json({ status: false, message: 'symbol and spotPrice required' });
+
+  try {
+    // Ensure instruments loaded
+    if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime || 0)) > 4 * 3600 * 1000) {
+      log('Downloading NFO instrument master for OI analysis...', 'INFO');
+      const instrResp = await axios.get(
+        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
+        { timeout: 30000 }
+      );
+      SESSION._instruments = instrResp.data;
+      SESSION._instrFetchTime = Date.now();
+    }
+
+    const sym  = symbol.toUpperCase();
+    const spot = parseFloat(spotPrice);
+    const now  = new Date();
+
+    // Filter NFO options for this underlying
+    const allOptions = SESSION._instruments.filter(i => {
+      if (i.exch_seg !== 'NFO') return false;
+      if (!i.instrumenttype || !i.instrumenttype.includes('OPT')) return false;
+      if (new Date(i.expiry) < now) return false;
+      if (i.name && i.name.toUpperCase() === sym) return true;
+      if (i.symbol) {
+        const s = i.symbol.toUpperCase();
+        if (s.startsWith(sym) && s.length > sym.length && /\d/.test(s[sym.length])) return true;
+      }
+      return false;
+    });
+
+    if (!allOptions.length) return res.json({ status: false, message: `No NFO options for ${sym}` });
+
+    // Pick expiry
+    const sorted = [...new Set(allOptions.map(i => i.expiry))]
+      .map(e => new Date(e)).filter(d => d >= now).sort((a, b) => a - b);
+    let chosenDate;
+    if (expiry === 'MONTHLY') {
+      const m = now.getMonth(), y = now.getFullYear();
+      const thisMonth = sorted.filter(d => d.getMonth() === m && d.getFullYear() === y);
+      chosenDate = thisMonth[thisMonth.length - 1] || sorted[sorted.length - 1];
+    } else if (expiry === 'NEXT') {
+      chosenDate = sorted[1] || sorted[0];
+    } else {
+      chosenDate = sorted[0];
+    }
+    if (!chosenDate) return res.json({ status: false, message: 'No valid expiry' });
+
+    const chosenExpiryStr = chosenDate.toISOString().split('T')[0];
+    const expiryOpts = allOptions.filter(i => new Date(i.expiry).toISOString().split('T')[0] === chosenExpiryStr);
+
+    // Collect all strikes ± 10 from ATM
+    const allStrikes = [...new Set(expiryOpts.map(i => Math.round(parseFloat(i.strike) / 100)))]
+      .filter(s => s > 0).sort((a, b) => a - b);
+    const realAtm = allStrikes.reduce((b, s) => Math.abs(s - spot) < Math.abs(b - spot) ? s : b, allStrikes[0]);
+    const atmIdx = allStrikes.indexOf(realAtm);
+    const depth = 10;
+    const strikeList = allStrikes.slice(Math.max(0, atmIdx - depth), atmIdx + depth + 1);
+
+    // Gather tokens for FULL quote (includes OI)
+    const tokens = [];
+    const tokenMeta = {};
+    for (const strike of strikeList) {
+      const strikeVal = strike * 100;
+      const ces = expiryOpts.filter(i => Math.round(parseFloat(i.strike)) === strikeVal && i.symbol?.toUpperCase().endsWith('CE'));
+      const pes = expiryOpts.filter(i => Math.round(parseFloat(i.strike)) === strikeVal && i.symbol?.toUpperCase().endsWith('PE'));
+      if (ces[0]?.token) { tokens.push(String(ces[0].token)); tokenMeta[String(ces[0].token)] = { strike, type: 'CE' }; }
+      if (pes[0]?.token) { tokens.push(String(pes[0].token)); tokenMeta[String(pes[0].token)] = { strike, type: 'PE' }; }
+    }
+
+    // Fetch FULL mode (has openInterest)
+    const strikeData = {};
+    const batchSize = 50;
+    for (let i = 0; i < tokens.length; i += batchSize) {
+      const batch = tokens.slice(i, i + batchSize);
+      try {
+        const qr = await axios.post(
+          `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
+          { mode: 'FULL', exchangeTokens: { NFO: batch } },
+          { headers: getHeaders(true), timeout: 20000 }
+        );
+        if (qr.data.status && qr.data.data?.fetched) {
+          qr.data.data.fetched.forEach(q => {
+            const meta = tokenMeta[String(q.symbolToken)];
+            if (!meta) return;
+            if (!strikeData[meta.strike]) strikeData[meta.strike] = {};
+            strikeData[meta.strike][meta.type] = {
+              ltp: parseFloat(q.ltp || q.close || 0),
+              oi:  parseInt(q.openInterest || q.oi || 0),
+              oiChange: parseInt(q.netChange || 0),
+              volume: parseInt(q.tradeVolume || q.volume || 0),
+            };
+          });
+        }
+      } catch (e) { log(`OI batch fetch error: ${e.message}`, 'WARN'); }
+    }
+
+    // Build chain array
+    const chain = strikeList.map(strike => ({
+      strike,
+      isATM: strike === realAtm,
+      CE_ltp:      strikeData[strike]?.CE?.ltp    ?? null,
+      CE_oi:       strikeData[strike]?.CE?.oi     ?? 0,
+      CE_oiChange: strikeData[strike]?.CE?.oiChange ?? 0,
+      CE_vol:      strikeData[strike]?.CE?.volume  ?? 0,
+      PE_ltp:      strikeData[strike]?.PE?.ltp    ?? null,
+      PE_oi:       strikeData[strike]?.PE?.oi     ?? 0,
+      PE_oiChange: strikeData[strike]?.PE?.oiChange ?? 0,
+      PE_vol:      strikeData[strike]?.PE?.volume  ?? 0,
+    }));
+
+    // PCR — Put-Call Ratio by OI
+    const totalCeOI = chain.reduce((s, c) => s + (c.CE_oi || 0), 0);
+    const totalPeOI = chain.reduce((s, c) => s + (c.PE_oi || 0), 0);
+    const pcr = totalCeOI > 0 ? parseFloat((totalPeOI / totalCeOI).toFixed(3)) : null;
+    const pcrBias = pcr === null ? 'NEUTRAL' : pcr > 1.3 ? 'BULLISH' : pcr < 0.7 ? 'BEARISH' : 'NEUTRAL';
+
+    // Max Pain
+    const maxPain = calcMaxPain(chain);
+
+    // Resistance = CE strike with highest OI (call writers defend it)
+    const resistStrike = chain.reduce((b, c) => (c.CE_oi > (b?.CE_oi || 0) ? c : b), null)?.strike || null;
+    // Support = PE strike with highest OI (put writers defend it)
+    const supportStrike = chain.reduce((b, c) => (c.PE_oi > (b?.PE_oi || 0) ? c : b), null)?.strike || null;
+
+    // OI buildup / unwinding signals
+    // Long buildup: CE OI increasing + price rising → bullish momentum
+    const ceBuildup   = chain.filter(c => c.CE_oiChange > 0 && c.strike > realAtm).slice(0, 3);
+    const peBuildup   = chain.filter(c => c.PE_oiChange > 0 && c.strike < realAtm).slice(-3);
+
+    log(`OI ${sym}: PCR=${pcr} MaxPain=${maxPain} Support=${supportStrike} Resist=${resistStrike}`, 'INFO');
+
+    res.json({
+      status: true, symbol: sym, expiry: chosenExpiryStr,
+      atmStrike: realAtm, spotPrice: spot,
+      pcr, pcrBias, maxPain,
+      supportStrike, resistStrike,
+      totalCeOI, totalPeOI,
+      chain,
+      // Proximity flags
+      nearMaxPain:    maxPain ? Math.abs(spot - maxPain) / spot < 0.01 : false,
+      nearSupport:    supportStrike ? Math.abs(spot - supportStrike) / spot < 0.005 : false,
+      nearResistance: resistStrike  ? Math.abs(spot - resistStrike)  / spot < 0.005 : false,
+    });
+
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message;
+    log(`OI analysis error: ${msg}`, 'WARN');
+    res.status(500).json({ status: false, message: msg });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// WEIGHTED SIGNAL SCORING ENGINE
+// ─────────────────────────────────────────────────────────────────────
+//
+// Philosophy: weighted points instead of binary AND.
+// A signal can pass even if minor filters fail (VIX slightly high,
+// news mixed, expiry day) as long as the core chart setup is strong.
+//
+// Score tiers:
+//   75–100 → STRONG   (trade with full size)
+//   60–74  → MODERATE (trade with half size)
+//   45–59  → WEAK     (watch, wait for confirmation)
+//   < 45   → AVOID
+//
+// Hard blocks (rare): VIX > 30 (extreme panic) OR core trend fully
+// against direction. These override the score.
+// ─────────────────────────────────────────────────────────────────────
+
+// WEIGHT TABLE — total available = 100 points
+const SIGNAL_WEIGHTS = {
+  // ── Core technical (55 pts) ──────────────────────────────────────
+  marketBias:     20,   // EMA 20/50 trend direction — highest weight
+  supertrend:     15,   // Supertrend UP/DOWN confirmation
+  rsi:            10,   // RSI momentum (oversold/overbought)
+  macd:           10,   // MACD crossover / above signal line
+
+  // ── Intraday structure (20 pts) ──────────────────────────────────
+  aboveVwap:      10,   // Price vs VWAP
+  orbBreakout:    10,   // ORB breakout/breakdown trigger
+
+  // ── Confirmation layer (15 pts) ──────────────────────────────────
+  volumeConfirm:   7,   // Volume ratio >= 1.2x
+  instFlow:        5,   // FII/DII institutional direction
+  pcrBias:         3,   // Put-Call Ratio sentiment
+
+  // ── Soft filters — warnings, not blockers (10 pts) ───────────────
+  vixRegime:       5,   // VIX regime penalty/bonus
+  newsSentiment:   2,   // News keyword scoring (noisy — low weight)
+  geoRisk:         2,   // Geopolitical risk headlines
+  expiryDay:       1,   // Expiry day caution
+};
+
+// Max possible score = sum of all weights = 100
+const MAX_SCORE = Object.values(SIGNAL_WEIGHTS).reduce((a, b) => a + b, 0);
+
+/**
+ * scoreSignal(d, type) → { score, maxPossible, breakdown, hardBlock, hardBlockReason }
+ *
+ * d = assembled data object (bias + fii + vix + news + oi)
+ * type = 'CE' | 'PE'
+ *
+ * Each check returns { earned, max, label, pass, note }
+ * 'earned' is fractional: full weight, half weight, or 0.
+ * null data = skip the check (don't penalise missing data).
+ */
+function scoreSignal(d, type) {
+  const isCE = type === 'CE';
+  const breakdown = {};
+  let hardBlock = false;
+  let hardBlockReason = '';
+
+  // ── HARD BLOCK: extreme VIX (panic mode) ──────────────────────────
+  if (d.vixValue !== null && d.vixValue >= 30) {
+    hardBlock = true;
+    hardBlockReason = `India VIX at ${d.vixValue} — extreme panic, avoid directional trades`;
+  }
+
+  // ── 1. Market Bias (EMA 20/50 trend) — 20 pts ─────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.marketBias;
+    let earned = 0, note = '';
+    if (isCE) {
+      if (d.bias === 'BULLISH')       { earned = w;       note = 'EMA bullish trend ✓'; }
+      else if (d.bias === 'NEUTRAL')  { earned = w * 0.5; note = 'EMA neutral — partial'; }
+      else                            { earned = 0;       note = 'EMA bearish — against CE'; }
+    } else {
+      if (d.bias === 'BEARISH')       { earned = w;       note = 'EMA bearish trend ✓'; }
+      else if (d.bias === 'NEUTRAL')  { earned = w * 0.5; note = 'EMA neutral — partial'; }
+      else                            { earned = 0;       note = 'EMA bullish — against PE'; }
+    }
+    breakdown.marketBias = { earned, max: w, pass: earned >= w * 0.5, note };
+  }
+
+  // ── 2. Supertrend — 15 pts ─────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.supertrend;
+    if (!d.supertrend) {
+      breakdown.supertrend = { earned: w * 0.5, max: w, pass: null, note: 'No data — neutral' };
+    } else {
+      const up = d.supertrend.trend === 'UP';
+      const freshSignal = d.supertrend.signal === (isCE ? 'BUY' : 'SELL');
+      let earned = 0, note = '';
+      if (isCE) {
+        if (up && freshSignal)    { earned = w;       note = 'Supertrend UP + fresh BUY signal ✓✓'; }
+        else if (up)              { earned = w * 0.7; note = 'Supertrend UP ✓'; }
+        else                      { earned = 0;       note = 'Supertrend DOWN — against CE'; }
+      } else {
+        if (!up && freshSignal)   { earned = w;       note = 'Supertrend DOWN + fresh SELL signal ✓✓'; }
+        else if (!up)             { earned = w * 0.7; note = 'Supertrend DOWN ✓'; }
+        else                      { earned = 0;       note = 'Supertrend UP — against PE'; }
+      }
+      breakdown.supertrend = { earned, max: w, pass: earned > 0, note };
+    }
+  }
+
+  // ── 3. RSI — 10 pts ───────────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.rsi;
+    const rsi = d.rsi || 50;
+    let earned = 0, note = '';
+    if (isCE) {
+      if (rsi < 40)       { earned = w;       note = `RSI ${rsi} — oversold, strong CE ✓`; }
+      else if (rsi < 50)  { earned = w * 0.7; note = `RSI ${rsi} — below midline, ok`; }
+      else if (rsi < 60)  { earned = w * 0.4; note = `RSI ${rsi} — neutral zone`; }
+      else if (rsi < 70)  { earned = w * 0.2; note = `RSI ${rsi} — elevated, caution`; }
+      else                { earned = 0;       note = `RSI ${rsi} — overbought, bad for CE`; }
+    } else {
+      if (rsi > 60)       { earned = w;       note = `RSI ${rsi} — overbought, strong PE ✓`; }
+      else if (rsi > 50)  { earned = w * 0.7; note = `RSI ${rsi} — above midline, ok`; }
+      else if (rsi > 40)  { earned = w * 0.4; note = `RSI ${rsi} — neutral zone`; }
+      else if (rsi > 30)  { earned = w * 0.2; note = `RSI ${rsi} — low, caution`; }
+      else                { earned = 0;       note = `RSI ${rsi} — oversold, bad for PE`; }
+    }
+    breakdown.rsi = { earned, max: w, pass: earned >= w * 0.4, note };
+  }
+
+  // ── 4. MACD — 10 pts ──────────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.macd;
+    if (!d.macd) {
+      breakdown.macd = { earned: w * 0.5, max: w, pass: null, note: 'No data — neutral' };
+    } else {
+      let earned = 0, note = '';
+      const bullish = d.macd.aboveSignal;
+      const crossover = d.macd.crossover;
+      if (isCE) {
+        if (crossover === 'BULLISH')      { earned = w;       note = 'MACD fresh bullish crossover ✓✓'; }
+        else if (bullish)                 { earned = w * 0.6; note = 'MACD above signal ✓'; }
+        else if (crossover === 'BEARISH') { earned = 0;       note = 'MACD fresh bearish cross — bad'; }
+        else                              { earned = w * 0.2; note = 'MACD below signal, weak'; }
+      } else {
+        if (crossover === 'BEARISH')      { earned = w;       note = 'MACD fresh bearish crossover ✓✓'; }
+        else if (!bullish)                { earned = w * 0.6; note = 'MACD below signal ✓'; }
+        else if (crossover === 'BULLISH') { earned = 0;       note = 'MACD fresh bullish cross — bad'; }
+        else                              { earned = w * 0.2; note = 'MACD above signal, weak'; }
+      }
+      breakdown.macd = { earned, max: w, pass: earned >= w * 0.5, note };
+    }
+  }
+
+  // ── 5. VWAP — 10 pts ──────────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.aboveVwap;
+    if (d.aboveVwap === null) {
+      breakdown.aboveVwap = { earned: w * 0.5, max: w, pass: null, note: 'VWAP data unavailable' };
+    } else {
+      const ok = isCE ? d.aboveVwap : !d.aboveVwap;
+      breakdown.aboveVwap = {
+        earned: ok ? w : 0, max: w, pass: ok,
+        note: ok
+          ? `Price ${isCE ? 'above' : 'below'} VWAP ✓`
+          : `Price ${isCE ? 'below' : 'above'} VWAP — against ${type}`,
+      };
+    }
+  }
+
+  // ── 6. ORB Breakout — 10 pts ──────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.orbBreakout;
+    const ref = isCE ? d.orb_high : d.orb_low;
+    if (ref === null) {
+      breakdown.orbBreakout = { earned: w * 0.5, max: w, pass: null, note: 'ORB not set yet' };
+    } else {
+      const ok = isCE ? d.ltp > ref : d.ltp < ref;
+      // Partial credit: if price is within 0.3% of ORB (approaching breakout)
+      const approaching = isCE
+        ? (d.ltp > ref * 0.997 && d.ltp <= ref)
+        : (d.ltp < ref * 1.003 && d.ltp >= ref);
+      let earned = ok ? w : (approaching ? w * 0.4 : 0);
+      breakdown.orbBreakout = {
+        earned, max: w, pass: ok,
+        note: ok ? `ORB ${isCE ? 'breakout' : 'breakdown'} confirmed ✓`
+               : approaching ? `Approaching ORB level — watch`
+               : `No ORB ${isCE ? 'breakout' : 'breakdown'}`,
+      };
+    }
+  }
+
+  // ── 7. Volume Confirmation — 7 pts ───────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.volumeConfirm;
+    const vr = d.volRatio || 1;
+    let earned = 0, note = '';
+    if (vr >= 1.5)      { earned = w;       note = `Volume ${vr}x — very strong ✓✓`; }
+    else if (vr >= 1.2) { earned = w * 0.8; note = `Volume ${vr}x — above average ✓`; }
+    else if (vr >= 0.8) { earned = w * 0.4; note = `Volume ${vr}x — average`; }
+    else                { earned = 0;       note = `Volume ${vr}x — low, weak signal`; }
+    breakdown.volumeConfirm = { earned, max: w, pass: vr >= 1.2, note };
+  }
+
+  // ── 8. Institutional Flow (FII/DII) — 5 pts ──────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.instFlow;
+    let earned = 0, note = '';
+    if (isCE) {
+      if (d.instBias === 'BULLISH')    { earned = w;       note = `FII/DII bullish ₹${d.fiiNet}Cr ✓`; }
+      else if (d.instBias === 'NEUTRAL'){ earned = w * 0.5; note = `FII/DII neutral`; }
+      else                             { earned = 0;       note = `FII/DII bearish ₹${d.fiiNet}Cr`; }
+    } else {
+      if (d.instBias === 'BEARISH')    { earned = w;       note = `FII/DII bearish ₹${d.fiiNet}Cr ✓`; }
+      else if (d.instBias === 'NEUTRAL'){ earned = w * 0.5; note = `FII/DII neutral`; }
+      else                             { earned = 0;       note = `FII/DII bullish ₹${d.fiiNet}Cr`; }
+    }
+    breakdown.instFlow = { earned, max: w, pass: earned >= w * 0.5, note };
+  }
+
+  // ── 9. PCR Bias — 3 pts ───────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.pcrBias;
+    if (!d.pcr) {
+      breakdown.pcrBias = { earned: w * 0.5, max: w, pass: null, note: 'PCR unavailable' };
+    } else {
+      let earned = 0, note = '';
+      if (isCE) {
+        if (d.pcrBias === 'BULLISH')    { earned = w;       note = `PCR ${d.pcr} — bullish ✓`; }
+        else if (d.pcrBias === 'NEUTRAL'){ earned = w * 0.5; note = `PCR ${d.pcr} — neutral`; }
+        else                            { earned = 0;       note = `PCR ${d.pcr} — bearish`; }
+      } else {
+        if (d.pcrBias === 'BEARISH')    { earned = w;       note = `PCR ${d.pcr} — bearish ✓`; }
+        else if (d.pcrBias === 'NEUTRAL'){ earned = w * 0.5; note = `PCR ${d.pcr} — neutral`; }
+        else                            { earned = 0;       note = `PCR ${d.pcr} — bullish`; }
+      }
+      breakdown.pcrBias = { earned, max: w, pass: earned >= w * 0.5, note };
+    }
+  }
+
+  // ── 10. VIX Regime — 5 pts (soft filter, graduated penalty) ──────
+  {
+    const w = SIGNAL_WEIGHTS.vixRegime;
+    const regime = d.vixRegime || 'UNKNOWN';
+    const vix = d.vixValue;
+    let earned = 0, note = '';
+    if (regime === 'VERY_LOW')  { earned = w;       note = `VIX ${vix} — very low, cheap options ✓✓`; }
+    else if (regime === 'LOW')  { earned = w;       note = `VIX ${vix} — low, good conditions ✓`; }
+    else if (regime === 'NORMAL'){ earned = w * 0.7; note = `VIX ${vix} — normal`; }
+    else if (regime === 'ELEVATED'){ earned = w * 0.4; note = `VIX ${vix} — elevated, options pricey`; }
+    else if (regime === 'HIGH') { earned = w * 0.1; note = `VIX ${vix} — high, reduce size`; }
+    else if (regime === 'EXTREME'){ earned = 0;      note = `VIX ${vix} — extreme, hard block`; }
+    else                        { earned = w * 0.5; note = 'VIX unknown — neutral'; }
+    breakdown.vixRegime = { earned, max: w, pass: earned >= w * 0.4, note };
+  }
+
+  // ── 11. News Sentiment — 2 pts ────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.newsSentiment;
+    const score = d.newsSentimentScore || 50;
+    let earned = 0, note = '';
+    if (isCE) {
+      if (score >= 60)      { earned = w;       note = `News bullish (${score}%) ✓`; }
+      else if (score >= 40) { earned = w * 0.5; note = `News neutral (${score}%)`; }
+      else                  { earned = 0;       note = `News bearish (${score}%)`; }
+    } else {
+      if (score <= 40)      { earned = w;       note = `News bearish (${score}%) ✓`; }
+      else if (score <= 60) { earned = w * 0.5; note = `News neutral (${score}%)`; }
+      else                  { earned = 0;       note = `News bullish (${score}%)`; }
+    }
+    breakdown.newsSentiment = { earned, max: w, pass: earned >= w * 0.5, note };
+  }
+
+  // ── 12. Geo Risk — 2 pts ──────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.geoRisk;
+    const geo = d.newsGeoRisk || 0;
+    let earned = 0, note = '';
+    if (geo === 0)      { earned = w;       note = 'No geopolitical risk ✓'; }
+    else if (geo <= 3)  { earned = w * 0.7; note = `Low geo risk (${geo})`; }
+    else if (geo <= 6)  { earned = w * 0.3; note = `Moderate geo risk (${geo})`; }
+    else                { earned = 0;       note = `High geo risk (${geo}) — caution`; }
+    breakdown.geoRisk = { earned, max: w, pass: geo <= 6, note };
+  }
+
+  // ── 13. Expiry Day — 1 pt ─────────────────────────────────────────
+  {
+    const w = SIGNAL_WEIGHTS.expiryDay;
+    if (d.isExpiryDay) {
+      breakdown.expiryDay = { earned: 0, max: w, pass: false,
+        note: 'Expiry day — gamma risk, reduce size' };
+    } else {
+      breakdown.expiryDay = { earned: w, max: w, pass: true,
+        note: 'Not expiry day ✓' };
+    }
+  }
+
+  // ── Total score ───────────────────────────────────────────────────
+  const totalEarned  = Object.values(breakdown).reduce((s, b) => s + b.earned, 0);
+  const totalPossible = Object.values(breakdown).reduce((s, b) => s + b.max, 0);
+  // Normalise to 100 in case some checks were skipped (null data)
+  const score = Math.round((totalEarned / totalPossible) * 100);
+
+  return { score, totalEarned: parseFloat(totalEarned.toFixed(1)), totalPossible, breakdown, hardBlock, hardBlockReason };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: FULL SIGNAL ANALYSIS — weighted scoring engine v3
 // Body: { symbolToken, sym, exchange, isIndex, spotPrice, type }
-// Returns all signal conditions + final verdict
+// Returns: scored result + verdict + stop/target + breakdown
 // ─────────────────────────────────────────────────────────────────────
 app.post('/signal-analysis', async (req, res) => {
   if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
@@ -628,63 +1378,148 @@ app.post('/signal-analysis', async (req, res) => {
   const { symbolToken, sym, exchange = 'NSE', isIndex = false, spotPrice, type } = req.body;
 
   try {
-    const [biasResp, fiiResp] = await Promise.allSettled([
-      axios.post(`http://localhost:${PORT}/market-bias`, { symbolToken, exchange }, { headers: { 'Content-Type': 'application/json' } }),
+    // ── Fetch all 5 sources in parallel ───────────────────────────
+    const [biasResp, fiiResp, vixResp, newsResp, oiResp] = await Promise.allSettled([
+      axios.post(`http://localhost:${PORT}/market-bias`,
+        { symbolToken, exchange },
+        { headers: { 'Content-Type': 'application/json' } }),
       axios.get(`http://localhost:${PORT}/fii-dii`),
+      axios.get(`http://localhost:${PORT}/india-vix`),
+      axios.get(`http://localhost:${PORT}/news-sentiment`),
+      spotPrice
+        ? axios.post(`http://localhost:${PORT}/oi-analysis`,
+            { symbol: sym, spotPrice, expiry: 'WEEKLY' },
+            { headers: { 'Content-Type': 'application/json' } })
+        : Promise.resolve({ data: null }),
     ]);
 
-    const bias   = biasResp.status === 'fulfilled'   ? biasResp.value.data   : { status: false };
-    const fii    = fiiResp.status === 'fulfilled'    ? fiiResp.value.data    : { instBias: 'NEUTRAL' };
+    const bias = biasResp.status === 'fulfilled' ? biasResp.value.data : {};
+    const fii  = fiiResp.status  === 'fulfilled' ? fiiResp.value.data  : {};
+    const vix  = vixResp.status  === 'fulfilled' ? vixResp.value.data  : {};
+    const news = newsResp.status === 'fulfilled' ? newsResp.value.data  : {};
+    const oi   = oiResp.status   === 'fulfilled' && oiResp.value.data?.status
+                   ? oiResp.value.data : null;
 
-    const result = {
-      status: true,
+    // ── Assemble data object for scorer ───────────────────────────
+    const d = {
       sym, type,
-      // Market bias
-      bias:        bias.bias        || 'NEUTRAL',
-      ema20:       bias.ema20       || null,
-      ema50:       bias.ema50       || null,
-      rsi:         bias.rsi         || 50,
-      vwap:        bias.vwap        || null,
-      aboveVwap:   bias.aboveVwap   ?? null,
-      pdh:         bias.pdh         || null,
-      pdl:         bias.pdl         || null,
-      orb_high:    bias.orb_high    || null,
-      orb_low:     bias.orb_low     || null,
-      volRatio:    bias.volRatio    || 1,
-      ltp:         bias.ltp         || spotPrice,
-      // Institutional flow
-      instBias:    fii.instBias     || 'NEUTRAL',
-      fiiNet:      fii.fiiNet       || 0,
-      diiNet:      fii.diiNet       || 0,
+      // Technical
+      bias:         bias.bias        || 'NEUTRAL',
+      ema20:        bias.ema20       || null,
+      ema50:        bias.ema50       || null,
+      rsi:          bias.rsi         ?? 50,
+      vwap:         bias.vwap        || null,
+      aboveVwap:    bias.aboveVwap   ?? null,
+      pdh:          bias.pdh         || null,
+      pdl:          bias.pdl         || null,
+      orb_high:     bias.orb_high    || null,
+      orb_low:      bias.orb_low     || null,
+      volRatio:     bias.volRatio    ?? 1,
+      ltp:          bias.ltp         || spotPrice || null,
+      macd:         bias.macd        || null,
+      atr:          bias.atr         || null,
+      supertrend:   bias.supertrend  || null,
+      atrStopLong:  bias.atrStopLong || null,
+      atrStopShort: bias.atrStopShort|| null,
+      isExpiryDay:  bias.isExpiryDay || false,
+      // Institutional
+      instBias:     fii.instBias     || 'NEUTRAL',
+      fiiNet:       fii.fiiNet       ?? 0,
+      diiNet:       fii.diiNet       ?? 0,
+      // VIX
+      vixValue:     vix.vix          || null,
+      vixRegime:    vix.regime       || 'UNKNOWN',
+      premiumBuyable: vix.premiumBuyable !== false,
+      vixGuidance:  vix.guidance     || '',
+      // News
+      newsSentiment:      news.sentiment      || 'NEUTRAL',
+      newsSentimentScore: news.sentimentScore ?? 50,
+      newsGeoRisk:        news.geoRisk        ?? 0,
+      // OI
+      pcr:             oi?.pcr             || null,
+      pcrBias:         oi?.pcrBias         || 'NEUTRAL',
+      maxPain:         oi?.maxPain         || null,
+      oiSupportStrike: oi?.supportStrike   || null,
+      oiResistStrike:  oi?.resistStrike    || null,
+      nearMaxPain:     oi?.nearMaxPain     || false,
+      nearSupport:     oi?.nearSupport     || false,
+      nearResistance:  oi?.nearResistance  || false,
     };
 
-    // Signal alignment checks
-    const checks = {};
-    if (type === 'CE') {
-      checks.marketBias   = result.bias === 'BULLISH' || result.bias === 'NEUTRAL';
-      checks.rsiOversold  = result.rsi < 45;
-      checks.aboveVwap    = result.aboveVwap !== false;
-      checks.instFlow     = result.instBias !== 'BEARISH';
-      checks.notAtResist  = result.pdh ? result.ltp < result.pdh * 1.005 : true;
-      checks.orbBreakout  = result.orb_high ? result.ltp > result.orb_high : null;
+    // ── Run weighted scorer ────────────────────────────────────────
+    const { score, totalEarned, totalPossible, breakdown, hardBlock, hardBlockReason } = scoreSignal(d, type);
+
+    // ── Verdict tiers ─────────────────────────────────────────────
+    let verdict, actionNote;
+    if (hardBlock) {
+      verdict    = 'BLOCKED';
+      actionNote = hardBlockReason;
+    } else if (score >= 75) {
+      verdict    = 'STRONG';
+      actionNote = 'High conviction — trade with normal size';
+    } else if (score >= 60) {
+      verdict    = 'MODERATE';
+      actionNote = 'Good setup — trade with half size or wait for one more confirmation';
+    } else if (score >= 45) {
+      verdict    = 'WEAK';
+      actionNote = 'Marginal setup — watch only, do not trade yet';
     } else {
-      checks.marketBias   = result.bias === 'BEARISH' || result.bias === 'NEUTRAL';
-      checks.rsiOverbought= result.rsi > 55;
-      checks.belowVwap    = result.aboveVwap !== true;
-      checks.instFlow     = result.instBias !== 'BULLISH';
-      checks.notAtSupport = result.pdl ? result.ltp > result.pdl * 0.995 : true;
-      checks.orbBreakdown = result.orb_low ? result.ltp < result.orb_low : null;
+      verdict    = 'AVOID';
+      actionNote = 'Poor alignment — skip this signal';
     }
-    checks.volumeConfirm = result.volRatio >= 1.2;
 
-    result.checks = checks;
-    result.passCount = Object.values(checks).filter(v => v === true).length;
-    result.totalChecks = Object.values(checks).filter(v => v !== null).length;
-    result.alignmentScore = result.totalChecks > 0
-      ? Math.round(result.passCount / result.totalChecks * 100) : 50;
+    // ── ATR-based risk levels ─────────────────────────────────────
+    let suggestedStop = null, suggestedTarget = null, riskReward = null;
+    if (d.atr && d.ltp) {
+      suggestedStop   = type === 'CE'
+        ? parseFloat((d.ltp - 1.5 * d.atr).toFixed(2))
+        : parseFloat((d.ltp + 1.5 * d.atr).toFixed(2));
+      suggestedTarget = type === 'CE'
+        ? parseFloat((d.ltp + 2.5 * d.atr).toFixed(2))
+        : parseFloat((d.ltp - 2.5 * d.atr).toFixed(2));
+      const risk   = Math.abs(d.ltp - suggestedStop);
+      const reward = Math.abs(d.ltp - suggestedTarget);
+      riskReward   = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : null;
+    }
 
-    res.json(result);
+    // ── Key reasons (top 3 contributing factors by earned pts) ────
+    const reasons = Object.entries(breakdown)
+      .sort((a, b) => b[1].earned - a[1].earned)
+      .slice(0, 3)
+      .map(([k, v]) => v.note);
+
+    // ── Warnings (checks that dragged score down) ─────────────────
+    const warnings = Object.entries(breakdown)
+      .filter(([, v]) => v.pass === false)
+      .map(([, v]) => v.note);
+
+    log(`Signal ${sym} ${type}: score=${score} verdict=${verdict} VIX=${d.vixValue} RSI=${d.rsi} bias=${d.bias}`, 'INFO');
+
+    res.json({
+      status: true,
+      sym, type,
+      // ── Score ──
+      score,               // 0–100
+      totalEarned,
+      totalPossible,
+      verdict,             // STRONG | MODERATE | WEAK | AVOID | BLOCKED
+      actionNote,
+      hardBlock,
+      hardBlockReason: hardBlock ? hardBlockReason : null,
+      // ── Breakdown ──
+      breakdown,           // per-check { earned, max, pass, note }
+      reasons,             // top 3 positive reasons
+      warnings,            // failed checks
+      // ── Raw data ──
+      ...d,
+      // ── Risk management ──
+      suggestedStop,
+      suggestedTarget,
+      riskReward,
+    });
+
   } catch (err) {
+    log(`signal-analysis error: ${err.message}`, 'ERR');
     res.status(500).json({ status: false, message: err.message });
   }
 });
@@ -1188,36 +2023,6 @@ app.post('/refresh', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// ROUTE: REFRESH TOKEN
-// ─────────────────────────────────────────────────────────────────────
-app.post('/refresh', async (req, res) => {
-  if (!SESSION.refreshToken) {
-    return res.json({ status: false, message: 'No refresh token available' });
-  }
-
-  try {
-    const response = await axios.post(
-      `${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,
-      { refreshToken: SESSION.refreshToken },
-      { headers: getHeaders(true), timeout: 15000 }
-    );
-
-    if (response.data.status === true && response.data.data) {
-      SESSION.jwtToken = response.data.data.jwtToken;
-      SESSION.refreshToken = response.data.data.refreshToken;
-      SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
-      log('Token refreshed', 'OK');
-      return res.json({ status: true, message: 'Token refreshed' });
-    }
-
-    res.json({ status: false, message: 'Token refresh failed' });
-  } catch (error) {
-    const msg = error.response?.data?.message || error.message;
-    res.status(500).json({ status: false, message: msg });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────
 // AUTO TOKEN REFRESH (every 7 hours)
 // ─────────────────────────────────────────────────────────────────────
 setInterval(async () => {
@@ -1423,12 +2228,13 @@ app.get('/mcx', async (req, res) => {
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log('\n╔════════════════════════════════════════════════════════╗');
-  console.log('║  NSE F&O Signal Engine — Angel One SmartAPI Proxy v2.0 ║');
-  console.log('╠════════════════════════════════════════════════════════╣');
-  console.log(`║  Server:    http://localhost:${PORT}                            ║`);
-  console.log(`║  Dashboard: http://localhost:${PORT}/nse-fno-signal-engine.html ║`);
-  console.log('║  Status:    Ready for login requests                   ║');
-  console.log('╚════════════════════════════════════════════════════════╝\n');
+  console.log('\n╔══════════════════════════════════════════════════════════════╗');
+  console.log('║   NSE F&O Signal Engine — Angel One SmartAPI Proxy v3.0      ║');
+  console.log('╠══════════════════════════════════════════════════════════════╣');
+  console.log(`║   Server  : http://localhost:${PORT}                                  ║`);
+  console.log('║   New     : /india-vix  /oi-analysis  (v3 additions)         ║');
+  console.log('║   Updated : /market-bias  /signal-analysis  (MACD+ST+ATR)   ║');
+  console.log('║   Status  : Ready for login requests                         ║');
+  console.log('╚══════════════════════════════════════════════════════════════╝\n');
   log('Listening for connections...', 'OK');
 });

@@ -1438,195 +1438,31 @@ function getMarketStatus() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// NEWS-AWARE SIGNAL SCORING (internal — not shown on screen)
-// Uses geopolitical + macro + sector news context to adjust signal
-// probability score before displaying to user
-// ══════════════════════════════════════════════════════════════════
-const NEWS_CONTEXT = {
-  // Geopolitical risk factors that suppress CE signals and boost PE signals
-  geopolitical: [
-    { keywords:['war','conflict','missile','attack','sanction','tension'],      ceAdj:-8,  peAdj:+8  },
-    { keywords:['ceasefire','peace','deal','agreement','truce'],               ceAdj:+5,  peAdj:-5  },
-    { keywords:['tariff','trade war','import duty','export ban'],              ceAdj:-6,  peAdj:+6  },
-    { keywords:['oil supply','opec','crude ban'],                              ceAdj:-5,  peAdj:+5  },
-  ],
-  // Macro economic signals
-  macro: [
-    { keywords:['rate hike','hawkish','inflation high','rbi hike'],            ceAdj:-7,  peAdj:+7  },
-    { keywords:['rate cut','dovish','inflation eases','rbi cut'],              ceAdj:+8,  peAdj:-8  },
-    { keywords:['gdp miss','recession','slowdown','contraction'],              ceAdj:-9,  peAdj:+9  },
-    { keywords:['gdp beat','growth','expansion','recovery'],                   ceAdj:+7,  peAdj:-7  },
-    { keywords:['rupee fall','usd inr high','currency weakness'],              ceAdj:-4,  peAdj:+4  },
-    { keywords:['fii sell','fii outflow','foreign sell'],                      ceAdj:-6,  peAdj:+6  },
-    { keywords:['fii buy','fii inflow','foreign buying'],                      ceAdj:+6,  peAdj:-6  },
-    { keywords:['budget','fiscal deficit','government spend'],                 ceAdj:+3,  peAdj:-3  },
-  ],
-  // Sector-specific news
-  sector: [
-    { keywords:['bank npa','npa rise','bad loans'],                  sectors:['BANK'],           ceAdj:-8,  peAdj:+8  },
-    { keywords:['bank results','credit growth','loan growth'],       sectors:['BANK'],           ceAdj:+6,  peAdj:-6  },
-    { keywords:['crude rise','oil up','brent high'],                 sectors:['ENERGY','AUTO'],  ceAdj:-5,  peAdj:+5  },
-    { keywords:['drug approval','fda','usfda'],                      sectors:['PHARMA'],         ceAdj:+8,  peAdj:-8  },
-    { keywords:['price erosion','usfda warning','import alert'],     sectors:['PHARMA'],         ceAdj:-7,  peAdj:+7  },
-    { keywords:['it deal','deal win','large deal'],                  sectors:['IT'],             ceAdj:+7,  peAdj:-7  },
-    { keywords:['it layoff','visa issue','h1b'],                     sectors:['IT'],             ceAdj:-5,  peAdj:+5  },
-    { keywords:['real estate','housing demand','property up'],       sectors:['REALTY'],         ceAdj:+6,  peAdj:-6  },
-    { keywords:['auto sales','vehicle sales','ev push'],             sectors:['AUTO'],           ceAdj:+5,  peAdj:-5  },
-    { keywords:['metal price','steel rise','aluminium'],             sectors:['METAL'],          ceAdj:+5,  peAdj:-5  },
-  ],
-  // MCX commodity influence on related stocks
-  mcx: [
-    { commodity:'GOLD',     direction:'up',   sectors:['FINANCE'],    ceAdj:+4,  peAdj:-4 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['ENERGY'],     ceAdj:+6,  peAdj:-6 },
-    { commodity:'CRUDEOIL', direction:'up',   sectors:['AUTO'],       ceAdj:-4,  peAdj:+4 },
-    { commodity:'CRUDEOIL', direction:'down', sectors:['AUTO'],       ceAdj:+5,  peAdj:-5 },
-    { commodity:'SILVER',   direction:'up',   sectors:['METAL'],      ceAdj:+3,  peAdj:-3 },
-  ],
-};
-
-// Simulated live news headlines (updated each scan cycle with realistic patterns)
-// In production these would come from a news API — here they model real market dynamics
-const NEWS_POOLS = {
-  bullish: [
-    'FII inflows surge ₹4,200cr — markets rally expected',
-    'RBI holds rates, signals dovish stance for Q2',
-    'India GDP beats estimates at 7.8% — strong momentum',
-    'SEBI eases F&O margin norms — positive for retail traders',
-    'US Fed pauses — EM markets including India to benefit',
-    'Crude oil slides 2% — positive for India import bill',
-    'IT sector deal pipeline robust — Nasscom upgrades outlook',
-    'GST collections hit record ₹2.1L cr — fiscal strong',
-  ],
-  bearish: [
-    'Middle East tensions escalate — safe haven demand rises',
-    'Inflation data above estimate — rate cut hopes recede',
-    'FII outflows ₹3,500cr — dollar strengthening',
-    'US recession fears resurface — global risk-off',
-    'Crude oil jumps 3% on OPEC cut — India CAD concern',
-    'Rupee at 84.5 vs USD — RBI may intervene',
-    'China slowdown weighs on metals — India exports at risk',
-    'Corporate earnings miss in BFSI — caution warranted',
-  ],
-  neutral: [
-    'Markets await Fed minutes — consolidation likely',
-    'Q4 results season begins — stock-specific moves expected',
-    'Budget expectations build — infra and defence in focus',
-    'Global cues mixed — Nifty likely range-bound 24000-24500',
-  ],
-};
-
-// Current news sentiment state (refreshed each scan)
-let NEWS_STATE = { sentiment: 'neutral', headlines: [], adjustments: {} };
-
-function refreshNewsSentiment() {
-  // Pick 2-3 random headlines reflecting realistic market state
-  const hour = new Date().getHours();
-  const isMarketOpen = hour >= 9 && hour < 16;
-
-  let pool = ['bullish','bearish','neutral'][Math.floor(Math.random()*3)];
-
-  const headlines = [];
-  const src = NEWS_POOLS[pool];
-  for (let i = 0; i < 2; i++) headlines.push(src[Math.floor(Math.random()*src.length)]);
-  if (Math.random() > 0.6) headlines.push(NEWS_POOLS.neutral[Math.floor(Math.random()*NEWS_POOLS.neutral.length)]);
-
-  NEWS_STATE = { sentiment: pool, headlines, adjustments: {} };
-
-  // Build adjustment map from matching keywords
-  const allFactors = [...NEWS_CONTEXT.geopolitical, ...NEWS_CONTEXT.macro];
-  const combined = headlines.join(' ').toLowerCase();
-  allFactors.forEach(f => {
-    if (f.keywords.some(k => combined.includes(k))) {
-      NEWS_STATE.adjustments['CE'] = (NEWS_STATE.adjustments['CE']||0) + (f.ceAdj||0);
-      NEWS_STATE.adjustments['PE'] = (NEWS_STATE.adjustments['PE']||0) + (f.peAdj||0);
-    }
-  });
-
-
-}
-
-function getNewsAdjustedProb(baseProb, type) {
-  // News context is informational only — never penalises CE or PE probability
-  // This prevents one-sided news randomly killing CE or PE signals
-  return baseProb;
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// OPTION CHAIN CACHE
-// ══════════════════════════════════════════════════════════════════
-const OC_CACHE = {};
-const OC_TTL = 60 * 1000; // 60 sec — refresh premium every minute for accuracy
-
-async function fetchOptionChain(sym, spotPrice) {
-  const now = Date.now();
-  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
-  try {
-    const server = getServer();
-    const r = await fetch(server + '/option-chain', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({symbol:sym, spotPrice, expiry:S.config.expiry, depth:5}),
-    });
-    const d = await r.json();
-    if (d.status && d.strikes) {
-      OC_CACHE[sym] = {data:d, fetchTime:now};
-      addLog(`Option chain: ${sym} ATM=${d.atmStrike}`, 'ok');
-      return d;
-    }
-  } catch(e) {}
-  return null;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// NEWS SENTIMENT — fetched silently for scanner scoring
-// ══════════════════════════════════════════════════════════════════
-let S_NEWS = { sentiment: 'NEUTRAL', sentimentScore: 50, geoRisk: 0, fetchTime: 0 };
-
-async function fetchNewsSentiment() {
-  if (!S.connected) return;
-  try {
-    const r = await fetch(getServer() + '/news-sentiment');
-    const d = await r.json();
-    if (d.status) {
-      S_NEWS = { ...d, fetchTime: Date.now() };
-      addLog(`News: ${d.sentiment} (${d.sentimentScore}%) · GeoRisk: ${d.geoRisk}`, 'ok');
-    }
-  } catch(e) {}
-}
-
-// Fetch news every 5 minutes silently
-fetchNewsSentiment();
-setInterval(fetchNewsSentiment, 5 * 60 * 1000);
-
-
-// ══════════════════════════════════════════════════════════════════
-// RA PIPELINE: bias → level → setup → trigger → confirmation → risk
+// SIGNAL ENGINE v3 — calls /signal-analysis (server-side weighted scorer)
+// Replaces old client-side scoreRA() / generateSignal() pipeline.
 //
-// HARD BLOCKS (instant null — no exceptions):
-//   • Market bias opposes direction (EMA structure)
-//   • No real candle data for that symbol (skip, never fabricate)
-//   • Real option premium unavailable (stocks); index gets est only
-//   • Price AT S/R level without breakout confirmation
-//   • Volume < 1.0x avg (illiquid — skip entirely)
-//   • Extreme geo-risk (≥5) or expiry crush (≤1 day)
-//   • >2 signals for same symbol+type this session (overtrading)
-//   • RR < 1:2 after SL placed at structure
-//
-// SOFT PENALTIES (score reduction, not rejection):
-//   • VWAP opposing        → −12 pts
-//   • FII opposing         → −10 pts
-//   • News/event opposing  → −8 pts
-//   • Low IV rank missing  → −5 pts
-//   • ORB absent           → −0 pts (neutral)
-//
-// RELATIVE STRENGTH vs INDEX:
-//   • Stock stronger than Nifty → +8 pts CE / −8 pts PE
-//   • Stock weaker  than Nifty → +8 pts PE / −8 pts CE
+// Flow per symbol:
+//   1. Get live spot price (must be real)
+//   2. Get option premium via /option-chain (real) or BSM fallback (EST)
+//   3. POST /signal-analysis → server runs weighted scorer (100-pt system)
+//      • Market bias (EMA 20/50)   20 pts
+//      • Supertrend                15 pts
+//      • RSI                       10 pts
+//      • MACD                      10 pts
+//      • VWAP                      10 pts
+//      • ORB breakout              10 pts
+//      • Volume                     7 pts
+//      • FII/DII flow               5 pts
+//      • VIX regime                 5 pts
+//      • PCR                        3 pts
+//      • News sentiment             2 pts
+//      • Geo risk                   2 pts
+//      • Expiry day                 1 pt
+//   4. Map server score → display prob (60–92%)
+//   5. Apply risk model (ATR stop/target) + RR gate (≥ 1:2)
 // ══════════════════════════════════════════════════════════════════
 
-const ANALYSIS_CACHE = {};
-const ANALYSIS_TTL   = 5 * 60 * 1000; // 5 min — matches server-side BIAS_CACHE TTL
-
+// ── NSE token map (symbolToken for /market-bias + /signal-analysis) ──
 const NSE_TOKENS = {
   NIFTY:'26000', BANKNIFTY:'26009', FINNIFTY:'26037', MIDCAP:'26074',
   RELIANCE:'2885',  TCS:'11536',    HDFCBANK:'1333',  INFY:'1594',
@@ -1659,8 +1495,20 @@ const NSE_TOKENS = {
   DMART:'2882',     TRENT:'1964',    SUZLON:'12018',  ADANIGREEN:'236921',
   ADANIPOWER:'533519', IRFC:'335340', IREDA:'543257', RVNL:'542649',
 };
-let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 
+// ── Cached /signal-analysis results (5 min TTL — matches server BIAS_CACHE) ──
+const SA_CACHE = {};
+const SA_TTL   = 5 * 60 * 1000;
+
+// ── Option chain cache (60 sec TTL) ──
+const OC_CACHE = {};
+const OC_TTL   = 60 * 1000;
+
+// ── Stagger fetches to avoid burst 403s ──
+let _saFetchTime = 0;
+
+// ── Institutional bias (refreshed every 30 min) ──
+let INST_BIAS = { bias:'NEUTRAL', fiiNet:0, diiNet:0, fetchTime:0 };
 async function fetchInstBias() {
   if (Date.now() - INST_BIAS.fetchTime < 30*60*1000) return;
   try {
@@ -1668,327 +1516,165 @@ async function fetchInstBias() {
     const d = await r.json();
     if (d.status) {
       INST_BIAS = { bias:d.instBias, fiiNet:d.fiiNet, diiNet:d.diiNet, fetchTime:Date.now() };
-      addLog(`📊 FII ₹${d.fiiNet}Cr DII ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
+      addLog(`FII ₹${d.fiiNet}Cr DII ₹${d.diiNet}Cr → ${d.instBias}`, 'ok');
     }
   } catch(e) {}
 }
 
-// Stagger market-bias fetches — avoid burst 403s from Angel One
-// Server has its own 600ms rate limiter, but client should also not fire all at once
-let _analysisFetchTime = 0;
-async function fetchMarketAnalysis(sym) {
+// ── News sentiment state (kept in sync by runScan) ──
+let S_NEWS = { sentiment:'NEUTRAL', sentimentScore:50, geoRisk:0, fetchTime:0 };
+
+// ── Option chain fetch ──
+async function fetchOptionChain(sym, spotPrice) {
   const now = Date.now();
-  if (ANALYSIS_CACHE[sym] && (now - ANALYSIS_CACHE[sym].fetchTime) < ANALYSIS_TTL)
-    return ANALYSIS_CACHE[sym].data;
-  const token = NSE_TOKENS[sym];
-  if (!token) return null; // no token → no analysis → signal skipped
-
-  // Stagger: if last fetch was < 200ms ago, wait a bit to avoid burst
-  const sinceLastFetch = now - _analysisFetchTime;
-  if (sinceLastFetch < 200) await new Promise(r => setTimeout(r, 200 - sinceLastFetch));
-  _analysisFetchTime = Date.now();
-
+  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
   try {
-    const r = await fetch(getServer() + '/market-bias', {
+    const r = await fetch(getServer() + '/option-chain', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ symbolToken:token, exchange:'NSE' }),
-      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({ symbol:sym, spotPrice, expiry:S.config.expiry, depth:5 }),
     });
     const d = await r.json();
-    if (d.status) { ANALYSIS_CACHE[sym] = { data:d, fetchTime:Date.now() }; return d; }
-    // Server returned neutral fallback (403 was handled server-side) — still cache it
-    if (d.bias !== undefined) { ANALYSIS_CACHE[sym] = { data:d, fetchTime:Date.now() }; return d; }
+    if (d.status && d.strikes) {
+      OC_CACHE[sym] = { data:d, fetchTime:now };
+      return d;
+    }
+  } catch(e) {}
+  return null;
+}
+
+// ── Map server weighted score (0-100) → display probability (60-92%) ──
+// Score 45  → prob 60%  (WEAK floor)
+// Score 75  → prob 80%  (STRONG)
+// Score 100 → prob 92%  (ceiling — never show 100% to be honest)
+function scoreToProbability(score) {
+  if (score <= 0)  return 0;
+  if (score < 45)  return 55 + Math.round(score * 0.22);   // 0-45 → 55-64%
+  if (score < 60)  return 60 + Math.round((score-45)*0.67); // 45-60 → 60-70%
+  if (score < 75)  return 70 + Math.round((score-60)*0.67); // 60-75 → 70-80%
+  return Math.min(92, 80 + Math.round((score-75)*0.48));    // 75-100 → 80-92%
+}
+
+// ── Main: call /signal-analysis for one symbol+type ──
+// Returns null if signal should be skipped.
+async function runSignalAnalysis(sym, type, spotPrice, exchange) {
+  const token = NSE_TOKENS[sym];
+  if (!token) return null;
+
+  const cacheKey = `${sym}_${type}`;
+  const now = Date.now();
+  if (SA_CACHE[cacheKey] && (now - SA_CACHE[cacheKey].fetchTime) < SA_TTL)
+    return SA_CACHE[cacheKey].data;
+
+  // Stagger: prevent burst requests
+  const elapsed = now - _saFetchTime;
+  if (elapsed < 300) await new Promise(r => setTimeout(r, 300 - elapsed));
+  _saFetchTime = Date.now();
+
+  try {
+    const r = await fetch(getServer() + '/signal-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbolToken: token,
+        sym, type,
+        exchange: exchange || 'NSE',
+        spotPrice,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    const d = await r.json();
+    if (d.status) {
+      SA_CACHE[cacheKey] = { data:d, fetchTime:Date.now() };
+      return d;
+    }
   } catch(e) {
-    addLog(`Analysis fetch ${sym}: ${e.message}`, 'warn');
+    addLog(`signal-analysis ${sym} ${type}: ${e.message}`, 'warn');
   }
   return null;
 }
 
-// ── RA Scorer ──
-// Returns { score:0–100, grade:'A'|'B'|'C'|'REJECT', reasons:[], setupType }
-function scoreRA(p) {
-  const { type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr, ivRank,
-          instBias, newsScore, geoRisk, orbConfirm, daysToExpiry,
-          pdhBreak, pdlBreak, atStructure, relStrength } = p;
-
-  // ── STAGE 1: BIAS — soft penalty for opposing trend (not a hard reject) ──
-  // Only hard-reject when bias is confirmed AND RSI also opposes (both signals needed)
-  const strongBearishCE = bias === 'BEARISH' && type === 'CE' && rsi !== null && rsi > 55;
-  const strongBullishPE = bias === 'BULLISH' && type === 'PE' && rsi !== null && rsi < 45;
-  if (strongBearishCE) return { score:0, grade:'REJECT', reason:'Trend BEARISH + RSI high — CE blocked' };
-  if (strongBullishPE) return { score:0, grade:'REJECT', reason:'Trend BULLISH + RSI low — PE blocked' };
-
-  // ── STAGE 2: LEVEL — PDH/PDL S/R enforcement ──
-  // atStructure = price within 0.3% of PDH (CE) or PDL (PE) without breakout
-  if (atStructure && !pdhBreak && !pdlBreak)
-    return { score:0, grade:'REJECT', reason:'Price at S/R without breakout confirmation' };
-
-  // ── STAGE 3: VOLUME — hard reject only truly illiquid (< 0.5x) ──
-  if (volRatio !== null && volRatio < 0.5)
-    return { score:0, grade:'REJECT', reason:`Volume ${volRatio?.toFixed(1)}x — illiquid, skipping` };
-
-  // ── STAGE 4: EXPIRY ──
-  if (daysToExpiry <= 1) return { score:0, grade:'REJECT', reason:'Expiry tomorrow — theta crush' };
-
-  // ── STAGE 5: SCORE all soft conditions ──
-  let score = 0;
-  const reasons = [];
-
-  // Bias (0–25 pts, penalty for opposing direction)
-  if (type === 'CE' && bias === 'BULLISH')       { score += 25; reasons.push(`BULLISH trend`); }
-  else if (type === 'PE' && bias === 'BEARISH')  { score += 25; reasons.push(`BEARISH trend`); }
-  else if (type === 'CE' && bias === 'BEARISH')  { score -= 15; reasons.push(`Counter-trend CE`); }  // penalise but allow
-  else if (type === 'PE' && bias === 'BULLISH')  { score -= 15; reasons.push(`Counter-trend PE`); }  // penalise but allow
-  else { score += 10; reasons.push(`NEUTRAL trend`); } // neutral allowed
-
-  // RSI — real candle data required (not random)
-  // (0–22 pts)
-  if (rsi !== null) {
-    if (type === 'CE') {
-      if (rsi < 30)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply oversold`); }
-      else if (rsi < 38)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} oversold`); }
-      else if (rsi < 45)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild oversold`); }
-      else if (rsi < 50)  { score += 3; }
-    } else {
-      if (rsi > 70)       { score += 22; reasons.push(`RSI ${rsi.toFixed(0)} deeply overbought`); }
-      else if (rsi > 62)  { score += 16; reasons.push(`RSI ${rsi.toFixed(0)} overbought`); }
-      else if (rsi > 55)  { score += 9;  reasons.push(`RSI ${rsi.toFixed(0)} mild overbought`); }
-      else if (rsi > 50)  { score += 3; }
-    }
+// ── Detect setup label from server data ──
+function detectSetupFromServer(sa) {
+  if (!sa) return 'MOMENTUM';
+  const { supertrend, macd, orb_high, orb_low, ltp, rsi, bias, type } = sa;
+  if (supertrend?.signal === 'BUY'  && type === 'CE') return 'SUPERTREND BUY';
+  if (supertrend?.signal === 'SELL' && type === 'PE') return 'SUPERTREND SELL';
+  if (orb_high && orb_low && ltp) {
+    if (type === 'CE' && ltp > orb_high) return 'ORB BREAKOUT';
+    if (type === 'PE' && ltp < orb_low)  return 'ORB BREAKDOWN';
   }
-
-  // OI buildup (0–15 pts) — from Angel One option chain
-  if (oiDelta !== null) {
-    if (oiDelta > 0.40)      { score += 15; reasons.push(`Strong OI buildup`); }
-    else if (oiDelta > 0.25) { score += 10; reasons.push(`OI buildup`); }
-    else if (oiDelta > 0.10) { score += 5; }
-  }
-
-  // PCR (0–12 pts) — from Angel One PCR API
-  if (pcr !== null) {
-    if (type === 'CE') {
-      if (pcr < 0.60)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bullish`); }
-      else if (pcr < 0.75)  { score += 8; }
-      else if (pcr < 0.90)  { score += 4; }
-    } else {
-      if (pcr > 1.20)       { score += 12; reasons.push(`PCR ${pcr.toFixed(2)} bearish`); }
-      else if (pcr > 1.00)  { score += 8; }
-      else if (pcr > 0.85)  { score += 4; }
-    }
-  }
-
-  // IV Rank (0–8 pts) — buy when cheap
-  if (ivRank !== null) {
-    if (ivRank < 20)       { score += 8; reasons.push(`IV rank ${ivRank.toFixed(0)} cheap`); }
-    else if (ivRank < 30)  { score += 5; }
-    else if (ivRank < 40)  { score += 2; }
-    else                   { score -= 5; } // expensive — soft penalty
-  }
-
-  // Volume surge (0–8 pts)
-  if (volRatio !== null) {
-    if (volRatio >= 2.5)    { score += 8; reasons.push(`Vol ${volRatio.toFixed(1)}x surge`); }
-    else if (volRatio >= 1.8) { score += 5; }
-    else if (volRatio >= 1.2) { score += 2; }
-  }
-
-  // ── SOFT PENALTIES (non-critical — reduce score but don't reject) ──
-
-  // VWAP (−12 to +6 pts)
-  if (aboveVwap !== null) {
-    if (type === 'CE' && aboveVwap === true)   { score += 6;  reasons.push(`Above VWAP ✓`); }
-    else if (type === 'CE' && aboveVwap === false) { score -= 12; reasons.push(`Below VWAP ✗`); }
-    else if (type === 'PE' && aboveVwap === false) { score += 6;  reasons.push(`Below VWAP ✓`); }
-    else if (type === 'PE' && aboveVwap === true)  { score -= 12; reasons.push(`Above VWAP ✗`); }
-  }
-
-  // FII/DII (−10 to +6 pts)
-  if (type === 'CE' && instBias === 'BULLISH')   { score += 6;  reasons.push(`FII buying ✓`); }
-  else if (type === 'CE' && instBias === 'BEARISH') { score -= 10; }
-  else if (type === 'PE' && instBias === 'BEARISH') { score += 6;  reasons.push(`FII selling ✓`); }
-  else if (type === 'PE' && instBias === 'BULLISH') { score -= 10; }
-
-  // News/Events (−8 to +5 pts)
-  if (newsScore !== null) {
-    if (type === 'CE' && newsScore > 65)         { score += 5; }
-    else if (type === 'CE' && newsScore < 35)    { score -= 8; }
-    else if (type === 'PE' && newsScore < 35)    { score += 5; }
-    else if (type === 'PE' && newsScore > 65)    { score -= 8; }
-    if (geoRisk >= 3)                            { score -= 6 * Math.min(geoRisk, 4); }
-  }
-
-  // ORB Breakout (+8 pts bonus)
-  if (orbConfirm === true)  { score += 8; reasons.push(`ORB breakout ✓`); }
-
-  // PDH/PDL Breakout (+6 pts bonus)
-  if (pdhBreak)  { score += 6; reasons.push(`PDH ${p.pdh?.toFixed(0)} break ✓`); }
-  if (pdlBreak)  { score += 6; reasons.push(`PDL ${p.pdl?.toFixed(0)} break ✓`); }
-
-  // Relative Strength vs Nifty (±8 pts)
-  if (relStrength !== null) {
-    if (type === 'CE' && relStrength > 0.5)    { score += 8; reasons.push(`RS+ vs Nifty`); }
-    else if (type === 'CE' && relStrength < -0.5) { score -= 8; }
-    else if (type === 'PE' && relStrength < -0.5) { score += 8; reasons.push(`RS− vs Nifty`); }
-    else if (type === 'PE' && relStrength > 0.5)  { score -= 8; }
-  }
-
-  // Expiry time decay
-  if (daysToExpiry <= 2) score = Math.floor(score * 0.75);
-
-  // ── Map raw score to 60–92 display probability ──
-  // Score range roughly −40 to +100. Need ~50+ to pass.
-  const clamped = Math.min(100, Math.max(0, score));
-  const prob = Math.min(92, 60 + Math.round(clamped * 0.32));
-
-  // Grade
-  const grade = prob >= 85 ? 'A' : prob >= 78 ? 'B' : prob >= 70 ? 'C' : 'REJECT';
-
-  return { score:clamped, prob, grade, reasons };
-}
-
-// ── Determine setup type from structure ──
-function detectSetup(type, analysis, baseP, step, rsi) {
-  if (!analysis) return 'MOMENTUM';
-  const { orb_high, orb_low, pdh, pdl, bias } = analysis;
-  if (orb_high && orb_low) {
-    if (type === 'CE' && baseP > orb_high) return 'ORB BREAKOUT';
-    if (type === 'PE' && baseP < orb_low)  return 'ORB BREAKOUT';
-  }
+  if (macd?.crossover === 'BULLISH' && type === 'CE') return 'MACD CROSS';
+  if (macd?.crossover === 'BEARISH' && type === 'PE') return 'MACD CROSS';
   if (rsi !== null) {
     if (rsi < 30 || rsi > 70) return 'REVERSAL';
     if (rsi < 38 || rsi > 62) return 'PULLBACK';
   }
-  if (pdh && pdl) {
-    if (type === 'CE' && baseP > pdh) return 'BREAKOUT';
-    if (type === 'PE' && baseP < pdl) return 'BREAKOUT';
-  }
+  if (bias === 'BULLISH' && type === 'CE') return 'BREAKOUT';
+  if (bias === 'BEARISH' && type === 'PE') return 'BREAKOUT';
   return 'MOMENTUM';
 }
 
+// ── Main signal generator — calls server, builds signal object ──
 async function generateSignal(symbolObj, isIndex) {
-  // ── STEP 1: SPOT PRICE — must be real (live) ──
+
+  // STEP 1: live spot price — must be real
   const liveP = S.livePrice[symbolObj.sym];
-  if (!liveP || liveP <= 0) return null; // no live price → skip entirely
+  if (!liveP || liveP <= 0) return null;
   const baseP = liveP;
-  // Step sizes match NSE standard strike intervals
+
+  // STEP 2: symbol token required
+  if (!NSE_TOKENS[symbolObj.sym]) return null;
+
+  // STEP 3: determine CE/PE direction
+  // Peek at cached bias first (free, no extra fetch) to weight direction
+  const cachedBias = (SA_CACHE[`${symbolObj.sym}_CE`] || SA_CACHE[`${symbolObj.sym}_PE`])?.data?.bias || 'NEUTRAL';
+  let type;
+  if (S.config.type === 'BOTH') {
+    if (cachedBias === 'BULLISH')      type = Math.random() > 0.25 ? 'CE' : 'PE';
+    else if (cachedBias === 'BEARISH') type = Math.random() > 0.25 ? 'PE' : 'CE';
+    else                               type = Math.random() > 0.5  ? 'CE' : 'PE';
+  } else {
+    type = S.config.type;
+  }
+
+  // STEP 4: call server /signal-analysis (weighted 100-pt scorer)
+  const sa = await runSignalAnalysis(symbolObj.sym, type, baseP, 'NSE');
+  if (!sa) return null;
+
+  // STEP 5: verdict gates
+  // BLOCKED = hard block (VIX ≥ 30)
+  if (sa.hardBlock || sa.verdict === 'BLOCKED') return null;
+  // WEAK or AVOID = skip
+  if (sa.verdict === 'AVOID') return null;
+
+  // Map weighted score to display probability
+  const prob = scoreToProbability(sa.score || 0);
+  if (prob < S.config.minProb) return null;
+
+  // STEP 6: option premium — real via /option-chain, fallback to BSM estimate
+  const SYM_MAP = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
+  const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
+
   let step;
   const _s = symbolObj.sym;
   if (_s === 'BANKNIFTY') step = 100;
   else if (_s === 'NIFTY' || _s === 'FINNIFTY' || _s === 'MIDCAP') step = 50;
   else if (baseP > 5000) step = 100;
   else if (baseP > 2000) step = 50;
-  else if (baseP > 500) step = 10;
+  else if (baseP > 500)  step = 10;
   else step = 5;
 
-  // ── STEP 2: MARKET ANALYSIS — fetch first so BOTH mode can use bias ──
-  let analysis = null;
-  if (S.connected && NSE_TOKENS[symbolObj.sym]) {
-    analysis = await fetchMarketAnalysis(symbolObj.sym);
-  }
-  // Stocks without token → skip (can't trade without knowing the instrument)
-  if (!isIndex && !NSE_TOKENS[symbolObj.sym]) return null;
-
-  // ── STEP 1b: SIGNAL TYPE (after analysis) ──
-  // For BOTH mode: prefer the direction that aligns with current bias
-  let type;
-  if (S.config.type === 'BOTH') {
-    const biasPref = analysis?.bias ?? 'NEUTRAL';
-    if (biasPref === 'BULLISH') type = Math.random() > 0.25 ? 'CE' : 'PE'; // 75% CE
-    else if (biasPref === 'BEARISH') type = Math.random() > 0.25 ? 'PE' : 'CE'; // 75% PE
-    else type = Math.random() > 0.5 ? 'CE' : 'PE'; // neutral → 50/50
-  } else {
-    type = S.config.type;
-  }
-  const lot  = symbolObj.lot || 75;
-
-  // ── STEP 3: EXTRACT REAL VALUES ──
-  // All null if unavailable — pipeline will handle each gracefully
-  const bias      = analysis?.bias      ?? 'NEUTRAL';
-  const rsi       = analysis?.rsi       ?? null;
-  const aboveVwap = analysis?.aboveVwap ?? null;
-  const volRatio  = analysis?.volRatio  ?? null;
-  const pdh       = analysis?.pdh       ?? null;
-  const pdl       = analysis?.pdl       ?? null;
-  const orbHigh   = analysis?.orb_high  ?? null;
-  const orbLow    = analysis?.orb_low   ?? null;
-  const vwap      = analysis?.vwap      ?? null;
-  const ema20     = analysis?.ema20     ?? null;
-  const ema50     = analysis?.ema50     ?? null;
-
-  // ── STEP 4: PDH/PDL S/R checks ──
-  const TOL = 0.003; // 0.3% tolerance band
-  const atPDH      = pdh && Math.abs(baseP - pdh) / pdh < TOL;
-  const atPDL      = pdl && Math.abs(baseP - pdl) / pdl < TOL;
-  const atStructure = (type === 'CE' && atPDH) || (type === 'PE' && atPDL);
-  const pdhBreak   = pdh && baseP > pdh * (1 + TOL); // confirmed above PDH
-  const pdlBreak   = pdl && baseP < pdl * (1 - TOL); // confirmed below PDL
-  const orbConfirm = orbHigh && orbLow
-    ? (type === 'CE' ? baseP > orbHigh : baseP < orbLow)
-    : null;
-
-  // ── STEP 5: RELATIVE STRENGTH vs Nifty ──
-  // Use VWAP or EMA20 as baseline for both to avoid stale hardcoded levels
-  let relStrength = null;
-  if (!isIndex && S.livePrice['NIFTY'] && S.livePrice['NIFTY'] > 0) {
-    const niftyBase = analysis?.vwap ? analysis.vwap : S.livePrice['NIFTY'];
-    const niftyChg  = (S.livePrice['NIFTY'] - niftyBase) / niftyBase * 100;
-    const stockBase  = ema20 || baseP;
-    const stockChg   = stockBase > 0 ? (baseP - stockBase) / stockBase * 100 : 0;
-    relStrength = parseFloat((stockChg - niftyChg).toFixed(2));
-  }
-
-  // ── STEP 6: DERIVATIVES — use live data where available, null otherwise ──
-  const livePCR = S.livePCR[symbolObj.sym] || S.livePCR['NIFTY'] || null;
-  // OI delta and IV rank: still estimated (Angel One doesn't provide historical OI via free SmartAPI)
-  // but we mark them as null-possible to avoid fabrication in scoring
-  const oiDelta   = Math.random() * 0.55;   // from OI gainers if available, else estimated
-  const ivRank    = 8 + Math.random() * 32; // from option chain IV surface if available
-  const daysToExp = 2 + Math.floor(Math.random() * 5);
-
-  // ── STEP 7: NEWS ──
-  const newsScore = S_NEWS?.sentimentScore ?? null;
-  const geoRisk   = S_NEWS?.geoRisk ?? 0;
-
-  // ── STEP 8: RUN RA PIPELINE ──
-  const ra = scoreRA({
-    type, rsi, bias, aboveVwap, volRatio, oiDelta, pcr: livePCR,
-    ivRank, instBias: INST_BIAS.bias, newsScore, geoRisk,
-    orbConfirm, daysToExpiry: daysToExp,
-    pdhBreak, pdlBreak, atStructure, relStrength,
-    pdh, pdl,
-  });
-
-  if (ra.grade === 'REJECT') return null;
-  if (ra.prob < S.config.minProb) return null;
-
-  // ── STEP 9: OPTION PREMIUM — real only; index gets structural estimate ──
-  const SYM_MAP  = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
-  const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
-  let premium = 0, strike = Math.round(baseP/step)*step, usedReal = false, optionToken = null;
+  let premium = 0, strike = Math.round(baseP/step)*step;
+  let usedReal = false, optionToken = null;
+  const daysToExp = sa.isExpiryDay ? 1 : 3 + Math.floor(Math.random()*4);
 
   if (S.connected) {
     const oc = await fetchOptionChain(angelSym, baseP);
     if (oc?.strikes?.length) {
-      // First try the flagged ATM strike
-      let atm = oc.strikes.find(r => r.isATM);
-      // If ATM's LTP is 0 (stale/market closed), find nearest strike with non-zero LTP
-      if (atm) {
-        const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
-        if (!ltp || ltp <= 0) {
-          // Look for nearest strike that has live data
-          const withLtp = oc.strikes
-            .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
-            .sort((a, b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
-          if (withLtp.length) atm = withLtp[0];
-        }
-      } else {
-        // No ATM flagged — pick nearest to spot with non-zero LTP
-        const withLtp = oc.strikes
-          .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
-          .sort((a, b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
-        if (withLtp.length) atm = withLtp[0];
-        else atm = oc.strikes[Math.floor(oc.strikes.length / 2)];
-      }
+      const withLtp = oc.strikes
+        .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
+        .sort((a,b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
+      const atm = withLtp[0] || oc.strikes[Math.floor(oc.strikes.length/2)];
       if (atm) {
         strike = atm.strike;
         const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
@@ -1998,99 +1684,105 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // Fallback: if live option chain unavailable, estimate ATM premium using realistic % of spot
-  // Based on typical India VIX 14–18% and ATM delta ≈ 0.5
-  // ATM premium ≈ spot × annualisedVol × √(T/365) × 0.4 (simplified BSM)
-  // Typical ATM premiums: NIFTY 24k→~100-200, BANKNIFTY 55k→~250-450, stocks vary
+  // BSM fallback
   if (!usedReal) {
-    const daysLeft = daysToExp || 4;
-    // Use different IV assumptions per asset type for realistic estimates
-    let annIV;
-    const _sym = symbolObj.sym;
-    if (_sym === 'BANKNIFTY') annIV = 0.17;
-    else if (_sym === 'NIFTY') annIV = 0.14;
-    else if (_sym === 'FINNIFTY' || _sym === 'MIDCAP') annIV = 0.16;
-    else if (baseP > 3000) annIV = 0.22; // high-cap stock
-    else if (baseP > 1000) annIV = 0.26; // mid-cap stock
-    else annIV = 0.30; // small-cap
-    // ATM premium ≈ S × σ × √(T/365) × 0.4 (BSM approximation at ATM)
-    premium = parseFloat((baseP * annIV * Math.sqrt(daysLeft / 365) * 0.4).toFixed(2));
+    let annIV = _s === 'BANKNIFTY' ? 0.17 : _s === 'NIFTY' ? 0.14
+              : _s === 'FINNIFTY' || _s === 'MIDCAP' ? 0.16
+              : baseP > 3000 ? 0.22 : baseP > 1000 ? 0.26 : 0.30;
+    premium = parseFloat((baseP * annIV * Math.sqrt(daysToExp/365) * 0.4).toFixed(2));
     if (premium < 0.5) premium = 0.5;
-    usedReal = false; // card shows EST badge — user knows it's estimated
   }
 
-
-
-
-
-
-
-
-
-
-
-
+  // STEP 7: capital / lot filter
+  const lot = symbolObj.lot || 75;
   if (premium * lot > S.config.maxPrem) return null;
+  const lots = Math.floor(S.config.capital / (premium * lot));
+  if (lots < 1) return null;
+  const capital = lots * premium * lot;
 
-  // ── STEP 10: RISK MODEL ──
-  // SL: from structure (PDH/PDL) if available, else config slPct
-  let slPrice;
-  if (type === 'CE') {
-    // CE SL = PDL if known and within 2% of current price, else slPct of premium
-    slPrice = pdl && (baseP - pdl)/baseP < 0.02 ? pdl : null;
-  } else {
-    slPrice = pdh && (pdh - baseP)/baseP < 0.02 ? pdh : null;
-  }
+  // STEP 8: stop / target
+  // Prefer ATR-based levels from server; fallback to config %
+  let sl, target;
   const slPct = S.config.slPct / 100;
-  const sl    = parseFloat(Math.max(0.01, premium * (1 - slPct)).toFixed(2));
-  const riskPts   = premium - sl;
+  const tgtPct = S.config.profitPct / 100;
 
-  // Target auto-calculated: enforce RR ≥ 1:2, minimum 2× risk
-  const minTarget = parseFloat((premium + 2 * riskPts).toFixed(2));
-  // Also apply configured profitPct as a floor (auto-set to max(2×SL, 10%))
-  const cfgTarget = parseFloat((premium * (1 + S.config.profitPct/100)).toFixed(2));
-  const target    = Math.max(minTarget, cfgTarget);
-  const rr        = riskPts > 0 ? ((target - premium) / riskPts).toFixed(1) : '–';
+  if (sa.suggestedStop && sa.suggestedTarget && sa.atr) {
+    // Server gives ATR-based spot stop/target — translate to option premium equivalents
+    // ATR stop on underlying → approximate premium move using delta ≈ 0.5 (ATM)
+    const atr = sa.atr;
+    const stopMove  = Math.min(atr * 1.5, premium * 0.80); // max 80% loss
+    const tgtMove   = Math.max(atr * 2.5, premium * tgtPct);
+    sl     = parseFloat(Math.max(0.10, premium - stopMove).toFixed(2));
+    target = parseFloat((premium + tgtMove).toFixed(2));
+  } else {
+    sl     = parseFloat(Math.max(0.10, premium * (1 - slPct)).toFixed(2));
+    target = parseFloat(Math.max(premium * (1 + tgtPct), premium + 2*(premium - sl)).toFixed(2));
+  }
 
-  if (parseFloat(rr) < 2.0) return null; // hard RR gate
+  const riskPts = premium - sl;
+  const rr = riskPts > 0 ? (target - premium) / riskPts : 0;
+  if (rr < 2.0) return null; // hard 1:2 RR gate
 
-  const cap  = premium * lot;
-  if (cap > S.config.capital) return null;
-  const lots = Math.floor(S.config.capital / cap);
+  // STEP 9: overtrading guard (max 2 per sym+type)
+  if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
 
-  // ── STEP 11: SETUP TYPE + REASON ──
-  const setupType = detectSetup(type, analysis, baseP, step, rsi);
-  const reason    = ra.reasons.length ? ra.reasons.join(' · ') : `${setupType} setup`;
+  // STEP 10: build reason string from server breakdown
+  const reasons = sa.reasons?.length
+    ? sa.reasons.join(' · ')
+    : `${sa.verdict} setup · Score ${sa.score}/100`;
 
-  // ── STEP 12: OVERTRADING GUARD ──
-  const existing = S.signals.filter(s => s.sym === symbolObj.sym && s.type === type);
-  if (existing.length >= 2) return null; // max 2 per symbol+type
+  const setupType = detectSetupFromServer({ ...sa, type });
 
   return {
-    id: Date.now() + Math.random(),
-    sym:   symbolObj.sym,
-    name:  isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
+    id:   Date.now() + Math.random(),
+    sym:  symbolObj.sym,
+    name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
-    strike: `${strike} ${type}`,
-    expiry: S.config.expiry==='WEEKLY'?'Weekly':S.config.expiry==='NEXT'?'Next Week':'Monthly',
-    premium, target, sl, prob: ra.prob, rr,
-    lot, lots, capital: lots*cap,
+    strike:  `${strike} ${type}`,
+    expiry:  S.config.expiry === 'WEEKLY' ? 'Weekly' : S.config.expiry === 'NEXT' ? 'Next Week' : 'Monthly',
+    premium, target, sl,
+    prob,                         // display probability (60-92%)
+    score:   sa.score || 0,       // raw weighted score (0-100)
+    verdict: sa.verdict,          // STRONG / MODERATE / WEAK
+    rr:      rr.toFixed(1),
+    lot, lots, capital,
     isRealPremium: usedReal,
     optionToken,
     stockToken: NSE_TOKENS[symbolObj.sym] || null,
-    entryPremium: premium, entryPrice: baseP,
-    livePremium: premium, livePrice: baseP,
-    reason,
-    rsi:       rsi !== null ? parseFloat(rsi.toFixed(1)) : null,
-    ivRank:    Math.round(ivRank),
-    pcr:       livePCR !== null ? parseFloat(livePCR.toFixed(2)) : null,
-    volRatio:  volRatio !== null ? parseFloat(volRatio.toFixed(1)) : null,
-    oi:        Math.round(oiDelta*100),
-    bias, instBias: INST_BIAS.bias, setupType,
-    relStrength,
-    pdh, pdl, orb_high: orbHigh, orb_low: orbLow, vwap, ema20, ema50,
+    entryPremium: premium,
+    entryPrice:   baseP,
+    livePremium:  premium,
+    livePrice:    baseP,
+    reason: reasons,
+    warnings: sa.warnings || [],
+    breakdown: sa.breakdown || {},
+    // Raw indicators from server
+    rsi:        sa.rsi         ?? null,
+    macd:       sa.macd        ?? null,
+    atr:        sa.atr         ?? null,
+    supertrend: sa.supertrend  ?? null,
+    vixValue:   sa.vixValue    ?? null,
+    vixRegime:  sa.vixRegime   ?? 'UNKNOWN',
+    pcr:        sa.pcr         ?? null,
+    pcrBias:    sa.pcrBias     ?? 'NEUTRAL',
+    maxPain:    sa.maxPain     ?? null,
+    ivRank:     null,            // not yet from server
+    volRatio:   sa.volRatio    ?? null,
+    oi:         sa.pcr ? Math.round(sa.pcr * 100) : null,
+    bias:       sa.bias        ?? 'NEUTRAL',
+    instBias:   sa.instBias    ?? INST_BIAS.bias,
+    newsSentiment:      sa.newsSentiment      ?? 'NEUTRAL',
+    newsSentimentScore: sa.newsSentimentScore ?? 50,
+    pdh:        sa.pdh         ?? null,
+    pdl:        sa.pdl         ?? null,
+    orb_high:   sa.orb_high    ?? null,
+    orb_low:    sa.orb_low     ?? null,
+    vwap:       sa.vwap        ?? null,
+    ema20:      sa.ema20       ?? null,
+    ema50:      sa.ema50       ?? null,
+    isExpiryDay: sa.isExpiryDay || false,
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-    ts: Date.now(),
+    ts:   Date.now(),
   };
 }
 
@@ -2620,16 +2312,31 @@ function openDrawer(idStr) {
         <div class="drawer-cell-val" style="color:var(--amber)">₹${Number(sig.premium).toFixed(2)}</div>
       </div>
       <div class="drawer-cell">
-        <div class="drawer-cell-label">Probability</div>
-        <div class="drawer-cell-val" style="color:${probColor}">${sig.prob}%</div>
+        <div class="drawer-cell-label">Score / Prob</div>
+        <div class="drawer-cell-val" style="color:${probColor}">${sig.score||0}<span style="font-size:13px;color:var(--text3)">/100</span> · ${sig.prob}%</div>
       </div>
       <div class="drawer-cell">
-        <div class="drawer-cell-label">Target (+${S.config.profitPct}%)</div>
+        <div class="drawer-cell-label">Target</div>
         <div class="drawer-cell-val" style="color:var(--green)">₹${Number(sig.target).toFixed(2)}</div>
       </div>
       <div class="drawer-cell">
-        <div class="drawer-cell-label">Stop Loss (-${S.config.slPct}%)</div>
+        <div class="drawer-cell-label">Stop Loss</div>
         <div class="drawer-cell-val" style="color:var(--red)">₹${Number(sig.sl).toFixed(2)}</div>
+      </div>
+    </div>
+
+    <!-- Verdict banner -->
+    <div style="padding:9px 13px;border-radius:8px;margin-bottom:12px;text-align:center;
+      background:${sig.verdict==='STRONG'?'var(--green-bg)':sig.verdict==='MODERATE'?'var(--amber-bg)':'var(--red-bg)'};
+      border:1px solid ${sig.verdict==='STRONG'?'#0FA95840':sig.verdict==='MODERATE'?'#ffb62740':'#E5393540'}">
+      <span style="font-size:13px;font-weight:800;font-family:var(--font-mono);letter-spacing:.08em;
+        color:${sig.verdict==='STRONG'?'var(--green)':sig.verdict==='MODERATE'?'var(--amber)':'var(--red)'}">
+        ${sig.verdict||'SIGNAL'} · ${sig.score||0}/100 pts
+      </span>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--font-sans)">
+        ${sig.verdict==='STRONG'?'High conviction — normal position size'
+          :sig.verdict==='MODERATE'?'Good setup — consider half position size'
+          :'Marginal — watch only'}
       </div>
     </div>
 
@@ -2638,11 +2345,30 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI</span><span class="drawer-row-val">${sig.rsi}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">IV Rank</span><span class="drawer-row-val">${sig.ivRank}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val">${sig.pcr}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio}x</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">OI Change</span><span class="drawer-row-val">+${sig.oi}%</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">R:R Ratio</span><span class="drawer-row-val" style="color:var(--cyan)">${sig.rr}:1</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">RSI-14</span><span class="drawer-row-val" style="color:${sig.rsi<40||sig.rsi>60?'var(--amber)':'var(--text)'}">${sig.rsi ?? '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">EMA Bias</span><span class="drawer-row-val" style="color:${sig.bias==='BULLISH'?'var(--green)':sig.bias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.bias||'–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">MACD</span><span class="drawer-row-val" style="color:${sig.macd?.crossover==='BULLISH'?'var(--green)':sig.macd?.crossover==='BEARISH'?'var(--red)':'var(--text3)'}">
+      ${sig.macd ? (sig.macd.crossover !== 'NONE' ? sig.macd.crossover+' CROSS' : (sig.macd.aboveSignal ? 'Above Signal' : 'Below Signal')) : '–'}
+    </span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Supertrend</span><span class="drawer-row-val" style="color:${sig.supertrend?.trend==='UP'?'var(--green)':'var(--red)'}">
+      ${sig.supertrend ? sig.supertrend.trend + (sig.supertrend.signal!=='HOLD'?' · '+sig.supertrend.signal:'') : '–'}
+    </span></div>
+    <div class="drawer-row"><span class="drawer-row-label">India VIX</span><span class="drawer-row-val" style="color:${sig.vixValue<16?'var(--green)':sig.vixValue<20?'var(--text)':sig.vixValue<25?'var(--amber)':'var(--red)'}">
+      ${sig.vixValue ? sig.vixValue.toFixed(1)+' ('+sig.vixRegime+')' : '–'}
+    </span></div>
+    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val" style="color:${sig.pcrBias==='BULLISH'?'var(--green)':sig.pcrBias==='BEARISH'?'var(--red)':'var(--text3)'}">
+      ${sig.pcr ? sig.pcr.toFixed(2)+' ('+sig.pcrBias+')' : '–'}
+    </span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Max Pain</span><span class="drawer-row-val">${sig.maxPain ? '₹'+sig.maxPain.toLocaleString('en-IN') : '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio ? sig.volRatio.toFixed(1)+'x' : '–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">FII/DII Bias</span><span class="drawer-row-val" style="color:${sig.instBias==='BULLISH'?'var(--green)':sig.instBias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.instBias||'–'}</span></div>
+    <div class="drawer-row"><span class="drawer-row-label">News Sentiment</span><span class="drawer-row-val" style="color:${sig.newsSentimentScore>60?'var(--green)':sig.newsSentimentScore<40?'var(--red)':'var(--text3)'}">
+      ${sig.newsSentiment||'–'} (${sig.newsSentimentScore||50}%)
+    </span></div>
+    ${sig.isExpiryDay ? `<div class="drawer-row"><span class="drawer-row-label" style="color:var(--amber)">⚠ Expiry Day</span><span class="drawer-row-val" style="color:var(--amber)">Reduce position size</span></div>` : ''}
+    ${sig.warnings?.length ? `<div style="margin:10px 0 4px;font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Warnings</div>
+    ${sig.warnings.map(w=>`<div style="font-size:11px;color:var(--amber);padding:3px 0;border-bottom:1px solid var(--border)">${w}</div>`).join('')}` : ''}
 
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
       <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
@@ -2780,67 +2506,63 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
-// BUILD WHY TAGS — parses sig.reason (actual scoring output) into
-// colored pills. Zero duplication with the card's meta row.
+// BUILD WHY TAGS — uses server breakdown object for accurate coloring
+// Falls back to reason string parsing if breakdown unavailable
 // ══════════════════════════════════════════════════════════════════
 function buildWhyTags(sig) {
+  // ── Primary: use server breakdown object ──
+  if (sig.breakdown && Object.keys(sig.breakdown).length) {
+    const tags = [];
+    const bd = sig.breakdown;
+    const isCE = sig.type === 'CE';
+
+    // Order: most impactful first
+    const ORDER = ['marketBias','supertrend','rsi','macd','aboveVwap','orbBreakout',
+                   'volumeConfirm','instFlow','vixRegime','pcrBias','newsSentiment',
+                   'geoRisk','expiryDay'];
+
+    for (const key of ORDER) {
+      const b = bd[key];
+      if (!b) continue;
+      const note = b.note || key;
+      // Skip truly neutral/unknown entries to keep card clean
+      if (b.pass === null && b.earned === b.max * 0.5) continue;
+
+      // Color: green = pass+high score, red = failed, amber = partial, blue = neutral
+      let cls;
+      if (b.pass === false)                     cls = 'r';
+      else if (b.earned >= b.max * 0.9)         cls = 'g';
+      else if (b.earned >= b.max * 0.5)         cls = 'a';
+      else                                       cls = 'b';
+
+      // Short label
+      const label = note
+        .replace(/✓✓/g,'★').replace(/✓/g,'').replace(/→.*$/,'')
+        .replace(/\s{2,}/g,' ').trim();
+      if (label) tags.push(`<span class="sig-why-tag ${cls}">${label}</span>`);
+      if (tags.length >= 6) break; // max 6 pills
+    }
+
+    // Append verdict badge
+    const verdictCls = sig.verdict === 'STRONG' ? 'g' : sig.verdict === 'MODERATE' ? 'a' : 'r';
+    tags.push(`<span class="sig-why-tag ${verdictCls}">${sig.verdict || 'SIGNAL'} ${sig.score || ''}%</span>`);
+
+    // Warn if expiry day
+    if (sig.isExpiryDay) tags.push(`<span class="sig-why-tag r">EXPIRY DAY</span>`);
+
+    return tags.join('');
+  }
+
+  // ── Fallback: parse reason string ──
   if (!sig.reason) return `<span class="sig-why-tag a">MOMENTUM SETUP</span>`;
-
-  // sig.reason is "BULLISH trend · RSI 28 deeply oversold · Strong OI buildup · Above VWAP ✓"
-  const parts = sig.reason.split(/\s*·\s*/).map(s => s.trim()).filter(Boolean);
-
-  // Deduplicate by label (case-insensitive key)
-  const seen = new Set();
-  const unique = parts.filter(p => {
-    const k = p.toLowerCase().replace(/[\d.]+/g, '#');
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-
-  // Classify each part into a color
-  function classify(txt) {
-    const t = txt.toLowerCase();
-    // Green — bullish signals
-    if (/bullish trend/.test(t))       return 'g';
-    if (/oversold/.test(t))            return 'g';
-    if (/oi buildup/.test(t))          return 'g';
-    if (/above vwap/.test(t) && sig.type==='CE') return 'g';
-    if (/below vwap/.test(t) && sig.type==='PE') return 'g';
-    if (/orb breakout/.test(t)||/orb.*✓/.test(t)) return 'g';
-    if (/pdh.*break/.test(t))          return 'g';
-    if (/fii buy/.test(t)||/fii selling.*✓/.test(t)) return (sig.type==='CE'?'g':'g');
-    if (/rs\+.*nifty/.test(t)||/rs\+/.test(t)) return 'g';
-    if (/iv rank.*cheap/.test(t)||/cheap/.test(t)) return 'g';
-    if (/pcr.*bullish/.test(t))        return 'g';
-    if (/vol.*surge/.test(t)||/\d+\.?\d*x surge/.test(t)) return 'g';
-    // Red — bearish signals
-    if (/bearish trend/.test(t))       return 'r';
-    if (/overbought/.test(t))          return 'r';
-    if (/below vwap.*✗/.test(t)||(/below vwap/.test(t)&&sig.type==='CE')) return 'r';
-    if (/above vwap.*✗/.test(t)||(/above vwap/.test(t)&&sig.type==='PE')) return 'r';
-    if (/pdl.*break/.test(t))          return 'r';
-    if (/pcr.*bearish/.test(t))        return 'r';
-    if (/rs-.*nifty/.test(t)||/rs−/.test(t)) return 'r';
-    if (/✗/.test(txt))                 return 'r';
-    // Blue — neutral positive
-    if (/neutral trend/.test(t))       return 'b';
-    if (/vwap/.test(t))                return 'b';
-    if (/pcr/.test(t))                 return 'b';
-    if (/iv rank/.test(t))             return 'b';
-    if (/rs/.test(t))                  return 'b';
-    // Amber — default
-    return 'a';
-  }
-
-  // Format label — capitalize nicely, replace ✓ with nothing (implied positive)
-  function fmt(txt) {
-    return txt.replace(/✓/g,'').replace(/✗/g,'✕').trim();
-  }
-
-  return unique.map(p =>
-    `<span class="sig-why-tag ${classify(p)}">${fmt(p)}</span>`
-  ).join('');
+  const parts = sig.reason.split(/\s*·\s*/).map(s => s.trim()).filter(Boolean).slice(0,5);
+  return parts.map(p => {
+    const t = p.toLowerCase();
+    const cls = /bullish|oversold|breakout|above vwap|fii buy|surge|cheap|pcr bull/.test(t) ? 'g'
+              : /bearish|overbought|below vwap|fii sell|pcr bear/.test(t) ? 'r'
+              : /neutral|vwap|pcr|iv/.test(t) ? 'b' : 'a';
+    return `<span class="sig-why-tag ${cls}">${p.replace(/✓/g,'').trim()}</span>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════
