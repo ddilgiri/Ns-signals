@@ -505,15 +505,15 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Stop Loss %</label>
-        <div class="slider-wrap">
-          <input type="range" min="5" max="50" value="10" id="cfgSL" oninput="document.getElementById('cfgSLV').textContent=this.value+'%';updateTargetInfo()">
-          <span class="slider-val"><span id="cfgSLV">10</span>%</span>
+        <label class="field-label">Stop Loss</label>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r)">
+          <span style="font-size:22px;font-weight:900;font-family:var(--font-mono);color:var(--red)">5%</span>
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text2);line-height:1.6">Fixed stop loss at <b>5%</b> of option premium. Auto-exit triggers instantly when premium drops to SL level.</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--font-mono)">Target auto-set to minimum 10% (1:2 RR)</div>
+          </div>
         </div>
-        <div id="targetInfoBox" style="margin-top:8px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.7">
-          <span style="color:var(--text3);font-size:9px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em">Auto Target (1:2 RR minimum)</span><br>
-          SL <span id="infoSL" style="color:var(--red)">10%</span> → Target auto-set to minimum <span id="infoTgt" style="color:var(--green)">20%</span> or higher if RR demands it
-        </div>
+        <input type="hidden" id="cfgSL" value="5">
       </div>
 
       <div class="field">
@@ -551,10 +551,10 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       <div class="field">
         <label class="field-label">Scan Indices</label>
         <div class="cb-list">
-          <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 75</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-NIFTY" checked><div class="cb-info"><div class="cb-name">NIFTY 50</div><div class="cb-sub">Lot: 65</div></div></label>
           <label class="cb-item"><input type="checkbox" id="idx-BANKNIFTY" checked><div class="cb-info"><div class="cb-name">BANKNIFTY</div><div class="cb-sub">Lot: 30</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 40</div></div></label>
-          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 75</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-FINNIFTY" checked><div class="cb-info"><div class="cb-name">FINNIFTY</div><div class="cb-sub">Lot: 60</div></div></label>
+          <label class="cb-item"><input type="checkbox" id="idx-MIDCAP" checked><div class="cb-info"><div class="cb-name">MIDCAP NIFTY</div><div class="cb-sub">Lot: 120</div></div></label>
         </div>
       </div>
 
@@ -959,7 +959,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:20,slPct:10,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:10,slPct:5,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -1360,8 +1360,8 @@ async function fetchMarketData() {
         const tok  = String(q.symbolToken);
         const sym  = TOKEN_SYM_MAP[tok];
         if (!sym) return;
-        // Store prev before updating (for % change calc)
-        if (S.livePrice[sym] && S.livePrice[sym] > 0) S.livePrev[sym] = prev;
+        // Store the API-provided previous close as livePrev (correct baseline for % change)
+        S.livePrev[sym] = prev;
         S.livePrice[sym] = ltp;
       });
       // Update watchlist bar in-place
@@ -1369,22 +1369,32 @@ async function fetchMarketData() {
     }
   } catch(e) { /* silent */ }
 
-  // Stock LTPs (selected stocks not already in watchlist)
+  // Stock LTPs — use NSE_TOKENS (complete map) for ALL selected stocks
   try {
-    const selArr = [...S.selectedStocks].filter(s => STOCK_TOKENS[s] && !S_WATCHLIST.includes(s));
-    const batch  = selArr.slice(0,20).map(s => STOCK_TOKENS[s]);
-    if (batch.length) {
-      const r = await fetch(server + '/quote', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:batch}}),
-      });
-      const d = await r.json();
-      if (d.status && d.data?.fetched) {
-        d.data.fetched.forEach(q => {
-          const sym = Object.keys(STOCK_TOKENS).find(s => String(STOCK_TOKENS[s])===String(q.symbolToken));
-          if (sym && q.ltp) S.livePrice[sym] = parseFloat(q.ltp);
+    // Build a list of tokens for all selected stocks using the complete NSE_TOKENS map
+    const selArr = [...S.selectedStocks].filter(s => NSE_TOKENS[s] && !S_WATCHLIST.includes(s));
+    // Fetch in batches of 20 to avoid API overload
+    const batchSize = 20;
+    for (let i = 0; i < Math.min(selArr.length, 60); i += batchSize) {
+      const batchSyms = selArr.slice(i, i + batchSize);
+      const batch = batchSyms.map(s => NSE_TOKENS[s]);
+      if (!batch.length) continue;
+      try {
+        const r = await fetch(server + '/quote', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:batch}}),
         });
-      }
+        const d = await r.json();
+        if (d.status && d.data?.fetched) {
+          // Build reverse map from token → sym using NSE_TOKENS
+          const REV_NSE = {};
+          Object.keys(NSE_TOKENS).forEach(s => { REV_NSE[String(NSE_TOKENS[s])] = s; });
+          d.data.fetched.forEach(q => {
+            const sym = REV_NSE[String(q.symbolToken)];
+            if (sym && q.ltp && parseFloat(q.ltp) > 0) S.livePrice[sym] = parseFloat(q.ltp);
+          });
+        }
+      } catch(e) { /* silent */ }
     }
   } catch(e) { /* silent */ }
 
@@ -1694,19 +1704,19 @@ async function generateSignal(symbolObj, isIndex) {
   if (lots < 1) return null;
   const capital = lots * premium * lot;
 
-  // STEP 8: stop / target (ATR-based from server, fallback to config %)
+  // STEP 8: stop / target — SL is ALWAYS 5% of premium (fixed), target min 1:2 RR
   let sl, target;
-  const slPct = S.config.slPct / 100;
-  const tgtPct = S.config.profitPct / 100;
+  const slPct = S.config.slPct / 100; // always 0.05 (5%)
+  const tgtPct = S.config.profitPct / 100; // always 0.10 (10%)
+
+  // SL = exactly 5% below entry premium
+  sl = parseFloat(Math.max(0.10, premium * (1 - slPct)).toFixed(2));
 
   if (sa.atr && sa.ltp) {
     const atr = sa.atr;
-    const stopMove = Math.min(atr * 1.5, premium * 0.80);
-    const tgtMove  = Math.max(atr * 2.5, premium * tgtPct);
-    sl     = parseFloat(Math.max(0.10, premium - stopMove).toFixed(2));
+    const tgtMove = Math.max(atr * 2.5, premium * tgtPct);
     target = parseFloat((premium + tgtMove).toFixed(2));
   } else {
-    sl     = parseFloat(Math.max(0.10, premium * (1 - slPct)).toFixed(2));
     target = parseFloat(Math.max(premium * (1 + tgtPct), premium + 2*(premium - sl)).toFixed(2));
   }
 
@@ -1832,15 +1842,26 @@ async function updateSignalLivePrices() {
     if (sig.optionToken && optionLTPs[sig.optionToken] !== undefined) {
       sig.livePremium = optionLTPs[sig.optionToken];
       changed = true;
-      // Check SL hit
-      if (sig.livePremium > 0 && sig.livePremium <= sig.sl) {
-        slHitIds.push(sig.id);
-      }
     }
     // Fix: always match by symbol name (S.livePrice is keyed by sym, not numeric token)
     if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
       sig.livePrice = S.livePrice[sig.sym];
       changed = true;
+      // For BSM-estimated options (no real token), approximate livePremium from spot move
+      if (!sig.optionToken && sig.entryPrice > 0 && sig.livePremium > 0) {
+        const spotMove = sig.livePrice - sig.entryPrice;
+        const spotMovePct = spotMove / sig.entryPrice;
+        // CE: spot up → premium up. PE: spot down → premium up
+        const premiumDelta = sig.type === 'CE'
+          ? sig.entryPremium * (1 + spotMovePct * 5)   // 5x leverage approx
+          : sig.entryPremium * (1 - spotMovePct * 5);
+        sig.livePremium = Math.max(0.05, parseFloat(premiumDelta.toFixed(2)));
+      }
+    }
+    // SL check: trigger if livePremium dropped to/below SL (5% of entry = fixed SL)
+    const effectiveSL = sig.sl || (sig.entryPremium * (1 - 5/100));
+    if (sig.livePremium > 0 && sig.entryPremium > 0 && sig.livePremium <= effectiveSL) {
+      slHitIds.push(sig.id);
     }
   });
 
@@ -1855,7 +1876,7 @@ async function updateSignalLivePrices() {
         sig.closedAt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
         S.closedSignals.push(sig);
         S.signals.splice(idx, 1);
-        toast('warn', `🔒 SL Hit: ${sig.sym}`, `${sig.type} · SL ₹${Number(sig.sl).toFixed(2)} reached · Moved to Closed`);
+        toast('warn', `🔒 Auto-Exit: ${sig.sym}`, `${sig.type} · Premium ₹${sig.livePremium?.toFixed(2)} hit 5% SL ₹${Number(sig.sl).toFixed(2)} · Moved to Closed`);
         addLog(`SL hit: ${sig.sym} ${sig.strike} ${sig.type} · premium ₹${sig.livePremium?.toFixed(2)} ≤ SL ₹${Number(sig.sl).toFixed(2)}`, 'warn');
       }
     });
@@ -1945,18 +1966,11 @@ function toggleScan() {
   }
 }
 
-function updateTargetInfo() {
-  const sl = parseInt(document.getElementById('cfgSL').value) || 10;
-  // Auto target = max(2×SL, 10%) — enforces minimum 1:2 RR
-  const minTarget = Math.max(sl * 2, 10);
-  if (document.getElementById('infoSL')) document.getElementById('infoSL').textContent = sl + '%';
-  if (document.getElementById('infoTgt')) document.getElementById('infoTgt').textContent = minTarget + '%';
-}
-updateTargetInfo();
+// SL is fixed at 5% — no slider needed
 
 function saveConfig() {
   S.config.capital = parseInt(document.getElementById('cfgCap').value) || 30000;
-  S.config.slPct = parseInt(document.getElementById('cfgSL').value) || 10;
+  S.config.slPct = 5; // Fixed at 5%
   // Auto-calculate profitPct: min 1:2 RR, so target = max(2×SL, 10%)
   S.config.profitPct = Math.max(S.config.slPct * 2, 10);
   S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 65;
@@ -1969,8 +1983,8 @@ function saveConfig() {
   );
   const pnlHdrEl = document.getElementById('mSessionPnl');
   if (pnlHdrEl) { pnlHdrEl.textContent = '–'; pnlHdrEl.style.color = 'var(--text3)'; }
-  addLog(`Config saved: ₹${S.config.capital.toLocaleString('en-IN')} · SL ${S.config.slPct}% · Target ${S.config.profitPct}% (1:2 RR auto)`, 'ok');
-  toast('ok', '✅ Config Saved', `Capital: ₹${S.config.capital.toLocaleString('en-IN')} · Target auto: ${S.config.profitPct}%`);
+  addLog(`Config saved: ₹${S.config.capital.toLocaleString('en-IN')} · SL 5% (fixed) · Target ${S.config.profitPct}% (1:2 RR auto)`, 'ok');
+  toast('ok', '✅ Config Saved', `Capital: ₹${S.config.capital.toLocaleString('en-IN')} · SL: 5% fixed · Target: ${S.config.profitPct}%`);
 }
 
 async function runScan() {
