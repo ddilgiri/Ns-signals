@@ -1535,17 +1535,19 @@ async function fetchInstBias() {
 let S_NEWS = { sentiment:'NEUTRAL', sentimentScore:50, geoRisk:0, fetchTime:0 };
 
 // ── Option chain fetch ──
-async function fetchOptionChain(sym, spotPrice) {
+async function fetchOptionChain(sym, spotPrice, expiryMode) {
+  const mode = expiryMode || getExpiryModeForSym(sym);
+  const cacheKey = `${sym}_${mode}`;
   const now = Date.now();
-  if (OC_CACHE[sym] && (now - OC_CACHE[sym].fetchTime) < OC_TTL) return OC_CACHE[sym].data;
+  if (OC_CACHE[cacheKey] && (now - OC_CACHE[cacheKey].fetchTime) < OC_TTL) return OC_CACHE[cacheKey].data;
   try {
     const r = await fetch(getServer() + '/option-chain', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ symbol:sym, spotPrice, expiry:S.config.expiry, depth:5 }),
+      body: JSON.stringify({ symbol:sym, spotPrice, expiry: mode, depth:5 }),
     });
     const d = await r.json();
     if (d.status && d.strikes) {
-      OC_CACHE[sym] = { data:d, fetchTime:now };
+      OC_CACHE[cacheKey] = { data:d, fetchTime:now };
       return d;
     }
   } catch(e) {}
@@ -1625,14 +1627,90 @@ function detectSetupFromServer(sa) {
 }
 
 // ── Main signal generator — calls server, builds signal object ──
+// ── Expiry helpers (frontend mirror of server logic) ──────────────────
+// Per Dhan F&O calendar:
+//   NIFTY only     → weekly (every Tuesday)
+//   BANKNIFTY, FINNIFTY, MIDCPNIFTY → monthly (last Tuesday)
+//   All stocks     → monthly, BUT switch to next month 5 days before expiry
+function getLastTuesdayOfMonth(year, month) {
+  const last = new Date(year, month + 1, 0);
+  const back = (last.getDay() >= 2) ? (last.getDay() - 2) : (last.getDay() + 5);
+  return new Date(year, month + 1, 0 - back);
+}
+
+function getStockExpiryMode(sym) {
+  // Returns 'MONTHLY' or 'NEXT_MONTH'
+  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  ist.setHours(0,0,0,0);
+  const lastTue = getLastTuesdayOfMonth(ist.getFullYear(), ist.getMonth());
+  const daysLeft = Math.round((lastTue - ist) / 86400000);
+  if (daysLeft >= 0 && daysLeft <= 5) return 'NEXT_MONTH';
+  return 'MONTHLY';
+}
+
+function getExpiryModeForSym(sym) {
+  const s = (sym||'').toUpperCase();
+  if (s === 'NIFTY') return 'WEEKLY';
+  if (['BANKNIFTY','FINNIFTY','MIDCPNIFTY','MIDCAP'].includes(s)) return 'MONTHLY';
+  return getStockExpiryMode(s); // stock
+}
+
+// Is today expiry day for this specific instrument?
+function isExpiryDayForSym(sym) {
+  const s = (sym||'').toUpperCase();
+  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  if (ist.getDay() !== 2) return false; // Not Tuesday = never expiry
+  // NIFTY: every Tuesday
+  if (s === 'NIFTY') return true;
+  // Other indices + stocks: only last Tuesday of month
+  const lastTue = getLastTuesdayOfMonth(ist.getFullYear(), ist.getMonth());
+  return ist.toDateString() === lastTue.toDateString();
+}
+
+// Days remaining to current month expiry
+function daysToMonthlyExpiry() {
+  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  ist.setHours(0,0,0,0);
+  const lastTue = getLastTuesdayOfMonth(ist.getFullYear(), ist.getMonth());
+  return Math.round((lastTue - ist) / 86400000);
+}
+
 async function generateSignal(symbolObj, isIndex) {
 
   // STEP 1: live spot price — must be real
+
   const liveP = S.livePrice[symbolObj.sym];
   if (!liveP || liveP <= 0) return null;
   const baseP = liveP;
 
-  // STEP 2: resolve symbol token — NSE_TOKENS first, then WL_ALL fallback
+  // ── EXPIRY RULES ─────────────────────────────────────────────────
+  // NIFTY          → weekly (every Tuesday)
+  // BANKNIFTY/FINNIFTY/MIDCPNIFTY → monthly (last Tuesday)
+  // Stocks         → monthly, NEXT_MONTH if ≤5 days to expiry
+  // On stock EXPIRY DAY → SKIP (physical delivery risk)
+  // On index EXPIRY DAY → allow but add gamma/theta warning
+
+  const _sym = (symbolObj.sym||'').toUpperCase();
+  const _isIdx = ['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','MIDCAP'].includes(_sym);
+  const _expiryMode = getExpiryModeForSym(_sym);
+  const _expiryDay  = isExpiryDayForSym(_sym);
+  const _daysLeft   = daysToMonthlyExpiry();
+
+  // STOCK on expiry day → skip (physical delivery, no liquidity)
+  if (!_isIdx && _expiryDay) {
+    addLog(`${_sym}: skipped — stock expiry day (physical delivery risk)`, 'warn');
+    return null;
+  }
+
+  // STOCK within 5 days → using next month contract (logged server-side too)
+  if (!_isIdx && _expiryMode === 'NEXT_MONTH') {
+    addLog(`${_sym}: ≤5d to expiry — scanning June contract`, '');
+  }
+
+  // INDEX on expiry day → flag for gamma/theta mode (not skipped)
+  const _indexExpiryMode = _isIdx && _expiryDay;
+
+
   const symbolToken = NSE_TOKENS[symbolObj.sym]
     || WL_ALL.find(w => w.sym === symbolObj.sym)?.token
     || null;
@@ -1667,12 +1745,27 @@ async function generateSignal(symbolObj, isIndex) {
   const SYM_MAP = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
 
+  // Use _expiryDay from earlier expiry-rules block
+  sa.isExpiryDay = _expiryDay;
+
+  // On index expiry day: tighten scoring — only STRONG signals pass (gamma risk)
+  if (_indexExpiryMode) {
+    if (sa.score < 72) {
+      addLog(`${_sym}: index expiry day — score ${sa.score} below 72 threshold, skipping`, 'warn');
+      return null;
+    }
+    addLog(`⚡ ${_sym}: INDEX EXPIRY DAY — gamma/theta mode, score=${sa.score}`, 'ok');
+  }
+
   let premium = 0, strike = Math.round(baseP / (baseP > 5000 ? 100 : baseP > 2000 ? 50 : baseP > 500 ? 10 : 5)) * (baseP > 5000 ? 100 : baseP > 2000 ? 50 : baseP > 500 ? 10 : 5);
   let usedReal = false, optionToken = null;
-  const daysToExp = sa.isExpiryDay ? 1 : 3 + Math.floor(Math.random()*4);
+
+  // Days to expiry for BSM fallback — use actual calendar days
+  const daysToExp = _expiryDay ? 1 : Math.max(1, _daysLeft);
 
   if (S.connected) {
-    const oc = await fetchOptionChain(angelSym, baseP);
+    // Pass correct expiry mode so option chain fetches right contract
+    const oc = await fetchOptionChain(angelSym, baseP, _expiryMode);
     if (oc?.strikes?.length) {
       const withLtp = oc.strikes
         .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
@@ -1738,7 +1831,7 @@ async function generateSignal(symbolObj, isIndex) {
     name: isIndex ? symbolObj.sym : (symbolObj.name || symbolObj.sym),
     isIndex, type, setupType,
     strike:  `${strike} ${type}`,
-    expiry:  S.config.expiry === 'WEEKLY' ? 'Weekly' : S.config.expiry === 'NEXT' ? 'Next Week' : 'Monthly',
+    expiry: _expiryMode === 'NEXT_MONTH' ? 'Next Month' : _expiryMode === 'WEEKLY' ? 'Weekly' : 'Monthly',
     premium, target, sl,
     prob,
     score:   sa.score || 0,
@@ -2369,7 +2462,7 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">News Sentiment</span><span class="drawer-row-val" style="color:${sig.newsSentimentScore>60?'var(--green)':sig.newsSentimentScore<40?'var(--red)':'var(--text3)'}">
       ${sig.newsSentiment||'–'} (${sig.newsSentimentScore||50}%)
     </span></div>
-    ${sig.isExpiryDay ? `<div class="drawer-row"><span class="drawer-row-label" style="color:var(--amber)">⚠ Expiry Day</span><span class="drawer-row-val" style="color:var(--amber)">Reduce position size</span></div>` : ''}
+    ${sig.isExpiryDay ? `<div class="drawer-row"><span class="drawer-row-label" style="color:var(--amber)">⚡ Expiry Day</span><span class="drawer-row-val" style="color:var(--amber)">${['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','MIDCAP'].includes((sig.sym||'').toUpperCase()) ? '⚠ Index expiry — high gamma/theta, only STRONG signals, 0DTE risk' : sig.sym+' monthly expiry today'}</span></div>` : ''}
     ${sig.warnings?.length ? `<div style="margin:10px 0 4px;font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Warnings</div>
     ${sig.warnings.map(w=>`<div style="font-size:11px;color:var(--amber);padding:3px 0;border-bottom:1px solid var(--border)">${w}</div>`).join('')}` : ''}
 

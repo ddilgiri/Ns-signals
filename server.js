@@ -642,8 +642,12 @@ app.post('/market-bias', async (req, res) => {
     // Supertrend (10, 3)
     const supertrend = calcSupertrend(raw);
 
-    // Expiry proximity flag — is today an expiry day? (Thursday for weekly NFO/BankNifty)
-    const isExpiryDay = ist.getDay() === 4; // 4 = Thursday
+    // Expiry proximity flag — NSE moved ALL F&O expiry to Tuesday (2) in 2024
+    // Stocks: last Tuesday of month (monthly only)
+    // Indices: every Tuesday (weekly)
+    // Source: dhan.co/fno-expiry-calendar
+    const dayOfWeek = ist.getDay();
+    const isExpiryDay = dayOfWeek === 2; // Tuesday
 
     // VWAP (today only)
     let vwapNum = 0, vwapDen = 0;
@@ -912,8 +916,12 @@ function buildVixResult(vix, change, changePct, prevClose) {
 app.post('/oi-analysis', async (req, res) => {
   if (!isAuthenticated()) return res.status(401).json({ status: false, message: 'Not authenticated' });
 
-  const { symbol, spotPrice, expiry = 'WEEKLY' } = req.body;
+  const { symbol, spotPrice, expiry } = req.body;
   if (!symbol || !spotPrice) return res.status(400).json({ status: false, message: 'symbol and spotPrice required' });
+
+  // Stocks have NO weekly options — always use MONTHLY
+  // Indices have weekly options — use WEEKLY unless caller overrides
+  const effectiveExpiry = expiry || getExpiryType(symbol, null);
 
   try {
     // Ensure instruments loaded
@@ -966,14 +974,21 @@ app.post('/oi-analysis', async (req, res) => {
       .sort((a, b) => a.date - b.date);
 
     let chosenExpRaw;
-    if (expiry === 'MONTHLY') {
+    if (effectiveExpiry === 'MONTHLY') {
       const m = now.getMonth(), y = now.getFullYear();
       const thisMonth = uniqueExp.filter(e => e.date.getMonth() === m && e.date.getFullYear() === y);
-      chosenExpRaw = (thisMonth[thisMonth.length - 1] || uniqueExp[uniqueExp.length - 1])?.raw;
-    } else if (expiry === 'NEXT') {
+      chosenExpRaw = (thisMonth[thisMonth.length - 1] || uniqueExp[0])?.raw;
+    } else if (effectiveExpiry === 'NEXT_MONTH') {
+      // Stock within 5 days of expiry — pick NEXT calendar month's last Tuesday
+      const nextM = (now.getMonth() + 1) % 12;
+      const nextY  = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+      const nextMonth = uniqueExp.filter(e => e.date.getMonth() === nextM && e.date.getFullYear() === nextY);
+      chosenExpRaw = (nextMonth[nextMonth.length - 1] || uniqueExp[1] || uniqueExp[0])?.raw;
+      log(`NEXT_MONTH expiry selected: ${chosenExpRaw}`, 'INFO');
+    } else if (effectiveExpiry === 'NEXT') {
       chosenExpRaw = (uniqueExp[1] || uniqueExp[0])?.raw;
     } else {
-      chosenExpRaw = uniqueExp[0]?.raw;
+      chosenExpRaw = uniqueExp[0]?.raw; // WEEKLY = nearest Tuesday
     }
     if (!chosenExpRaw) return res.json({ status: false, message: 'No valid expiry' });
 
@@ -1081,6 +1096,78 @@ app.post('/oi-analysis', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// HELPER: Per-instrument expiry day detection
+// Source: Dhan F&O Expiry Calendar (dhan.co/fno-expiry-calendar)
+//
+// NSE INDICES (Weekly):
+//   NIFTY       → Tuesday  (day 2)
+//   BANKNIFTY   → Tuesday  (day 2) — monthly only, no weekly as of 2024
+//   FINNIFTY    → Tuesday  (day 2)
+//   MIDCPNIFTY  → Tuesday  (day 2) — monthly
+//   NIFTYNEXT50 → Tuesday  (day 2) — monthly
+//
+// NSE STOCKS:
+//   All stocks  → MONTHLY only → Last Tuesday of expiry month
+//   (No weekly stock options on NSE)
+//
+// BSE (not used in this app):
+//   SENSEX/BANKEX → Thursday (day 4)
+//
+// NOTE: NSE moved all weeklies/monthlies from Thursday → Tuesday in 2024
+// ─────────────────────────────────────────────────────────────────────
+function isIndexExpiryDay(sym) {
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = ist.getDay();
+  // All NSE F&O (indices + stocks) expire on Tuesday (day 2)
+  return day === 2;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// EXPIRY RULES (per Dhan F&O Calendar):
+//   NIFTY only      -> WEEKLY  (every Tuesday)
+//   BANKNIFTY       -> MONTHLY (last Tuesday of month)
+//   FINNIFTY        -> MONTHLY (last Tuesday of month)
+//   MIDCPNIFTY      -> MONTHLY (last Tuesday of month)
+//   All Stocks      -> MONTHLY normally
+//                      BUT if within 5 calendar days of last Tuesday
+//                      -> use NEXT_MONTH to avoid physical delivery zone
+// ─────────────────────────────────────────────────────────────────────
+function getLastTuesdayOfMonth(year, month) {
+  const lastDay = new Date(year, month + 1, 0);
+  const dow = lastDay.getDay();
+  const back = (dow >= 2) ? (dow - 2) : (dow + 5);
+  const d = new Date(lastDay);
+  d.setDate(lastDay.getDate() - back);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getExpiryType(sym) {
+  const s = (sym || '').toUpperCase();
+
+  // NIFTY only has weekly
+  if (s === 'NIFTY') return 'WEEKLY';
+
+  // Index monthlies — always use current month's last Tuesday
+  if (s === 'BANKNIFTY' || s === 'FINNIFTY' || s === 'MIDCPNIFTY' || s === 'MIDCAP') {
+    return 'MONTHLY';
+  }
+
+  // STOCKS — monthly, but switch to next month 5 days before expiry
+  const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  ist.setHours(0, 0, 0, 0);
+  const lastTue = getLastTuesdayOfMonth(ist.getFullYear(), ist.getMonth());
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysToExpiry = Math.round((lastTue - ist) / msPerDay);
+
+  if (daysToExpiry >= 0 && daysToExpiry <= 5) {
+    log(`Stock ${s}: ${daysToExpiry}d to expiry — using NEXT month contract`, 'INFO');
+    return 'NEXT_MONTH';
+  }
+  return 'MONTHLY';
+}
+
 // WEIGHTED SIGNAL SCORING ENGINE
 // ─────────────────────────────────────────────────────────────────────
 //
@@ -1403,7 +1490,7 @@ app.post('/signal-analysis', async (req, res) => {
       axios.get(`http://localhost:${PORT}/news-sentiment`),
       spotPrice
         ? axios.post(`http://localhost:${PORT}/oi-analysis`,
-            { symbol: sym, spotPrice, expiry: 'WEEKLY' },
+            { symbol: sym, spotPrice, expiry: getExpiryType(sym, null) },
             { headers: { 'Content-Type': 'application/json' } })
         : Promise.resolve({ data: null }),
     ]);
@@ -1436,7 +1523,7 @@ app.post('/signal-analysis', async (req, res) => {
       supertrend:   bias.supertrend  || null,
       atrStopLong:  bias.atrStopLong || null,
       atrStopShort: bias.atrStopShort|| null,
-      isExpiryDay:  bias.isExpiryDay || false,
+      isExpiryDay:  isIndexExpiryDay(sym),  // per-index: FINNIFTY=Tue, MIDCAP=Mon, NIFTY=Thu, BANKNIFTY=Wed
       // Institutional
       instBias:     fii.instBias     || 'NEUTRAL',
       fiiNet:       fii.fiiNet       ?? 0,
@@ -1901,12 +1988,18 @@ app.post('/option-chain', async (req, res) => {
       const curMonth = now.getMonth(), curYear = now.getFullYear();
       const thisMonth = uniqueExpiries.filter(e => e.date.getMonth() === curMonth && e.date.getFullYear() === curYear);
       chosenExpiry = thisMonth.length
-        ? thisMonth[thisMonth.length - 1]           // last expiry this month
-        : uniqueExpiries[uniqueExpiries.length - 1]; // fallback: last available
+        ? thisMonth[thisMonth.length - 1]
+        : uniqueExpiries[0];
+    } else if (expiry === 'NEXT_MONTH') {
+      // Stock near expiry — use next calendar month's last expiry
+      const nextM = (now.getMonth() + 1) % 12;
+      const nextY  = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+      const nextMonth = uniqueExpiries.filter(e => e.date.getMonth() === nextM && e.date.getFullYear() === nextY);
+      chosenExpiry = nextMonth.length ? nextMonth[nextMonth.length - 1] : (uniqueExpiries[1] || uniqueExpiries[0]);
     } else if (expiry === 'NEXT') {
       chosenExpiry = uniqueExpiries[1] || uniqueExpiries[0];
     } else {
-      chosenExpiry = uniqueExpiries[0]; // WEEKLY = nearest
+      chosenExpiry = uniqueExpiries[0]; // WEEKLY = nearest Tuesday
     }
 
     const chosenExpiryRaw = chosenExpiry.raw; // use raw string for exact match
