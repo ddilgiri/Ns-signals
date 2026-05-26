@@ -1696,10 +1696,12 @@ async function generateSignal(symbolObj, isIndex) {
   const _expiryDay  = isExpiryDayForSym(_sym);
   const _daysLeft   = daysToMonthlyExpiry();
 
-  // STOCK on expiry day → skip (physical delivery, no liquidity)
+  // STOCK on expiry day → switch to next month contract (don't skip entirely)
+  // Physical delivery only applies if you HOLD till expiry — intraday is fine
+  // We just make sure we scan NEXT month contract so premium is reasonable
   if (!_isIdx && _expiryDay) {
-    addLog(`${_sym}: skipped — stock expiry day (physical delivery risk)`, 'warn');
-    return null;
+    addLog(`${_sym}: stock expiry day — scanning next month contract`, 'warn');
+    // _expiryMode already set to NEXT_MONTH by getExpiryModeForSym above
   }
 
   // STOCK within 5 days → using next month contract (logged server-side too)
@@ -1750,8 +1752,8 @@ async function generateSignal(symbolObj, isIndex) {
 
   // On index expiry day: tighten scoring — only STRONG signals pass (gamma risk)
   if (_indexExpiryMode) {
-    if (sa.score < 72) {
-      addLog(`${_sym}: index expiry day — score ${sa.score} below 72 threshold, skipping`, 'warn');
+    if (sa.score < 65) {
+      addLog(`${_sym}: index expiry day — score ${sa.score} below 65 threshold, skipping`, 'warn');
       return null;
     }
     addLog(`⚡ ${_sym}: INDEX EXPIRY DAY — gamma/theta mode, score=${sa.score}`, 'ok');
