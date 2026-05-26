@@ -921,7 +921,7 @@ app.post('/oi-analysis', async (req, res) => {
 
   // Stocks have NO weekly options — always use MONTHLY
   // Indices have weekly options — use WEEKLY unless caller overrides
-  const effectiveExpiry = expiry || getExpiryType(symbol, null);
+  const effectiveExpiry = expiry || getExpiryType(symbol);
 
   try {
     // Ensure instruments loaded
@@ -1490,7 +1490,7 @@ app.post('/signal-analysis', async (req, res) => {
       axios.get(`http://localhost:${PORT}/news-sentiment`),
       spotPrice
         ? axios.post(`http://localhost:${PORT}/oi-analysis`,
-            { symbol: sym, spotPrice, expiry: getExpiryType(sym, null) },
+            { symbol: sym, spotPrice, expiry: getExpiryType(sym) },
             { headers: { 'Content-Type': 'application/json' } })
         : Promise.resolve({ data: null }),
     ]);

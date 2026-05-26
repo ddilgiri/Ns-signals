@@ -1453,7 +1453,7 @@ function getMarketStatus() {
 //
 // Flow per symbol:
 //   1. Get live spot price (must be real)
-//   2. Get option premium via /option-chain (real) or BSM fallback (EST)
+//   2. Get option premium via /option-chain (real Angel One LTP only — no BSM)
 //   3. POST /signal-analysis → server runs weighted scorer (100-pt system)
 //      • Market bias (EMA 20/50)   20 pts
 //      • Supertrend                15 pts
@@ -1743,7 +1743,7 @@ async function generateSignal(symbolObj, isIndex) {
   // Strict gate: only signals with prob >= configured minProb (default 70%)
   if (prob < S.config.minProb) return null;
 
-  // STEP 6: option premium — real via /option-chain, fallback to BSM estimate
+  // STEP 6: option premium — REAL only via Angel One /option-chain. No fallback.
   const SYM_MAP = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
   const angelSym = SYM_MAP[symbolObj.sym] || symbolObj.sym;
 
@@ -1762,9 +1762,6 @@ async function generateSignal(symbolObj, isIndex) {
   let premium = 0, strike = Math.round(baseP / (baseP > 5000 ? 100 : baseP > 2000 ? 50 : baseP > 500 ? 10 : 5)) * (baseP > 5000 ? 100 : baseP > 2000 ? 50 : baseP > 500 ? 10 : 5);
   let usedReal = false, optionToken = null;
 
-  // Days to expiry for BSM fallback — use actual calendar days
-  const daysToExp = _expiryDay ? 1 : Math.max(1, _daysLeft);
-
   if (S.connected) {
     // Pass correct expiry mode so option chain fetches right contract
     const oc = await fetchOptionChain(angelSym, baseP, _expiryMode);
@@ -1782,14 +1779,16 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // BSM fallback
+  // ── NO BSM fallback — only real Angel One LTP allowed ──────────
+  // If option chain didn't return a real LTP, block this signal entirely
   if (!usedReal) {
-    const _s = symbolObj.sym;
-    let annIV = _s === 'BANKNIFTY' ? 0.17 : _s === 'NIFTY' ? 0.14
-              : _s === 'FINNIFTY' || _s === 'MIDCAP' ? 0.16
-              : baseP > 3000 ? 0.22 : baseP > 1000 ? 0.26 : 0.30;
-    premium = parseFloat((baseP * annIV * Math.sqrt(daysToExp/365) * 0.4).toFixed(2));
-    if (premium < 0.5) premium = 0.5;
+    addLog(`${_sym}: no real option LTP from Angel One — signal blocked`, 'warn');
+    return null;
+  }
+  // Also require optionToken — needed for live premium tracking
+  if (!optionToken) {
+    addLog(`${_sym}: no option token — cannot track live premium, signal blocked`, 'warn');
+    return null;
   }
 
   // STEP 7: capital / lot filter
@@ -1799,25 +1798,25 @@ async function generateSignal(symbolObj, isIndex) {
   if (lots < 1) return null;
   const capital = lots * premium * lot;
 
-  // STEP 8: stop / target — SL is ALWAYS 5% of premium (fixed), target min 1:2 RR
+  // STEP 8: SL and Target — based on option premium movement, NOT underlying ATR
+  // SL  = 40% below entry premium (industry standard for options buying)
+  // TGT = 2× the risk (minimum 1:2 RR always enforced)
   let sl, target;
-  const slPct = S.config.slPct / 100; // always 0.05 (5%)
-  const tgtPct = S.config.profitPct / 100; // always 0.10 (10%)
+  sl     = parseFloat(Math.max(0.25, premium * 0.60).toFixed(2)); // SL = 40% loss on premium
+  target = parseFloat((premium + 2 * (premium - sl)).toFixed(2)); // TGT = 1:2 RR minimum
 
-  // SL = exactly 5% below entry premium
-  sl = parseFloat(Math.max(0.10, premium * (1 - slPct)).toFixed(2));
-
+  // If ATR available, check if underlying move supports the target
+  // (ensures target is reachable given current volatility)
   if (sa.atr && sa.ltp) {
-    const atr = sa.atr;
-    const tgtMove = Math.max(atr * 2.5, premium * tgtPct);
-    target = parseFloat((premium + tgtMove).toFixed(2));
-  } else {
-    target = parseFloat(Math.max(premium * (1 + tgtPct), premium + 2*(premium - sl)).toFixed(2));
+    const expectedPremiumMove = sa.atr * 0.5 * 2.5; // delta ~0.5 ATM, 2.5× ATR move
+    const atrTarget = parseFloat((premium + expectedPremiumMove).toFixed(2));
+    // Use whichever gives better RR
+    if (atrTarget > target) target = atrTarget;
   }
 
   const riskPts = premium - sl;
   const rr = riskPts > 0 ? (target - premium) / riskPts : 0;
-  if (rr < 1.5) return null; // relaxed from 2.0 — 1:1.5 RR minimum
+  if (rr < 1.8) return null; // enforce minimum 1:2 RR
 
   // STEP 9: overtrading guard (max 2 per sym+type)
   if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
@@ -1942,19 +1941,11 @@ async function updateSignalLivePrices() {
     if (S.livePrice[sig.sym] && S.livePrice[sig.sym] > 0) {
       sig.livePrice = S.livePrice[sig.sym];
       changed = true;
-      // For BSM-estimated options (no real token), approximate livePremium from spot move
-      if (!sig.optionToken && sig.entryPrice > 0 && sig.livePremium > 0) {
-        const spotMove = sig.livePrice - sig.entryPrice;
-        const spotMovePct = spotMove / sig.entryPrice;
-        // CE: spot up → premium up. PE: spot down → premium up
-        const premiumDelta = sig.type === 'CE'
-          ? sig.entryPremium * (1 + spotMovePct * 5)   // 5x leverage approx
-          : sig.entryPremium * (1 - spotMovePct * 5);
-        sig.livePremium = Math.max(0.05, parseFloat(premiumDelta.toFixed(2)));
-      }
+      // Live premium only updated via real optionToken quote (see above)
+      // No fake approximation — if no optionToken, livePremium stays at entry value
     }
-    // SL check: trigger if livePremium dropped to/below SL (5% of entry = fixed SL)
-    const effectiveSL = sig.sl || (sig.entryPremium * (1 - 5/100));
+    // SL check: use actual SL stored on signal (40% loss on premium)
+    const effectiveSL = sig.sl || (sig.entryPremium * 0.60);
     if (sig.livePremium > 0 && sig.entryPremium > 0 && sig.livePremium <= effectiveSL) {
       slHitIds.push(sig.id);
     }
