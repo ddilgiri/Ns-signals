@@ -966,7 +966,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:10,slPct:5,minProb:65,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:10,slPct:5,minProb:60,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -1380,9 +1380,9 @@ async function fetchMarketData() {
   try {
     // Build a list of tokens for all selected stocks using the complete NSE_TOKENS map
     const selArr = [...S.selectedStocks].filter(s => NSE_TOKENS[s] && !S_WATCHLIST.includes(s));
-    // Fetch in batches of 20 to avoid API overload
-    const batchSize = 20;
-    for (let i = 0; i < Math.min(selArr.length, 60); i += batchSize) {
+    // Fetch in batches of 50 — covers all ~216 stocks in ~5 API calls
+    const batchSize = 50;
+    for (let i = 0; i < selArr.length; i += batchSize) {
       const batchSyms = selArr.slice(i, i + batchSize);
       const batch = batchSyms.map(s => NSE_TOKENS[s]);
       if (!batch.length) continue;
@@ -2116,10 +2116,10 @@ async function runScan() {
     }
   } catch(e) { /* non-critical */ }
 
-  addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks...`, '');
+  addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks (80/cycle rotation)...`, '');
 
   let newSigs = 0;
-  // Lot sizes from dhan.co/nse-fno-lot-size/ (May 2026)
+  // Lot sizes from dhan.co/nse-fno-lot-size/ (Jun 2026)
   const IDX = [{sym:'NIFTY',lot:65},{sym:'BANKNIFTY',lot:30},{sym:'FINNIFTY',lot:60},{sym:'MIDCAP',lot:120}];
   for (const idx of IDX) {
     if (!S.config.indices.includes(idx.sym)) continue;
@@ -2131,8 +2131,18 @@ async function runScan() {
     }
   }
 
+  // Scan ALL stocks in rotating batches of 80 per cycle
+  // Every ~3 cycles covers the full 216-stock list (80×3=240)
   const stockArr = [...S.selectedStocks];
-  const batch = stockArr.sort(()=>Math.random()-0.5).slice(0, Math.min(stockArr.length, 60));
+  if (typeof S._scanOffset === 'undefined') S._scanOffset = 0;
+  S._scanOffset = S._scanOffset % Math.max(stockArr.length, 1);
+  const BATCH_SIZE = 80;
+  const batch = [];
+  for (let i = 0; i < Math.min(BATCH_SIZE, stockArr.length); i++) {
+    batch.push(stockArr[(S._scanOffset + i) % stockArr.length]);
+  }
+  S._scanOffset = (S._scanOffset + BATCH_SIZE) % stockArr.length;
+  addLog(`Stock batch: ${batch.length}/${stockArr.length} this cycle (offset ${S._scanOffset})`, '');
   for (const sym of batch) {
     const obj = FNO_STOCKS.find(s=>s.sym===sym);
     if (!obj) continue;
@@ -2143,7 +2153,7 @@ async function runScan() {
     }
   }
 
-  S.signals = S.signals.slice(0, 100);
+  S.signals = S.signals.slice(0, 200);
   // Persist signals so they survive app close/refresh
   try { localStorage.setItem('fno_signals', JSON.stringify(S.signals)); } catch(e) {}
   document.getElementById('mSigs').textContent = S.signals.length;
