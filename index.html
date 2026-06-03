@@ -517,9 +517,9 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
       </div>
 
       <div class="field">
-        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">65%</span></label>
+        <label class="field-label">Min Probability: <span id="cfgProbV" style="color:var(--blue)">60%</span></label>
         <div class="slider-wrap">
-          <input type="range" min="60" max="90" value="65" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
+          <input type="range" min="60" max="90" value="60" id="cfgProb" oninput="document.getElementById('cfgProbV').textContent=this.value+'%'">
         </div>
       </div>
 
@@ -1339,7 +1339,7 @@ const STOCK_TOKENS = {
 async function fetchMarketData() {
   const server = getServer();
 
-  // ── Build token list: all 4 indices + watchlist stocks ──
+  // ── Fetch indices + watchlist (FULL mode for OHLC/volume display) ──
   const INDEX_TOKENS = ['26000','26009','26037','26074'];
   const watchTokens  = S_WATCHLIST
     .map(sym => WL_ALL.find(w => w.sym===sym)?.token)
@@ -1353,55 +1353,48 @@ async function fetchMarketData() {
     });
     const d = await r.json();
     if (d.status && d.data?.fetched) {
-      // Build a unified token→sym map covering indices + STOCK_TOKENS + WL_ALL
       const TOKEN_SYM_MAP = {
         '26000':'NIFTY','26009':'BANKNIFTY','26037':'FINNIFTY','26074':'MIDCAP'
       };
-      Object.keys(STOCK_TOKENS).forEach(s => { TOKEN_SYM_MAP[String(STOCK_TOKENS[s])] = s; });
       WL_ALL.forEach(w => { if (!TOKEN_SYM_MAP[w.token]) TOKEN_SYM_MAP[w.token] = w.sym; });
-
       d.data.fetched.forEach(q => {
         const ltp  = parseFloat(q.ltp  || q.close || 0);
         const prev = parseFloat(q.close || q.previousClose || ltp);
         if (!ltp) return;
-        const tok  = String(q.symbolToken);
-        const sym  = TOKEN_SYM_MAP[tok];
+        const sym  = TOKEN_SYM_MAP[String(q.symbolToken)];
         if (!sym) return;
-        // Store the API-provided previous close as livePrev (correct baseline for % change)
         S.livePrev[sym] = prev;
         S.livePrice[sym] = ltp;
       });
-      // Update watchlist bar in-place
       updateWatchlistBar();
     }
   } catch(e) { /* silent */ }
 
-  // Stock LTPs — use NSE_TOKENS (complete map) for ALL selected stocks
+  // ── Fetch LTP for ALL selected stocks using full NSE_TOKENS map ──
+  // Batch size 50 — covers 216 stocks in ~5 calls
   try {
-    // Build a list of tokens for all selected stocks using the complete NSE_TOKENS map
-    const selArr = [...S.selectedStocks].filter(s => NSE_TOKENS[s] && !S_WATCHLIST.includes(s));
-    // Fetch in batches of 50 — covers all ~216 stocks in ~5 API calls
+    const selArr = [...S.selectedStocks].filter(s => NSE_TOKENS[s]);
+    const REV_NSE = {};
+    Object.keys(NSE_TOKENS).forEach(s => { REV_NSE[String(NSE_TOKENS[s])] = s; });
     const batchSize = 50;
     for (let i = 0; i < selArr.length; i += batchSize) {
       const batchSyms = selArr.slice(i, i + batchSize);
-      const batch = batchSyms.map(s => NSE_TOKENS[s]);
-      if (!batch.length) continue;
+      const tokens = batchSyms.map(s => NSE_TOKENS[s]);
+      if (!tokens.length) continue;
       try {
         const r = await fetch(server + '/quote', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE:batch}}),
+          body: JSON.stringify({mode:'LTP', exchangeTokens:{NSE: tokens}}),
         });
         const d = await r.json();
         if (d.status && d.data?.fetched) {
-          // Build reverse map from token → sym using NSE_TOKENS
-          const REV_NSE = {};
-          Object.keys(NSE_TOKENS).forEach(s => { REV_NSE[String(NSE_TOKENS[s])] = s; });
           d.data.fetched.forEach(q => {
             const sym = REV_NSE[String(q.symbolToken)];
-            if (sym && q.ltp && parseFloat(q.ltp) > 0) S.livePrice[sym] = parseFloat(q.ltp);
+            const ltp = parseFloat(q.ltp || q.close || 0);
+            if (sym && ltp > 0) S.livePrice[sym] = ltp;
           });
         }
-      } catch(e) { /* silent */ }
+      } catch(e) { /* silent per batch */ }
     }
   } catch(e) { /* silent */ }
 
@@ -2028,7 +2021,7 @@ async function updateSignalLivePrices() {
 }
 
 
-function toggleScan() {
+async function toggleScan() {
   const btn = document.getElementById('scanBtn');
   if (S.scanning) {
     clearInterval(S.scanInt);
@@ -2056,6 +2049,10 @@ function toggleScan() {
     document.getElementById('mScanSt').style.color = 'var(--green)';
     saveConfig();
     addLog('Scanner started — ' + S.selectedStocks.size + ' stocks + ' + S.config.indices.join(', '), 'ok');
+    // Pre-warm livePrice for ALL stocks before first scan cycle
+    addLog('Pre-loading live prices for all stocks...', '');
+    await fetchMarketData();
+    addLog('Live prices loaded — starting scan', 'ok');
     runScan();
     S.scanInt = setInterval(runScan, (S.config.intervalSec||30)*1000);
   }
@@ -2068,7 +2065,7 @@ function saveConfig() {
   S.config.slPct = 5; // Fixed at 5%
   // Auto-calculate profitPct: min 1:2 RR, so target = max(2×SL, 10%)
   S.config.profitPct = Math.max(S.config.slPct * 2, 10);
-  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 65;
+  S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 60;
   S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
@@ -2117,6 +2114,9 @@ async function runScan() {
   } catch(e) { /* non-critical */ }
 
   addLog(`Scanning ${S.config.indices.length} indices + ${S.selectedStocks.size} stocks (80/cycle rotation)...`, '');
+
+  // Refresh live prices FIRST so generateSignal has current livePrice for all stocks
+  if (S.connected) await fetchMarketData();
 
   let newSigs = 0;
   // Lot sizes from dhan.co/nse-fno-lot-size/ (Jun 2026)
@@ -2169,7 +2169,6 @@ async function runScan() {
   }
 
   addLog(`Scan done — ${newSigs} new signals`, 'ok');
-  if (S.connected) fetchMarketData();
   renderSignals();
   updateAnalysisPage();
 }
