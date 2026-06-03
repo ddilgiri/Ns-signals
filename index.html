@@ -701,7 +701,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 // ══════════════════════════════════════════════════════════════════
 // FNO STOCKS
 // ══════════════════════════════════════════════════════════════════
-// Lot sizes sourced from https://dhan.co/nse-fno-lot-size/ (May 2026)
+// Lot sizes sourced from https://dhan.co/nse-fno-lot-size/ (Jun 2026)
 const FNO_STOCKS = [
   // ── NIFTY 50 ──
   // ── NIFTY 50 (May 2026 lot sizes from dhan.co) ──
@@ -771,6 +771,7 @@ const FNO_STOCKS = [
   {sym:'PERSISTENT', name:'Persistent Systems',     lot:100,  grp:'IT'},
   {sym:'KPITTECH',   name:'KPIT Technologies',      lot:425,  grp:'IT'},
   {sym:'OFSS',       name:'Oracle Financial Svcs',  lot:75,   grp:'IT'},
+  {sym:'TATAELXSI',  name:'Tata Elxsi',             lot:100,  grp:'IT'},
   // ── Auto ──
   {sym:'BAJAJ-AUTO', name:'Bajaj Auto',             lot:75,   grp:'AUTO'},
   {sym:'TVSMOTOR',   name:'TVS Motor Company',      lot:175,  grp:'AUTO'},
@@ -779,6 +780,7 @@ const FNO_STOCKS = [
   {sym:'BOSCHLTD',   name:'Bosch Ltd',              lot:25,   grp:'AUTO'},
   {sym:'BHARATFORG', name:'Bharat Forge',           lot:500,  grp:'AUTO'},
   {sym:'HYUNDAI',    name:'Hyundai Motor India',    lot:275,  grp:'AUTO'},
+  {sym:'TMPV',       name:'Tata Motors PV',         lot:800,  grp:'AUTO'},
   // ── Pharma ──
   {sym:'LUPIN',      name:'Lupin',                  lot:425,  grp:'PHARMA'},
   {sym:'AUROPHARMA', name:'Aurobindo Pharma',       lot:550,  grp:'PHARMA'},
@@ -792,6 +794,7 @@ const FNO_STOCKS = [
   {sym:'MAXHEALTH',  name:'Max Healthcare',         lot:525,  grp:'PHARMA'},
   // ── Energy ──
   {sym:'ADANIGREEN', name:'Adani Green Energy',     lot:600,  grp:'ENERGY'},
+  {sym:'INOXWIND',   name:'Inox Wind',              lot:3575, grp:'ENERGY'},
   {sym:'IOC',        name:'Indian Oil Corp',        lot:4875, grp:'ENERGY'},
   {sym:'HINDPETRO',  name:'Hindustan Petroleum',    lot:2025, grp:'ENERGY'},
   {sym:'GAIL',       name:'GAIL India',             lot:3150, grp:'ENERGY'},
@@ -822,6 +825,8 @@ const FNO_STOCKS = [
   {sym:'TRENT',      name:'Trent Ltd',              lot:100,  grp:'FMCG,RETAIL'},
   {sym:'UNITDSPR',   name:'United Spirits',         lot:400,  grp:'FMCG'},
   {sym:'JUBLFOOD',   name:'Jubilant FoodWorks',     lot:1250, grp:'FMCG'},
+  {sym:'RADICO',     name:'Radico Khaitan',         lot:150,  grp:'FMCG'},
+  {sym:'GODFRYPHLP', name:'Godfrey Phillips India', lot:275,  grp:'FMCG'},
   // ── Cement ──
   {sym:'AMBUJACEM',  name:'Ambuja Cements',         lot:1050, grp:'CEMENT'},
   {sym:'SHREECEM',   name:'Shree Cement',           lot:25,   grp:'CEMENT'},
@@ -860,10 +865,11 @@ const FNO_STOCKS = [
   {sym:'KFINTECH',   name:'KFin Technologies',      lot:500,  grp:'FINANCE'},
   {sym:'MOTILALOFS', name:'Motilal Oswal Fin Svcs', lot:775,  grp:'FINANCE'},
   {sym:'NUVAMA',     name:'Nuvama Wealth Mgmt',     lot:500,  grp:'FINANCE'},
+  {sym:'SAMMAANCAP', name:'Sammaan Capital',        lot:4300, grp:'FINANCE'},
   // ── Insurance ──
   {sym:'ICICIGI',    name:'ICICI Lombard General',  lot:325,  grp:'INSURANCE'},
   {sym:'ICICIPRULI', name:'ICICI Prudential Life',  lot:925,  grp:'INSURANCE'},
-  {sym:'LICI',       name:'LIC of India',           lot:700,  grp:'INSURANCE'},
+  {sym:'LICI',       name:'LIC of India',           lot:1400, grp:'INSURANCE'},
   {sym:'MFSL',       name:'Max Financial Services', lot:400,  grp:'INSURANCE'},
   // ── Chemicals ──
   {sym:'PIDILITIND', name:'Pidilite Industries',    lot:500,  grp:'CHEMICALS'},
@@ -892,6 +898,7 @@ const FNO_STOCKS = [
   {sym:'TIINDIA',    name:'Tube Investment of India',lot:200, grp:'CAPGOODS'},
   {sym:'UNOMINDA',   name:'UNO Minda',              lot:550,  grp:'CAPGOODS'},
   {sym:'SONACOMS',   name:'Sona BLW Precision',     lot:1225, grp:'CAPGOODS'},
+  {sym:'VOLTAS',     name:'Voltas Ltd',             lot:375,  grp:'CAPGOODS'},
   // ── Defence ──
   {sym:'COCHINSHIP', name:'Cochin Shipyard',        lot:400,  grp:'DEFENCE'},
   {sym:'MAZDOCK',    name:'Mazagon Dock',           lot:200,  grp:'DEFENCE'},
@@ -1504,6 +1511,8 @@ const NSE_TOKENS = {
   CDSL:'4204',      BSE:'543154',    MCX:'5120',      ANGELONE:'14413',
   DMART:'2882',     TRENT:'1964',    SUZLON:'12018',  ADANIGREEN:'236921',
   ADANIPOWER:'533519', IRFC:'335340', IREDA:'543257', RVNL:'542649',
+  INOXWIND:'17331', TATAELXSI:'18163', VOLTAS:'3989', RADICO:'7949',
+  GODFRYPHLP:'1306', SAMMAANCAP:'2382', TMPV:'18011',
 };
 
 // ── Cached /signal-analysis results (5 min TTL — matches server BIAS_CACHE) ──
