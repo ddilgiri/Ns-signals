@@ -500,7 +500,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
         </div>
         <div class="field">
           <label class="field-label">Max Premium/Lot</label>
-          <input class="field-input" type="number" id="cfgMaxPrem" value="10000" inputmode="numeric">
+          <input class="field-input" type="number" id="cfgMaxPrem" value="50000" inputmode="numeric">
         </div>
       </div>
 
@@ -966,7 +966,7 @@ const S = {
   serverUrl: localStorage.getItem('serverUrl') || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3001' : window.location.origin),
   creds:{client:'',key:'',pin:'',totp:''},
   selectedStocks: new Set(FNO_STOCKS.map(s=>s.sym)),
-  config:{capital:30000,profitPct:10,slPct:5,minProb:60,maxPrem:10000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
+  config:{capital:30000,profitPct:10,slPct:5,minProb:60,maxPrem:50000,intervalSec:30,type:'BOTH',expiry:'WEEKLY',indices:['NIFTY','BANKNIFTY','FINNIFTY','MIDCAP']},
   livePrice:{}, livePrev:{}, livePCR:{},
   newSigCount: 0,
 };
@@ -1736,14 +1736,13 @@ async function generateSignal(symbolObj, isIndex) {
   const sa = await runSignalAnalysis(symbolObj.sym, type, baseP, 'NSE', symbolToken);
   if (!sa) return null;
 
-  // STEP 5: verdict gates — only hard block (VIX≥30) and AVOID kill the signal
-  if (sa.hardBlock || sa.verdict === 'BLOCKED') return null;
-  if (sa.verdict === 'AVOID') return null;
+  // STEP 5: verdict gates
+  if (sa.hardBlock || sa.verdict === 'BLOCKED') { addLog(`${_sym}: BLOCKED — ${sa.hardBlockReason||'VIX extreme'}`, 'warn'); return null; }
+  if (sa.verdict === 'AVOID') { addLog(`${_sym}: AVOID — score ${sa.score}/100 too low`, 'warn'); return null; }
 
   // Map weighted score to display probability
   const prob = scoreToProbability(sa.score || 0);
-  // Strict gate: only signals with prob >= configured minProb (default 70%)
-  if (prob < S.config.minProb) return null;
+  if (prob < S.config.minProb) { addLog(`${_sym}: prob ${prob}% < minProb ${S.config.minProb}% — skipped`, ''); return null; }
 
   // STEP 6: option premium — REAL only via Angel One /option-chain. No fallback.
   const SYM_MAP = { NIFTY:'NIFTY', BANKNIFTY:'BANKNIFTY', FINNIFTY:'FINNIFTY', MIDCAP:'MIDCPNIFTY' };
@@ -1771,7 +1770,7 @@ async function generateSignal(symbolObj, isIndex) {
       const withLtp = oc.strikes
         .filter(r => (type === 'CE' ? r.CE_ltp : r.PE_ltp) > 0)
         .sort((a,b) => Math.abs(a.strike - baseP) - Math.abs(b.strike - baseP));
-      const atm = withLtp[0] || oc.strikes[Math.floor(oc.strikes.length/2)];
+      const atm = withLtp[0]; // only use strikes that have a real or prev-close LTP
       if (atm) {
         strike = atm.strike;
         const ltp = type === 'CE' ? atm.CE_ltp : atm.PE_ltp;
@@ -1781,23 +1780,27 @@ async function generateSignal(symbolObj, isIndex) {
     }
   }
 
-  // ── NO BSM fallback — only real Angel One LTP allowed ──────────
-  // If option chain didn't return a real LTP, block this signal entirely
+  // ── If no real intraday LTP, log warning but allow through ────────
+  // close-based LTP is from previous day — still useful for signal direction
+  // Signal card will show "Est." tag so trader knows it's not live
   if (!usedReal) {
-    addLog(`${_sym}: no real option LTP from Angel One — signal blocked`, 'warn');
-    return null;
+    addLog(`${_sym}: option LTP may be stale (prev close) — proceeding with caution`, 'warn');
   }
-  // Also require optionToken — needed for live premium tracking
+  // Require optionToken — needed for live premium tracking
   if (!optionToken) {
     addLog(`${_sym}: no option token — cannot track live premium, signal blocked`, 'warn');
+    return null;
+  }
+  if (premium <= 0) {
+    addLog(`${_sym}: premium is zero — signal blocked`, 'warn');
     return null;
   }
 
   // STEP 7: capital / lot filter
   const lot = symbolObj.lot || 75;
-  if (premium * lot > S.config.maxPrem) return null;
+  if (premium * lot > S.config.maxPrem) { addLog(`${_sym}: contract value ₹${(premium*lot).toFixed(0)} > maxPrem ₹${S.config.maxPrem} — skipped`, ''); return null; }
   const lots = Math.floor(S.config.capital / (premium * lot));
-  if (lots < 1) return null;
+  if (lots < 1) { addLog(`${_sym}: capital ₹${S.config.capital} insufficient for 1 lot @ ₹${(premium*lot).toFixed(0)} — skipped`, ''); return null; }
   const capital = lots * premium * lot;
 
   // STEP 8: SL and Target — based on option premium movement, NOT underlying ATR
@@ -1818,7 +1821,7 @@ async function generateSignal(symbolObj, isIndex) {
 
   const riskPts = premium - sl;
   const rr = riskPts > 0 ? (target - premium) / riskPts : 0;
-  if (rr < 1.8) return null; // enforce minimum 1:2 RR
+  if (rr < 1.8) { addLog(`${_sym}: RR ${rr.toFixed(2)} < 1.8 — skipped`, ''); return null; }
 
   // STEP 9: overtrading guard (max 2 per sym+type)
   if (S.signals.filter(s => s.sym === symbolObj.sym && s.type === type).length >= 2) return null;
@@ -2066,7 +2069,7 @@ function saveConfig() {
   // Auto-calculate profitPct: min 1:2 RR, so target = max(2×SL, 10%)
   S.config.profitPct = Math.max(S.config.slPct * 2, 10);
   S.config.minProb = parseInt(document.getElementById('cfgProb').value) || 60;
-  S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 10000;
+  S.config.maxPrem = parseInt(document.getElementById('cfgMaxPrem').value) || 50000;
   S.config.intervalSec = parseInt(document.getElementById('cfgInterval').value) || 30;
   S.config.type = document.getElementById('cfgType').value;
   S.config.expiry = document.getElementById('cfgExpiry').value;
@@ -2357,7 +2360,8 @@ function renderSignals() {
         <!-- ROW 2: Option Premium + Share Price -->
         <div class="sig-prices">
           <div class="sig-price-box">
-            <div class="sig-price-lbl">Option Premium <span class="live-badge">LIVE</span></div>
+            <div class="sig-price-lbl">Option Premium <span class="live-badge" style="${s.isRealPremium===false?'background:#ffb62720;color:var(--amber);border-color:#ffb62740':''}">
+              ${s.isRealPremium===false?'EST.':'LIVE'}</span></div>
             <div id="sig-prem-${s.id}" class="sig-price-val" style="color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
             <div class="sig-price-entry">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
           </div>

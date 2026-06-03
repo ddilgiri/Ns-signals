@@ -1878,7 +1878,7 @@ app.post('/option-ltp', async (req, res) => {
     const qData = qResp.data;
     if (qData.status && qData.data?.fetched?.length) {
       const q   = qData.data.fetched[0];
-      const ltp = parseFloat(q.ltp || 0); // real LTP only — no close fallback
+      const ltp = parseFloat(q.ltp || 0) > 0 ? parseFloat(q.ltp) : parseFloat(q.close || 0);
       log(`✅ Option LTP: ${chosen.symbol} = ₹${ltp}`, 'OK');
       return res.json({ status: true, ltp, symbolToken: chosen.token, tradingSymbol: chosen.symbol, expiry: chosen.expiry });
     }
@@ -2075,7 +2075,7 @@ app.post('/option-chain', async (req, res) => {
           qResp.data.data.fetched.forEach(q => {
             const ltp   = parseFloat(q.ltp  || 0);
             const close = parseFloat(q.close || 0);
-            if (ltp > 0) ltpMap[String(q.symbolToken)] = ltp;
+            if (ltp > 0) { ltpMap[String(q.symbolToken)] = ltp; } else { const close = parseFloat(q.close || 0); if (close > 0) ltpMap[String(q.symbolToken)] = close; }
           });
         }
       } catch(e) {
