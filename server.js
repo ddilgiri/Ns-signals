@@ -1063,17 +1063,82 @@ app.post('/oi-analysis', async (req, res) => {
     // Max Pain
     const maxPain = calcMaxPain(chain);
 
-    // Resistance = CE strike with highest OI (call writers defend it)
-    const resistStrike = chain.reduce((b, c) => (c.CE_oi > (b?.CE_oi || 0) ? c : b), null)?.strike || null;
-    // Support = PE strike with highest OI (put writers defend it)
-    const supportStrike = chain.reduce((b, c) => (c.PE_oi > (b?.PE_oi || 0) ? c : b), null)?.strike || null;
+    // Resistance = CE strike with highest OI (call writers — Ramesh — defend it)
+    const resistStrikeObj = chain.reduce((b, c) => (c.CE_oi > (b?.CE_oi || 0) ? c : b), null);
+    const resistStrike = resistStrikeObj?.strike || null;
+    // Support = PE strike with highest OI (put writers — Suresh — defend it)
+    const supportStrikeObj = chain.reduce((b, c) => (c.PE_oi > (b?.PE_oi || 0) ? c : b), null);
+    const supportStrike = supportStrikeObj?.strike || null;
 
     // OI buildup / unwinding signals
-    // Long buildup: CE OI increasing + price rising → bullish momentum
-    const ceBuildup   = chain.filter(c => c.CE_oiChange > 0 && c.strike > realAtm).slice(0, 3);
-    const peBuildup   = chain.filter(c => c.PE_oiChange > 0 && c.strike < realAtm).slice(-3);
+    const ceBuildup = chain.filter(c => c.CE_oiChange > 0 && c.strike > realAtm).slice(0, 3);
+    const peBuildup = chain.filter(c => c.PE_oiChange > 0 && c.strike < realAtm).slice(-3);
 
-    log(`OI ${sym}: PCR=${pcr} MaxPain=${maxPain} Support=${supportStrike} Resist=${resistStrike}`, 'INFO');
+    // ── RAMESH / SURESH ANALYSIS ─────────────────────────────────────
+    // Ramesh = call writer; wants price DOWN. Trapped when spot > his strike.
+    // Suresh = put writer; wants price UP.  Trapped when spot < his strike.
+
+    // ATM CE and PE OI — battle at current price
+    const atmRow = chain.find(c => c.strike === realAtm) || {};
+    const atmCeOI = atmRow.CE_oi || 0;
+    const atmPeOI = atmRow.PE_oi || 0;
+    const atmPCR  = atmCeOI > 0 ? parseFloat((atmPeOI / atmCeOI).toFixed(3)) : null;
+
+    // Is Ramesh (call writer) trapped? — spot crossed above his highest CE OI strike
+    const rameshTrapped = resistStrike !== null && spot > resistStrike;
+    // Is Suresh (put writer) trapped? — spot fell below his highest PE OI strike
+    const sureshTrapped = supportStrike !== null && spot < supportStrike;
+
+    // Short squeeze potential: large CE OI just below spot (Ramesh must buy back)
+    const ceOIBelowSpot = chain
+      .filter(c => c.strike <= spot && c.strike >= spot * 0.98)
+      .reduce((s, c) => s + (c.CE_oi || 0), 0);
+    const shortSqueezePotential = ceOIBelowSpot > (totalCeOI * 0.15); // >15% CE OI just below spot
+
+    // Put squeeze potential: large PE OI just above spot (Suresh must buy back)
+    const peOIAboveSpot = chain
+      .filter(c => c.strike >= spot && c.strike <= spot * 1.02)
+      .reduce((s, c) => s + (c.PE_oi || 0), 0);
+    const putSqueezePotential = peOIAboveSpot > (totalPeOI * 0.15);
+
+    // OI battle bias: who has more firepower near ATM (±2 strikes)
+    const nearChain = chain.filter(c => Math.abs(c.strike - realAtm) <= 2 * (chain[1]?.strike - chain[0]?.strike || 10));
+    const nearCeOI  = nearChain.reduce((s, c) => s + (c.CE_oi || 0), 0);
+    const nearPeOI  = nearChain.reduce((s, c) => s + (c.PE_oi || 0), 0);
+    const oiBattleBias = nearCeOI === 0 && nearPeOI === 0 ? 'NEUTRAL'
+      : nearPeOI / (nearCeOI || 1) > 1.5 ? 'BULLISH'   // Suresh dominant near ATM
+      : nearCeOI / (nearPeOI || 1) > 1.5 ? 'BEARISH'   // Ramesh dominant near ATM
+      : 'NEUTRAL';
+
+    // Conflict detector: technical direction vs OI battle bias
+    // (filled in by signal-analysis route which has both)
+    const oiBattleSummary = (() => {
+      const parts = [];
+      if (rameshTrapped)        parts.push(`Ramesh trapped (spot ${spot} > resist ${resistStrike}) — short squeeze risk`);
+      if (sureshTrapped)        parts.push(`Suresh trapped (spot ${spot} < support ${supportStrike}) — put squeeze risk`);
+      if (shortSqueezePotential) parts.push(`Short squeeze potential — large CE OI just below spot`);
+      if (putSqueezePotential)  parts.push(`Put squeeze potential — large PE OI just above spot`);
+      if (parts.length === 0)   parts.push('No squeeze detected — OI battle balanced');
+      return parts;
+    })();
+
+    // Per-strike PCR for top strikes near ATM (for Ramesh/Suresh visual)
+    const strikeAnalysis = chain
+      .filter(c => Math.abs(c.strike - realAtm) <= 5 * (chain[1]?.strike - chain[0]?.strike || 10))
+      .map(c => ({
+        strike: c.strike,
+        CE_oi:  c.CE_oi,
+        PE_oi:  c.PE_oi,
+        strikePCR: c.CE_oi > 0 ? parseFloat((c.PE_oi / c.CE_oi).toFixed(2)) : null,
+        rameshStrength: c.CE_oi,   // call writer power
+        sureshStrength: c.PE_oi,   // put writer power
+        winner: !c.CE_oi && !c.PE_oi ? 'NEUTRAL'
+              : (c.PE_oi / (c.CE_oi || 1)) > 1.5 ? 'SURESH'
+              : (c.CE_oi / (c.PE_oi || 1)) > 1.5 ? 'RAMESH'
+              : 'NEUTRAL',
+      }));
+
+    log(`OI ${sym}: PCR=${pcr} MaxPain=${maxPain} Support=${supportStrike} Resist=${resistStrike} OIBias=${oiBattleBias} RameshTrapped=${rameshTrapped}`, 'INFO');
 
     res.json({
       status: true, symbol: sym, expiry: chosenExpiryStr,
@@ -1086,6 +1151,13 @@ app.post('/oi-analysis', async (req, res) => {
       nearMaxPain:    maxPain ? Math.abs(spot - maxPain) / spot < 0.01 : false,
       nearSupport:    supportStrike ? Math.abs(spot - supportStrike) / spot < 0.005 : false,
       nearResistance: resistStrike  ? Math.abs(spot - resistStrike)  / spot < 0.005 : false,
+      // ── Ramesh / Suresh Intelligence ──
+      atmCeOI, atmPeOI, atmPCR,
+      rameshTrapped, sureshTrapped,
+      shortSqueezePotential, putSqueezePotential,
+      oiBattleBias,
+      oiBattleSummary,
+      strikeAnalysis,
     });
 
   } catch (err) {
@@ -1207,6 +1279,9 @@ const SIGNAL_WEIGHTS = {
   newsSentiment:   2,   // News keyword scoring (noisy — low weight)
   geoRisk:         2,   // Geopolitical risk headlines
   expiryDay:       1,   // Expiry day caution
+
+  // ── Ramesh/Suresh OI Battle (8 pts) ──────────────────────────────
+  oiBattle:        8,   // OI writer trap + squeeze + battle bias
 };
 
 // Max possible score = sum of all weights = 100
@@ -1460,6 +1535,80 @@ function scoreSignal(d, type) {
     }
   }
 
+  // ── 14. Ramesh/Suresh OI Battle — bonus scoring ───────────────────
+  // This check adds insight from OI positioning:
+  // • Ramesh trapped (spot above his CE OI wall) = bullish squeeze = CE bonus
+  // • Suresh trapped (spot below his PE OI wall) = bearish squeeze = PE bonus
+  // • OI battle bias near ATM aligns with trade direction = extra confidence
+  {
+    let oiBattleEarned = 0, oiBattleNote = '', oiBattlePass = null;
+    const hasBattleData = d.oiBattleBias && d.oiBattleBias !== 'NEUTRAL';
+
+    if (isCE) {
+      if (d.rameshTrapped) {
+        oiBattleEarned += 8;
+        oiBattleNote = `Ramesh trapped — short squeeze active, CE bullish ✓✓`;
+        oiBattlePass = true;
+      } else if (d.shortSqueezePotential) {
+        oiBattleEarned += 5;
+        oiBattleNote = `Short squeeze potential — large CE OI just below spot ✓`;
+        oiBattlePass = true;
+      } else if (d.oiBattleBias === 'BULLISH') {
+        oiBattleEarned += 4;
+        oiBattleNote = `Suresh dominant near ATM — OI battle bullish ✓`;
+        oiBattlePass = true;
+      } else if (d.oiBattleBias === 'BEARISH') {
+        oiBattleEarned += 0;
+        oiBattleNote = `Ramesh dominant near ATM — OI battle bearish, caution for CE`;
+        oiBattlePass = false;
+      } else if (d.sureshTrapped) {
+        oiBattleEarned += 0;
+        oiBattleNote = `Suresh trapped below spot — bearish OI, avoid CE`;
+        oiBattlePass = false;
+      } else {
+        oiBattleEarned += 2;
+        oiBattleNote = hasBattleData ? `OI battle neutral` : `OI battle data unavailable`;
+        oiBattlePass = null;
+      }
+      // OI vs Technical conflict detection
+      if (oiBattlePass === false && d.bias === 'BULLISH') {
+        oiBattleNote += ' ⚠️ CONFLICT: technicals bullish but OI bearish — reduce size!';
+      }
+    } else {
+      // PE trade
+      if (d.sureshTrapped) {
+        oiBattleEarned += 8;
+        oiBattleNote = `Suresh trapped — put squeeze active, PE bearish ✓✓`;
+        oiBattlePass = true;
+      } else if (d.putSqueezePotential) {
+        oiBattleEarned += 5;
+        oiBattleNote = `Put squeeze potential — large PE OI just above spot ✓`;
+        oiBattlePass = true;
+      } else if (d.oiBattleBias === 'BEARISH') {
+        oiBattleEarned += 4;
+        oiBattleNote = `Ramesh dominant near ATM — OI battle bearish ✓`;
+        oiBattlePass = true;
+      } else if (d.oiBattleBias === 'BULLISH') {
+        oiBattleEarned += 0;
+        oiBattleNote = `Suresh dominant near ATM — OI battle bullish, caution for PE`;
+        oiBattlePass = false;
+      } else if (d.rameshTrapped) {
+        oiBattleEarned += 0;
+        oiBattleNote = `Ramesh trapped above spot — bullish OI, avoid PE`;
+        oiBattlePass = false;
+      } else {
+        oiBattleEarned += 2;
+        oiBattleNote = hasBattleData ? `OI battle neutral` : `OI battle data unavailable`;
+        oiBattlePass = null;
+      }
+      // OI vs Technical conflict detection
+      if (oiBattlePass === false && d.bias === 'BEARISH') {
+        oiBattleNote += ' ⚠️ CONFLICT: technicals bearish but OI bullish — reduce size!';
+      }
+    }
+    breakdown.oiBattle = { earned: oiBattleEarned, max: 8, pass: oiBattlePass, note: oiBattleNote };
+  }
+
   // ── Total score ───────────────────────────────────────────────────
   const totalEarned  = Object.values(breakdown).reduce((s, b) => s + b.earned, 0);
   const totalPossible = Object.values(breakdown).reduce((s, b) => s + b.max, 0);
@@ -1546,6 +1695,17 @@ app.post('/signal-analysis', async (req, res) => {
       nearMaxPain:     oi?.nearMaxPain     || false,
       nearSupport:     oi?.nearSupport     || false,
       nearResistance:  oi?.nearResistance  || false,
+      // Ramesh / Suresh OI Intelligence
+      rameshTrapped:         oi?.rameshTrapped         || false,
+      sureshTrapped:         oi?.sureshTrapped         || false,
+      shortSqueezePotential: oi?.shortSqueezePotential || false,
+      putSqueezePotential:   oi?.putSqueezePotential   || false,
+      oiBattleBias:          oi?.oiBattleBias          || 'NEUTRAL',
+      oiBattleSummary:       oi?.oiBattleSummary       || [],
+      strikeAnalysis:        oi?.strikeAnalysis        || [],
+      atmCeOI:               oi?.atmCeOI               || 0,
+      atmPeOI:               oi?.atmPeOI               || 0,
+      atmPCR:                oi?.atmPCR                || null,
     };
 
     // ── Run weighted scorer ────────────────────────────────────────
