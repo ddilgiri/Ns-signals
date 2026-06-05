@@ -1568,69 +1568,6 @@ function scoreToProbability(score) {
   return Math.min(92, 80 + Math.round((score-75)*0.48));    // 75-100 → 80-92%
 }
 
-// ══════════════════════════════════════════════════════════════════
-// ALL-GREEN FILTER — Every parameter must align for signal to emit
-// Even ONE red = signal blocked. Only highest conviction trades!
-// ══════════════════════════════════════════════════════════════════
-function isAllGreen(sa, type) {
-  const isCE = type === 'CE';
-
-  // ── 1. Score must be STRONG (75+) ─────────────────────────────
-  if (!sa.score || sa.score < 75) return { pass: false, reason: `Score ${sa.score} < 75 — not STRONG` };
-
-  // ── 2. Market Bias (EMA) must align ───────────────────────────
-  if (isCE && sa.bias !== 'BULLISH')  return { pass: false, reason: `EMA bias ${sa.bias} — needs BULLISH for CE` };
-  if (!isCE && sa.bias !== 'BEARISH') return { pass: false, reason: `EMA bias ${sa.bias} — needs BEARISH for PE` };
-
-  // ── 3. Supertrend must align ───────────────────────────────────
-  if (!sa.supertrend) return { pass: false, reason: 'Supertrend data missing' };
-  if (isCE && sa.supertrend.trend !== 'UP')   return { pass: false, reason: 'Supertrend DOWN — blocks CE' };
-  if (!isCE && sa.supertrend.trend !== 'DOWN') return { pass: false, reason: 'Supertrend UP — blocks PE' };
-
-  // ── 4. MACD must align ────────────────────────────────────────
-  if (sa.macd) {
-    if (isCE && !sa.macd.aboveSignal)  return { pass: false, reason: 'MACD below signal — blocks CE' };
-    if (!isCE && sa.macd.aboveSignal)  return { pass: false, reason: 'MACD above signal — blocks PE' };
-  }
-
-  // ── 5. VWAP must align ────────────────────────────────────────
-  if (sa.aboveVwap !== null && sa.aboveVwap !== undefined) {
-    if (isCE && !sa.aboveVwap)  return { pass: false, reason: 'Price below VWAP — blocks CE' };
-    if (!isCE && sa.aboveVwap)  return { pass: false, reason: 'Price above VWAP — blocks PE' };
-  }
-
-  // ── 6. ORB must be confirmed ───────────────────────────────────
-  if (sa.orb_high && sa.orb_low && sa.ltp) {
-    if (isCE && sa.ltp < sa.orb_high)  return { pass: false, reason: `No ORB breakout (${sa.ltp} < ${sa.orb_high})` };
-    if (!isCE && sa.ltp > sa.orb_low)  return { pass: false, reason: `No ORB breakdown (${sa.ltp} > ${sa.orb_low})` };
-  }
-
-  // ── 7. Volume must be above average ───────────────────────────
-  if ((sa.volRatio || 1) < 1.2) return { pass: false, reason: `Volume ${sa.volRatio}x < 1.2x — low conviction` };
-
-  // ── 8. OI Battle bias must not oppose ─────────────────────────
-  if (isCE && sa.oiBattleBias === 'BEARISH')  return { pass: false, reason: 'OI battle bearish — Ramesh dominant, blocks CE' };
-  if (!isCE && sa.oiBattleBias === 'BULLISH') return { pass: false, reason: 'OI battle bullish — Suresh dominant, blocks PE' };
-
-  // ── 9. Ramesh/Suresh trap check ────────────────────────────────
-  if (isCE && sa.sureshTrapped)   return { pass: false, reason: 'Suresh trapped — put squeeze risk, blocks CE' };
-  if (!isCE && sa.rameshTrapped)  return { pass: false, reason: 'Ramesh trapped — short squeeze risk, blocks PE' };
-
-  // ── 10. RSI must not be extreme against direction ──────────────
-  const rsi = sa.rsi || 50;
-  if (isCE && rsi > 70)   return { pass: false, reason: `RSI ${rsi} overbought — blocks CE` };
-  if (!isCE && rsi < 30)  return { pass: false, reason: `RSI ${rsi} oversold — blocks PE` };
-
-  // ── 11. VIX must be manageable ────────────────────────────────
-  if (sa.vixValue && sa.vixValue > 20) return { pass: false, reason: `VIX ${sa.vixValue} > 20 — high risk` };
-
-  // ── 12. No hard block ─────────────────────────────────────────
-  if (sa.hardBlock) return { pass: false, reason: sa.hardBlockReason || 'Hard block active' };
-
-  // ── ALL GREEN! ────────────────────────────────────────────────
-  return { pass: true, reason: 'All parameters green ✅' };
-}
-
 // ── Main: call /signal-analysis for one symbol+type ──
 // Returns null if signal should be skipped.
 async function runSignalAnalysis(sym, type, spotPrice, exchange, resolvedToken) {
@@ -1784,15 +1721,13 @@ async function generateSignal(symbolObj, isIndex) {
   // Indices always have tokens; stocks without any token: skip
   if (!isIndex && !symbolToken) return null;
 
-  // STEP 3: determine CE/PE direction — strictly from bias, no randomness
-  // With all-green filter, we must pick the direction that CAN pass all checks
+  // STEP 3: determine CE/PE direction
   const cachedBias = (SA_CACHE[`${symbolObj.sym}_CE`] || SA_CACHE[`${symbolObj.sym}_PE`])?.data?.bias || 'NEUTRAL';
   let type;
   if (S.config.type === 'BOTH') {
-    // Strictly follow bias — no random selection
-    if (cachedBias === 'BULLISH')      type = 'CE';  // Bullish = CE only
-    else if (cachedBias === 'BEARISH') type = 'PE';  // Bearish = PE only
-    else return null; // NEUTRAL = skip — no clear direction
+    if (cachedBias === 'BULLISH')      type = Math.random() > 0.25 ? 'CE' : 'PE';
+    else if (cachedBias === 'BEARISH') type = Math.random() > 0.25 ? 'PE' : 'CE';
+    else                               type = Math.random() > 0.5  ? 'CE' : 'PE';
   } else {
     type = S.config.type;
   }
@@ -1801,24 +1736,9 @@ async function generateSignal(symbolObj, isIndex) {
   const sa = await runSignalAnalysis(symbolObj.sym, type, baseP, 'NSE', symbolToken);
   if (!sa) return null;
 
-  // STEP 5: ALL-GREEN FILTER — every parameter must be green
-  // Hard block check first
-  if (sa.hardBlock || sa.verdict === 'BLOCKED') {
-    addLog(`${_sym}: BLOCKED — ${sa.hardBlockReason||'VIX extreme'}`, 'warn');
-    return null;
-  }
-  if (sa.verdict === 'AVOID') {
-    addLog(`${_sym}: AVOID — score ${sa.score}/100 too low`, 'warn');
-    return null;
-  }
-
-  // All-green check — every parameter must align
-  const greenCheck = isAllGreen(sa, type);
-  if (!greenCheck.pass) {
-    addLog(`${_sym} ${type}: ❌ ${greenCheck.reason}`, 'warn');
-    return null;
-  }
-  addLog(`${_sym} ${type}: ✅ ALL GREEN — score ${sa.score} — ${greenCheck.reason}`, 'ok');
+  // STEP 5: verdict gates
+  if (sa.hardBlock || sa.verdict === 'BLOCKED') { addLog(`${_sym}: BLOCKED — ${sa.hardBlockReason||'VIX extreme'}`, 'warn'); return null; }
+  if (sa.verdict === 'AVOID') { addLog(`${_sym}: AVOID — score ${sa.score}/100 too low`, 'warn'); return null; }
 
   // Map weighted score to display probability
   const prob = scoreToProbability(sa.score || 0);
@@ -1934,10 +1854,6 @@ async function generateSignal(symbolObj, isIndex) {
     reason: topReason,
     warnings: sa.warnings || [],
     breakdown: sa.breakdown || {},
-    // All-green audit
-    allGreen:        sa.allGreen        || false,
-    greenCheckNote:  sa.greenCheckNote  || '',
-    greenFailReasons: sa.greenFailReasons || [],
     // Raw indicators from server
     rsi:        sa.rsi         ?? null,
     macd:       sa.macd        ?? null,
@@ -1975,6 +1891,19 @@ async function generateSignal(symbolObj, isIndex) {
     atmCeOI:              sa.atmCeOI               ?? 0,
     atmPeOI:              sa.atmPeOI               ?? 0,
     atmPCR:               sa.atmPCR                ?? null,
+    // ── Dilip OI Formula ──
+    dilipFormula:         sa.dilipFormula          ?? 'NEUTRAL',
+    dilipFormulaNote:     sa.dilipFormulaNote      ?? '',
+    ceSignal:             sa.ceSignal              ?? null,
+    peSignal:             sa.peSignal              ?? null,
+    putTrapRisk:          sa.putTrapRisk           || false,
+    callTrapRisk:         sa.callTrapRisk          || false,
+    oiRecommendation:     sa.oiRecommendation      ?? 'NEUTRAL',
+    oiScore:              sa.oiScore               ?? 0,
+    oiVerdict:            sa.oiVerdict             ?? 'WEAK',
+    oiNotes:              sa.oiNotes               ?? [],
+    ceWalls:              sa.ceWalls               ?? [],
+    peFloors:             sa.peFloors              ?? [],
     time: new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
     ts:   Date.now(),
   };
@@ -2570,11 +2499,6 @@ function openDrawer(idStr) {
     <div class="drawer-row"><span class="drawer-row-label">Max Pain</span><span class="drawer-row-val">${sig.maxPain ? '₹'+sig.maxPain.toLocaleString('en-IN') : '–'}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio ? sig.volRatio.toFixed(1)+'x' : '–'}</span></div>
     <div class="drawer-row"><span class="drawer-row-label">FII/DII Bias</span><span class="drawer-row-val" style="color:${sig.instBias==='BULLISH'?'var(--green)':sig.instBias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.instBias||'–'}</span></div>
-    <!-- ALL GREEN PANEL -->
-    <div style="background:${sig.allGreen?'rgba(15,169,88,0.08)':'rgba(229,57,53,0.08)'};border:1px solid ${sig.allGreen?'#0FA958':'var(--red)'};border-radius:var(--r);padding:11px 13px;margin:12px 0">
-      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${sig.allGreen?'✅ ALL GREEN — Highest Conviction':'⚠️ Not All Green'}</div>
-      ${sig.allGreen?`<div style="font-size:12px;color:var(--green);font-weight:700">Every parameter aligned ✅</div>`:`<div style="font-size:11px;color:var(--amber)">${(sig.greenFailReasons||[]).map(r=>'❌ '+r).join('<br>')}</div>`}
-    </div>
     <div class="drawer-row"><span class="drawer-row-label">News Sentiment</span><span class="drawer-row-val" style="color:${sig.newsSentimentScore>60?'var(--green)':sig.newsSentimentScore<40?'var(--red)':'var(--text3)'}">
       ${sig.newsSentiment||'–'} (${sig.newsSentimentScore||50}%)
     </span></div>
@@ -2629,6 +2553,18 @@ function openDrawer(idStr) {
       </div>` : ''}
     </div>` : ''}
 
+
+    <!-- DILIP OI BATTLEFIELD -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin:12px 0">
+      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚔️ OI Battlefield</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:var(--text2)">Formula</span><span style="font-size:12px;font-weight:800;color:${sig.dilipFormula==='CE'?'var(--green)':sig.dilipFormula==='PE'?'var(--red)':'var(--amber)'}">${sig.dilipFormula||'NEUTRAL'}</span></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sig.dilipFormulaNote||'–'}</div>
+      ${sig.putTrapRisk?'<div style="color:var(--red);font-size:11px;font-weight:700">☠️ PUT TRAP RISK!</div>':''}
+      ${sig.callTrapRisk?'<div style="color:var(--red);font-size:11px;font-weight:700">☠️ CALL TRAP RISK!</div>':''}
+      ${sig.ceSignal?`<div style="font-size:11px;color:var(--text3)">CE: ${sig.ceSignal.note||''}</div>`:''}
+      ${sig.peSignal?`<div style="font-size:11px;color:var(--text3)">PE: ${sig.peSignal.note||''}</div>`:''}
+      <div style="margin-top:6px;display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">OI Score</span><span style="font-size:12px;font-weight:800;color:${(sig.oiScore||0)>=70?'var(--green)':(sig.oiScore||0)>=50?'var(--amber)':'var(--red)'}">${sig.oiScore||0}/100</span></div>
+    </div>
     <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
       <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
       ${sig.reason}
@@ -2809,13 +2745,6 @@ function buildWhyTags(sig) {
   if (sig.verdict) {
     const verdictCls = sig.verdict === 'STRONG' ? 'g' : sig.verdict === 'MODERATE' ? 'a' : 'r';
     tags.push(`<span class="sig-why-tag ${verdictCls}">${sig.verdict} ${sig.score || ''}pts</span>`);
-  }
-
-  // ALL GREEN badge — show prominently if all parameters passed
-  if (sig.allGreen) {
-    tags.push(`<span class="sig-why-tag g">✅ ALL GREEN</span>`);
-  } else if (sig.greenFailReasons?.length) {
-    tags.push(`<span class="sig-why-tag r">⚠️ ${sig.greenFailReasons[0]}</span>`);
   }
 
   if (!tags.length) return `<span class="sig-why-tag a">${sig.reason || 'MOMENTUM SETUP'}</span>`;

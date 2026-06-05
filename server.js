@@ -1063,29 +1063,224 @@ app.post('/oi-analysis', async (req, res) => {
     // Max Pain
     const maxPain = calcMaxPain(chain);
 
-    // Resistance = CE strike with highest OI (call writers defend it)
-    const resistStrike = chain.reduce((b, c) => (c.CE_oi > (b?.CE_oi || 0) ? c : b), null)?.strike || null;
-    // Support = PE strike with highest OI (put writers defend it)
-    const supportStrike = chain.reduce((b, c) => (c.PE_oi > (b?.PE_oi || 0) ? c : b), null)?.strike || null;
+    // ══════════════════════════════════════════════════════════════
+    // RAMESH / SURESH OI ENGINE — Complete battlefield analysis
+    // Based on: High CE above = ceiling, High PE below = floor
+    // CE below spot = Ramesh trapped, PE above spot = Suresh trapped
+    // ══════════════════════════════════════════════════════════════
 
-    // OI buildup / unwinding signals
-    // Long buildup: CE OI increasing + price rising → bullish momentum
-    const ceBuildup   = chain.filter(c => c.CE_oiChange > 0 && c.strike > realAtm).slice(0, 3);
-    const peBuildup   = chain.filter(c => c.PE_oiChange > 0 && c.strike < realAtm).slice(-3);
+    const strikeGap = chain.length > 1 ? Math.abs(chain[1].strike - chain[0].strike) : 5;
 
-    log(`OI ${sym}: PCR=${pcr} MaxPain=${maxPain} Support=${supportStrike} Resist=${resistStrike}`, 'INFO');
+    // ── Classify each strike relative to spot ─────────────────────
+    const aboveSpot = chain.filter(c => c.strike > realAtm);
+    const belowSpot = chain.filter(c => c.strike < realAtm);
+    const atSpot    = chain.find(c => c.strike === realAtm) || {};
+
+    // ── CEILING ANALYSIS (CE OI above spot) ───────────────────────
+    // High CE OI above spot = Ramesh army = blocks price rise
+    const ceAbove = aboveSpot.map(c => ({ strike: c.strike, oi: c.CE_oi, change: c.CE_oiChange }))
+      .sort((a,b) => b.oi - a.oi);
+    const maxCeAbove = ceAbove[0] || null;
+    const totalCeAbove = aboveSpot.reduce((s,c) => s + (c.CE_oi||0), 0);
+
+    // ── FLOOR ANALYSIS (PE OI below spot) ─────────────────────────
+    // High PE OI below spot = Suresh army = blocks price fall
+    const peBelow = belowSpot.map(c => ({ strike: c.strike, oi: c.PE_oi, change: c.PE_oiChange }))
+      .sort((a,b) => b.oi - a.oi);
+    const maxPeBelow = peBelow[0] || null;
+    const totalPeBelow = belowSpot.reduce((s,c) => s + (c.PE_oi||0), 0);
+
+    // ── TRAPPED ANALYSIS ──────────────────────────────────────────
+    // CE OI below spot = Ramesh already trapped (spot crossed his strike)
+    const ceBelow = belowSpot.map(c => ({ strike: c.strike, oi: c.CE_oi, change: c.CE_oiChange }))
+      .sort((a,b) => b.oi - a.oi);
+    const rameshTrappedOI = ceBelow.reduce((s,c) => s + (c.oi||0), 0);
+    const rameshTrapped   = rameshTrappedOI > totalCeAbove * 0.3; // significant trapped OI
+
+    // PE OI above spot = Suresh already trapped (spot fell below his strike)
+    const peAbove = aboveSpot.map(c => ({ strike: c.strike, oi: c.PE_oi, change: c.PE_oiChange }))
+      .sort((a,b) => b.oi - a.oi);
+    const sureshTrappedOI = peAbove.reduce((s,c) => s + (c.oi||0), 0);
+    const sureshTrapped   = sureshTrappedOI > totalPeBelow * 0.3;
+
+    // ── DILIP'S FORMULA ───────────────────────────────────────────
+    // High CE above + Low PE below = BUY PE (ceiling strong, floor weak)
+    // High PE below + Low CE above = BUY CE (floor strong, ceiling weak)
+    const avgChainOI = (totalCeOI + totalPeOI) / (chain.length * 2 || 1);
+    const ceilStrong  = maxCeAbove  && maxCeAbove.oi  > avgChainOI * 1.5;
+    const floorStrong = maxPeBelow  && maxPeBelow.oi  > avgChainOI * 1.5;
+    const ceilWeak    = !maxCeAbove || maxCeAbove.oi  < avgChainOI * 0.7;
+    const floorWeak   = !maxPeBelow || maxPeBelow.oi  < avgChainOI * 0.7;
+
+    let dilipFormula = 'NEUTRAL';
+    let dilipFormulaNote = '';
+    if (ceilStrong && floorWeak) {
+      dilipFormula     = 'PE';
+      dilipFormulaNote = `High CE ceiling (${maxCeAbove?.oi?.toLocaleString('en-IN')}) + weak PE floor = price free to fall`;
+    } else if (floorStrong && ceilWeak) {
+      dilipFormula     = 'CE';
+      dilipFormulaNote = `High PE floor (${maxPeBelow?.oi?.toLocaleString('en-IN')}) + weak CE ceiling = price free to rise`;
+    } else if (ceilStrong && floorStrong) {
+      dilipFormula     = 'AVOID';
+      dilipFormulaNote = `Both sides strong = price trapped = avoid`;
+    } else {
+      dilipFormula     = 'NEUTRAL';
+      dilipFormulaNote = `No clear OI dominance`;
+    }
+
+    // ── TRAP DETECTION ────────────────────────────────────────────
+    // PUT TRAP: PE OI rising + price rising = Suresh collecting premium
+    const recentPeOIChange = chain
+      .filter(c => c.strike >= realAtm - strikeGap*2 && c.strike <= realAtm + strikeGap*2)
+      .reduce((s,c) => s + (c.PE_oiChange||0), 0) / 4;
+    const recentCeOIChange = chain
+      .filter(c => c.strike >= realAtm - strikeGap*2 && c.strike <= realAtm + strikeGap*2)
+      .reduce((s,c) => s + (c.CE_oiChange||0), 0) / 4;
+
+    // Use pcrBias + OI changes to detect traps
+    const putTrapRisk  = recentPeOIChange > 50 && pcrBias !== 'BEARISH'; // PE OI exploding but not clearly bearish
+    const callTrapRisk = recentCeOIChange > 50 && pcrBias !== 'BULLISH'; // CE OI exploding but not clearly bullish
+
+    // ── 4 SCENARIOS PER SIDE ──────────────────────────────────────
+    const ceSignal = (() => {
+      const oiRising  = recentCeOIChange > 5;
+      const priceUp   = pcrBias === 'BEARISH'; // low PCR = Ramesh winning
+      if ( oiRising && !priceUp) return { signal: 'SHORT_BUILDUP',   action: 'BUY_PE',   note: 'Ramesh adding ceiling — bearish' };
+      if ( oiRising &&  priceUp) return { signal: 'LONG_BUILDUP',    action: 'CAUTION',  note: 'Both adding — uncertain' };
+      if (!oiRising && !priceUp) return { signal: 'LONG_UNWINDING',  action: 'HOLD_CE',  note: 'Ramesh booking profit' };
+      if (!oiRising &&  priceUp) return { signal: 'SHORT_COVERING',  action: 'BUY_CE',   note: 'Ramesh RUNNING — buy CE fast!' };
+      return { signal: 'NEUTRAL', action: 'WAIT', note: 'No clear signal' };
+    })();
+
+    const peSignal = (() => {
+      const oiRising  = recentPeOIChange > 5;
+      const priceDown = pcrBias === 'BULLISH'; // high PCR = Suresh winning
+      if ( oiRising &&  priceDown) return { signal: 'LONG_BUILDUP',   action: 'BUY_CE',  note: 'Suresh adding floor — bullish' };
+      if ( oiRising && !priceDown) return { signal: 'PUT_TRAP',       action: 'AVOID_PE', note: '⚠️ PUT TRAP! Suresh collecting premium!' };
+      if (!oiRising &&  priceDown) return { signal: 'LONG_UNWINDING', action: 'HOLD_CE',  note: 'Suresh booking profit' };
+      if (!oiRising && !priceDown) return { signal: 'PUT_COVERING',   action: 'BUY_PE',   note: 'Suresh RUNNING — buy PE fast!' };
+      return { signal: 'NEUTRAL', action: 'WAIT', note: 'No clear signal' };
+    })();
+
+    // ── FINAL OI RECOMMENDATION ───────────────────────────────────
+    let oiRecommendation = 'NEUTRAL';
+    let oiScore = 0; // 0-100 OI confidence score
+    let oiNotes = [];
+
+    // Dilip formula (40 pts)
+    if (dilipFormula === 'CE') { oiScore += 40; oiRecommendation = 'CE'; oiNotes.push(`Formula: ${dilipFormulaNote}`); }
+    else if (dilipFormula === 'PE') { oiScore += 40; oiRecommendation = 'PE'; oiNotes.push(`Formula: ${dilipFormulaNote}`); }
+    else if (dilipFormula === 'AVOID') { oiNotes.push('Formula: Both trapped — avoid'); }
+
+    // CE signal (20 pts)
+    if (ceSignal.action === 'BUY_CE' && oiRecommendation !== 'PE') { oiScore += 20; oiNotes.push(`CE: ${ceSignal.note}`); }
+    else if (ceSignal.action === 'BUY_PE' && oiRecommendation !== 'CE') { oiScore += 20; oiNotes.push(`CE: ${ceSignal.note}`); }
+
+    // PE signal (20 pts)
+    if (peSignal.action === 'BUY_CE' && oiRecommendation === 'CE') { oiScore += 20; oiNotes.push(`PE: ${peSignal.note}`); }
+    else if (peSignal.action === 'BUY_PE' && oiRecommendation === 'PE') { oiScore += 20; oiNotes.push(`PE: ${peSignal.note}`); }
+
+    // Trap detection (negative)
+    if (oiRecommendation === 'PE' && putTrapRisk)  { oiScore -= 30; oiNotes.push('⚠️ PUT TRAP risk detected!'); }
+    if (oiRecommendation === 'CE' && callTrapRisk) { oiScore -= 30; oiNotes.push('⚠️ CALL TRAP risk detected!'); }
+
+    // Trapped analysis bonus (20 pts)
+    if (oiRecommendation === 'CE' && rameshTrapped) { oiScore += 20; oiNotes.push('Ramesh trapped below = short covering likely'); }
+    if (oiRecommendation === 'PE' && sureshTrapped) { oiScore += 20; oiNotes.push('Suresh trapped above = put covering likely'); }
+
+    oiScore = Math.max(0, Math.min(100, oiScore));
+
+    // OI verdict
+    const oiVerdict = oiScore >= 70 ? 'STRONG' : oiScore >= 50 ? 'MODERATE' : oiScore >= 30 ? 'WEAK' : 'AVOID';
+
+    // ── NEAREST SUPPORT/RESISTANCE ────────────────────────────────
+    const nearestCeResistance = aboveSpot
+      .filter(c => c.CE_oi > 0)
+      .sort((a,b) => a.strike - b.strike)[0]?.strike || null;
+    const nearestPeSupport = belowSpot
+      .filter(c => c.PE_oi > 0)
+      .sort((a,b) => b.strike - a.strike)[0]?.strike || null;
+
+    // Top 3 CE walls above spot
+    const ceWalls = ceAbove.slice(0,3).map(c => ({
+      strike: c.strike,
+      oi: c.oi,
+      oiChange: c.change,
+      strength: c.oi > avgChainOI * 2 ? 'STRONG' : c.oi > avgChainOI ? 'MEDIUM' : 'WEAK'
+    }));
+
+    // Top 3 PE floors below spot
+    const peFloors = peBelow.slice(0,3).map(c => ({
+      strike: c.strike,
+      oi: c.oi,
+      oiChange: c.change,
+      strength: c.oi > avgChainOI * 2 ? 'STRONG' : c.oi > avgChainOI ? 'MEDIUM' : 'WEAK'
+    }));
+
+    // Per-strike PCR
+    const strikePCR = chain.map(c => ({
+      strike: c.strike,
+      pcr: c.CE_oi > 0 ? parseFloat((c.PE_oi / c.CE_oi).toFixed(2)) : null,
+      CE_oi: c.CE_oi,
+      PE_oi: c.PE_oi,
+      CE_change: c.CE_oiChange,
+      PE_change: c.PE_oiChange,
+      position: c.strike > realAtm ? 'ABOVE' : c.strike < realAtm ? 'BELOW' : 'ATM',
+      rameshStrength: c.CE_oi > avgChainOI * 1.5 ? 'STRONG' : c.CE_oi > avgChainOI * 0.7 ? 'MEDIUM' : 'WEAK',
+      sureshStrength: c.PE_oi > avgChainOI * 1.5 ? 'STRONG' : c.PE_oi > avgChainOI * 0.7 ? 'MEDIUM' : 'WEAK',
+    }));
+
+    log(`OI ${sym}: PCR=${pcr} OIRecommendation=${oiRecommendation} OIScore=${oiScore} DilipFormula=${dilipFormula} RameshTrapped=${rameshTrapped} SureshTrapped=${sureshTrapped} PutTrap=${putTrapRisk}`, 'INFO');
 
     res.json({
       status: true, symbol: sym, expiry: chosenExpiryStr,
       atmStrike: realAtm, spotPrice: spot,
       pcr, pcrBias, maxPain,
-      supportStrike, resistStrike,
       totalCeOI, totalPeOI,
       chain,
-      // Proximity flags
-      nearMaxPain:    maxPain ? Math.abs(spot - maxPain) / spot < 0.01 : false,
-      nearSupport:    supportStrike ? Math.abs(spot - supportStrike) / spot < 0.005 : false,
-      nearResistance: resistStrike  ? Math.abs(spot - resistStrike)  / spot < 0.005 : false,
+
+      // ── Proximity flags ──
+      nearMaxPain:       maxPain ? Math.abs(spot - maxPain) / spot < 0.01 : false,
+      nearSupport:       nearestPeSupport ? Math.abs(spot - nearestPeSupport) / spot < 0.005 : false,
+      nearResistance:    nearestCeResistance ? Math.abs(spot - nearestCeResistance) / spot < 0.005 : false,
+      supportStrike:     nearestPeSupport,
+      resistStrike:      nearestCeResistance,
+
+      // ── Ramesh / Suresh Battlefield ──
+      ceWalls,           // Top 3 CE walls above spot
+      peFloors,          // Top 3 PE floors below spot
+      rameshTrapped,     // CE OI below spot = Ramesh trapped
+      sureshTrapped,     // PE OI above spot = Suresh trapped
+      rameshTrappedOI,
+      sureshTrappedOI,
+
+      // ── Dilip's Formula ──
+      dilipFormula,      // PE | CE | AVOID | NEUTRAL
+      dilipFormulaNote,
+
+      // ── Scenario Signals ──
+      ceSignal,          // SHORT_BUILDUP | LONG_BUILDUP | SHORT_COVERING | LONG_UNWINDING
+      peSignal,          // LONG_BUILDUP | PUT_TRAP | LONG_UNWINDING | PUT_COVERING
+
+      // ── Trap Detection ──
+      putTrapRisk,
+      callTrapRisk,
+
+      // ── OI Recommendation ──
+      oiRecommendation,  // CE | PE | AVOID | NEUTRAL
+      oiScore,           // 0-100
+      oiVerdict,         // STRONG | MODERATE | WEAK | AVOID
+      oiNotes,
+
+      // ── Per-strike analysis ──
+      strikePCR,
+      atmCeOI:  atSpot.CE_oi  || 0,
+      atmPeOI:  atSpot.PE_oi  || 0,
+      atmPCR:   atSpot.CE_oi > 0 ? parseFloat((atSpot.PE_oi / atSpot.CE_oi).toFixed(2)) : null,
+
+      // ── OI Battle Bias (for all-green filter) ──
+      oiBattleBias: oiRecommendation === 'CE' ? 'BULLISH' : oiRecommendation === 'PE' ? 'BEARISH' : 'NEUTRAL',
+      oiBattleSummary: oiNotes,
     });
 
   } catch (err) {
@@ -1207,6 +1402,9 @@ const SIGNAL_WEIGHTS = {
   newsSentiment:   2,   // News keyword scoring (noisy — low weight)
   geoRisk:         2,   // Geopolitical risk headlines
   expiryDay:       1,   // Expiry day caution
+
+  // ── DILIP OI FORMULA (25 pts) — Ramesh/Suresh battlefield ────────
+  dilipOIFormula:  25,  // High CE above + Low PE below = PE | High PE below + Low CE above = CE
 };
 
 // Max possible score = sum of all weights = 100
@@ -1460,6 +1658,44 @@ function scoreSignal(d, type) {
     }
   }
 
+  // ── 14. DILIP OI FORMULA — 25 pts ─────────────────────────────────
+  // High CE above + Low PE below = PE signal
+  // High PE below + Low CE above = CE signal
+  // Trap detection = negative scoring
+  {
+    const w = SIGNAL_WEIGHTS.dilipOIFormula || 25;
+    let earned = 0; let note = ''; let pass = false;
+
+    const formula    = d.dilipFormula    || 'NEUTRAL';
+    const putTrap    = d.putTrapRisk     || false;
+    const callTrap   = d.callTrapRisk    || false;
+    const oiScore    = d.oiScore         || 0;
+    const ceSignal   = d.ceSignal?.signal || '';
+    const peSignal   = d.peSignal?.signal || '';
+
+    // Trap blocks completely
+    if (isCE && putTrap)  { earned = 0; note = '⚠️ PUT TRAP risk — blocks CE'; pass = false; }
+    else if (!isCE && callTrap) { earned = 0; note = '⚠️ CALL TRAP risk — blocks PE'; pass = false; }
+
+    // Formula alignment
+    else if (isCE && formula === 'CE')  { earned = w; note = `Dilip formula: ${d.dilipFormulaNote}`; pass = true; }
+    else if (!isCE && formula === 'PE') { earned = w; note = `Dilip formula: ${d.dilipFormulaNote}`; pass = true; }
+    else if (formula === 'AVOID')       { earned = 0; note = 'Both sides strong = price trapped'; pass = false; }
+
+    // Partial credit for scenario signals
+    else if (isCE && ceSignal === 'SHORT_COVERING') { earned = w * 0.8; note = 'Ramesh running — CE opportunity'; pass = true; }
+    else if (!isCE && peSignal === 'PUT_COVERING')  { earned = w * 0.8; note = 'Suresh running — PE opportunity'; pass = true; }
+    else if (isCE && ceSignal === 'LONG_BUILDUP')   { earned = w * 0.4; note = 'Long buildup — CE with caution'; pass = null; }
+    else if (!isCE && peSignal === 'LONG_BUILDUP')  { earned = w * 0.4; note = 'Long buildup — PE with caution'; pass = null; }
+    else { earned = 0; note = `OI formula ${formula} does not match ${isCE?'CE':'PE'} direction`; pass = false; }
+
+    // Bonus for trapped analysis
+    if (isCE && d.rameshTrapped && pass)  { earned = Math.min(w, earned + 5); note += ' + Ramesh trapped bonus'; }
+    if (!isCE && d.sureshTrapped && pass) { earned = Math.min(w, earned + 5); note += ' + Suresh trapped bonus'; }
+
+    breakdown.dilipOIFormula = { earned: Math.round(earned), max: w, pass, note };
+  }
+
   // ── Total score ───────────────────────────────────────────────────
   const totalEarned  = Object.values(breakdown).reduce((s, b) => s + b.earned, 0);
   const totalPossible = Object.values(breakdown).reduce((s, b) => s + b.max, 0);
@@ -1546,6 +1782,28 @@ app.post('/signal-analysis', async (req, res) => {
       nearMaxPain:     oi?.nearMaxPain     || false,
       nearSupport:     oi?.nearSupport     || false,
       nearResistance:  oi?.nearResistance  || false,
+
+      // ── Dilip OI Formula fields ──
+      dilipFormula:    oi?.dilipFormula    || 'NEUTRAL',
+      dilipFormulaNote: oi?.dilipFormulaNote || '',
+      ceSignal:        oi?.ceSignal        || null,
+      peSignal:        oi?.peSignal        || null,
+      putTrapRisk:     oi?.putTrapRisk     || false,
+      callTrapRisk:    oi?.callTrapRisk    || false,
+      oiRecommendation: oi?.oiRecommendation || 'NEUTRAL',
+      oiScore:         oi?.oiScore         || 0,
+      oiVerdict:       oi?.oiVerdict       || 'WEAK',
+      oiNotes:         oi?.oiNotes         || [],
+      ceWalls:         oi?.ceWalls         || [],
+      peFloors:        oi?.peFloors        || [],
+      rameshTrapped:   oi?.rameshTrapped   || false,
+      sureshTrapped:   oi?.sureshTrapped   || false,
+      oiBattleBias:    oi?.oiBattleBias    || 'NEUTRAL',
+      oiBattleSummary: oi?.oiBattleSummary || [],
+      atmCeOI:         oi?.atmCeOI         || 0,
+      atmPeOI:         oi?.atmPeOI         || 0,
+      atmPCR:          oi?.atmPCR          || null,
+      strikePCR:       oi?.strikePCR       || [],
     };
 
     // ── Run weighted scorer ────────────────────────────────────────
@@ -1569,43 +1827,6 @@ app.post('/signal-analysis', async (req, res) => {
       verdict    = 'AVOID';
       actionNote = 'Poor alignment — skip this signal';
     }
-
-    // ── ALL-GREEN SERVER CHECK ─────────────────────────────────────
-    // Validate every core parameter aligns — adds greenCheck to response
-    // Frontend isAllGreen() does final gate, this adds server-side audit trail
-    const greenFailReasons = [];
-    if (score < 75)                                           greenFailReasons.push(`Score ${score} < 75`);
-    if (isCE  && d.bias !== 'BULLISH')                        greenFailReasons.push(`EMA ${d.bias} ≠ BULLISH`);
-    if (!isCE && d.bias !== 'BEARISH')                        greenFailReasons.push(`EMA ${d.bias} ≠ BEARISH`);
-    if (d.supertrend) {
-      if (isCE  && d.supertrend.trend !== 'UP')               greenFailReasons.push('Supertrend DOWN');
-      if (!isCE && d.supertrend.trend !== 'DOWN')             greenFailReasons.push('Supertrend UP');
-    }
-    if (d.macd) {
-      if (isCE  && !d.macd.aboveSignal)                       greenFailReasons.push('MACD below signal');
-      if (!isCE && d.macd.aboveSignal)                        greenFailReasons.push('MACD above signal');
-    }
-    if (d.aboveVwap !== null) {
-      if (isCE  && !d.aboveVwap)                              greenFailReasons.push('Below VWAP');
-      if (!isCE && d.aboveVwap)                               greenFailReasons.push('Above VWAP');
-    }
-    if (d.orb_high && d.orb_low && d.ltp) {
-      if (isCE  && d.ltp < d.orb_high)                        greenFailReasons.push('No ORB breakout');
-      if (!isCE && d.ltp > d.orb_low)                         greenFailReasons.push('No ORB breakdown');
-    }
-    if ((d.volRatio || 1) < 1.2)                              greenFailReasons.push(`Vol ${d.volRatio}x < 1.2x`);
-    if (isCE  && d.oiBattleBias === 'BEARISH')                greenFailReasons.push('OI battle bearish');
-    if (!isCE && d.oiBattleBias === 'BULLISH')                greenFailReasons.push('OI battle bullish');
-    if (isCE  && d.sureshTrapped)                             greenFailReasons.push('Suresh trapped');
-    if (!isCE && d.rameshTrapped)                             greenFailReasons.push('Ramesh trapped');
-    const rsiVal = d.rsi || 50;
-    if (isCE  && rsiVal > 70)                                 greenFailReasons.push(`RSI ${rsiVal} overbought`);
-    if (!isCE && rsiVal < 30)                                 greenFailReasons.push(`RSI ${rsiVal} oversold`);
-    if (d.vixValue && d.vixValue > 20)                        greenFailReasons.push(`VIX ${d.vixValue} > 20`);
-
-    const allGreen       = greenFailReasons.length === 0;
-    const greenCheckNote = allGreen ? '✅ All parameters green' : `❌ ${greenFailReasons.join(' | ')}`;
-    if (!allGreen && verdict === 'STRONG') verdict = 'MODERATE'; // Downgrade if green check fails
 
     // ── ATR-based risk levels ─────────────────────────────────────
     let suggestedStop = null, suggestedTarget = null, riskReward = null;
@@ -1646,10 +1867,6 @@ app.post('/signal-analysis', async (req, res) => {
       actionNote,
       hardBlock,
       hardBlockReason: hardBlock ? hardBlockReason : null,
-      // ── All-Green audit ──
-      allGreen,
-      greenCheckNote,
-      greenFailReasons,
       // ── Breakdown ──
       breakdown,           // per-check { earned, max, pass, note }
       reasons,             // top 3 positive reasons
