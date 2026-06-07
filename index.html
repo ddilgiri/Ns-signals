@@ -53,8 +53,8 @@ body{font-family:var(--font-sans);font-weight:400;color:var(--text);display:flex
 }
 .topbar-logo{width:34px;height:34px;background:linear-gradient(135deg,var(--green),var(--cyan));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .topbar-title{flex:1}
-.topbar-title h1{font-size:13px;font-family:var(--font-sans);font-weight:900;letter-spacing:.1em;color:var(--text);text-transform:uppercase}
-.topbar-title p{font-size:9px;font-weight:300;color:var(--text3);letter-spacing:.06em;margin-top:1px}
+.topbar-title h1{font-size:15px;font-family:var(--font-sans);font-weight:900;letter-spacing:.08em;color:var(--text);text-transform:uppercase}
+.topbar-title p{font-size:10px;font-weight:400;color:var(--text3);letter-spacing:.05em;margin-top:1px}
 .topbar-right{display:flex;align-items:center;gap:8px}
 
 /* ── STATUS PILL ── */
@@ -112,25 +112,25 @@ body{font-family:var(--font-sans);font-weight:400;color:var(--text);display:flex
 
 /* ── SIGNAL CARD ── */
 .sig-card{
-  background:var(--bg2);border:1px solid var(--border);border-radius:14px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;
   margin:8px 12px 0;padding:0;position:relative;overflow:hidden;
-  cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;
+  transition:transform .12s,box-shadow .12s,border-color .12s;
 }
 .sig-card:active{transform:scale(0.985);box-shadow:none}
-.sig-card.ce-card{border-left:3px solid var(--green)}
-.sig-card.pe-card{border-left:3px solid var(--red)}
+.sig-card.ce-card{border-left:4px solid var(--green);border-top:1px solid #0FA95822}
+.sig-card.pe-card{border-left:4px solid var(--red);border-top:1px solid #E5393522}
 /* Card inner padding wrapper */
-.sig-inner{padding:13px 14px 12px 15px}
+.sig-inner{padding:14px 14px 13px 15px}
 /* Removed old sig-bar — replaced by border-left on card */
 .sig-bar{display:none}
 /* Header row */
-.sig-r1{display:flex;align-items:center;gap:7px;margin-bottom:9px}
-.sig-type{font-size:10px;font-family:var(--font-sans);font-weight:700;padding:3px 9px;border-radius:6px;letter-spacing:.04em;text-transform:uppercase}
-.sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #0FA95830}
-.sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #E5393530}
-.sig-name{font-size:15px;font-weight:700;color:var(--text);flex:1;font-family:var(--font-sans);letter-spacing:-.01em}
-.sig-prob-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
-.sig-prob{font-size:20px;font-weight:900;font-family:var(--font-mono);line-height:1;letter-spacing:-.02em}
+.sig-r1{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sig-type{font-size:11px;font-family:var(--font-sans);font-weight:800;padding:4px 10px;border-radius:7px;letter-spacing:.06em;text-transform:uppercase}
+.sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #0FA95835}
+.sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #E5393535}
+.sig-name{font-size:17px;font-weight:900;color:var(--text);flex:1;font-family:var(--font-sans);letter-spacing:-.02em}
+.sig-prob-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.sig-prob{font-size:22px;font-weight:900;font-family:var(--font-mono);line-height:1;letter-spacing:-.03em}
 .sig-prob-lbl{font-size:7px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.1em}
 /* Setup + meta pill row */
 .sig-meta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
@@ -139,35 +139,35 @@ body{font-family:var(--font-sans);font-weight:400;color:var(--text);display:flex
 .sig-pill.dim{background:var(--bg4);border-color:var(--border);color:var(--text3)}
 /* Price cells */
 .sig-prices{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
-.sig-price-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:9px 11px}
-.sig-price-lbl{font-size:7px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
-.sig-price-val{font-size:17px;font-weight:700;font-family:var(--font-mono);line-height:1.1;letter-spacing:-.01em}
-.sig-price-entry{font-size:9px;font-family:var(--font-sans);font-weight:300;margin-top:3px;color:var(--text3)}
+.sig-price-box{background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:10px 12px}
+.sig-price-lbl{font-size:8px;font-family:var(--font-sans);font-weight:400;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:5px;display:flex;align-items:center;gap:4px}
+.sig-price-val{font-size:19px;font-weight:900;font-family:var(--font-mono);line-height:1.1;letter-spacing:-.02em}
+.sig-price-entry{font-size:10px;font-family:var(--font-sans);font-weight:400;margin-top:4px;color:var(--text3)}
 /* Target / SL / P&L */
 .sig-tsl{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:6px;margin-bottom:9px}
-.sig-tsl-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
-.sig-tsl-lbl{font-size:7px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:3px}
-.sig-tsl-val{font-size:15px;font-weight:700;font-family:var(--font-mono);line-height:1;letter-spacing:-.01em}
-.sig-tsl-sub{font-size:8px;font-family:var(--font-sans);font-weight:300;color:var(--text3);margin-top:2px}
-/* P&L box — bigger, bolder, Roboto Black */
+.sig-tsl-box{background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:9px 11px}
+.sig-tsl-lbl{font-size:8px;font-family:var(--font-sans);font-weight:400;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:4px}
+.sig-tsl-val{font-size:16px;font-weight:900;font-family:var(--font-mono);line-height:1;letter-spacing:-.02em}
+.sig-tsl-sub{font-size:9px;font-family:var(--font-sans);font-weight:300;color:var(--text3);margin-top:3px}
+/* P&L box */
 .sig-tsl-box.pnl{background:var(--bg2)}
 .sig-tsl-box.pnl .sig-tsl-lbl{letter-spacing:.1em}
-.sig-tsl-box.pnl .sig-tsl-val{font-size:20px;font-weight:900;font-family:var(--font-mono);letter-spacing:-.02em;line-height:1}
+.sig-tsl-box.pnl .sig-tsl-val{font-size:21px;font-weight:900;font-family:var(--font-mono);letter-spacing:-.03em;line-height:1}
 /* Tags row */
 .sig-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:0}
 .sig-tag{font-size:9px;font-weight:400;color:var(--text3);padding:2px 7px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);font-family:var(--font-sans)}
 /* WHY section */
-.sig-why{padding:9px 14px 12px 15px;border-top:1px solid var(--border);background:var(--bg3)}
+.sig-why{padding:10px 14px 13px 15px;border-top:1px solid var(--border);background:var(--bg3)}
 .sig-why-lbl{font-size:7px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;display:flex;align-items:center;gap:5px}
 .sig-why-lbl::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--amber);flex-shrink:0}
-.sig-why-tags{display:flex;flex-wrap:wrap;gap:4px}
-.sig-why-tag{font-size:9px;font-family:var(--font-sans);font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid}
-.sig-why-tag.g{color:var(--green);background:var(--green-bg);border-color:#0FA95830}
-.sig-why-tag.r{color:var(--red);background:var(--red-bg);border-color:#E5393530}
-.sig-why-tag.a{color:var(--amber);background:var(--amber-bg);border-color:#ffb62730}
-.sig-why-tag.b{color:var(--blue);background:#3d9bff10;border-color:#3d9bff25}
+.sig-why-tags{display:flex;flex-wrap:wrap;gap:5px}
+.sig-why-tag{font-size:10px;font-family:var(--font-sans);font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid;letter-spacing:.02em}
+.sig-why-tag.g{color:var(--green);background:var(--green-bg);border-color:#0FA95835}
+.sig-why-tag.r{color:var(--red);background:var(--red-bg);border-color:#E5393535}
+.sig-why-tag.a{color:var(--amber);background:var(--amber-bg);border-color:#ffb62735}
+.sig-why-tag.b{color:var(--blue);background:#3d9bff12;border-color:#3d9bff28}
 /* Prob bar */
-.prob-bar{height:3px;background:var(--border);overflow:hidden}
+.prob-bar{height:4px;background:var(--border);overflow:hidden}
 .prob-fill{height:100%;background:linear-gradient(90deg,var(--amber),var(--green));transition:width .6s ease}
 .live-badge{font-size:7px;background:var(--green);color:#000;border-radius:3px;padding:1px 5px;font-weight:700;letter-spacing:.03em}
 .est-badge{font-size:7px;background:var(--text3);color:var(--bg);border-radius:3px;padding:1px 4px;font-weight:700}
@@ -269,24 +269,7 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 .stock-chips{display:flex;gap:6px;padding:0 12px 10px;overflow-x:auto}
 .stock-chips::-webkit-scrollbar{display:none}
 
-/* ── SIGNAL DETAIL DRAWER ── */
-#drawer{position:fixed;inset:0;z-index:300;pointer-events:none}
-#drawer.open{pointer-events:all}
-.drawer-overlay{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .3s}
-#drawer.open .drawer-overlay{opacity:.6}
-.drawer-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--bg2);border-radius:20px 20px 0 0;padding:0 16px calc(var(--safe-b) + 20px);transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
-#drawer.open .drawer-sheet{transform:translateY(0)}
-.drawer-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 16px}
-.drawer-title{font-size:17px;font-weight:700;font-family:var(--font-sans);color:var(--text);margin-bottom:3px;letter-spacing:-.01em}
-.drawer-sub{font-size:10px;font-weight:300;color:var(--text3);margin-bottom:16px;font-family:var(--font-sans);letter-spacing:.03em}
-.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.drawer-cell{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px}
-.drawer-cell-label{font-size:8px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
-.drawer-cell-val{font-size:19px;font-weight:700;font-family:var(--font-mono);letter-spacing:-.01em}
-.drawer-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
-.drawer-row:last-child{border-bottom:none}
-.drawer-row-label{color:var(--text3);font-weight:300;font-family:var(--font-sans);font-size:12px;letter-spacing:.01em}
-.drawer-row-val{font-family:var(--font-mono);font-weight:500;color:var(--text);font-size:13px}
+/* ── SIGNAL DETAIL DRAWER — REMOVED ── */
 
 /* ── ANIMATIONS ── */
 .flash{animation:flashCard .6s ease}
@@ -317,13 +300,6 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 </div>
 
 <!-- SIGNAL DETAIL DRAWER -->
-<div id="drawer">
-  <div class="drawer-overlay" onclick="closeDrawer()"></div>
-  <div class="drawer-sheet" id="drawerSheet">
-    <div class="drawer-handle"></div>
-    <div id="drawerContent"></div>
-  </div>
-</div>
 
 <!-- TOP BAR -->
 <div class="topbar">
@@ -2363,7 +2339,7 @@ function renderSignals() {
     const ageCol = ageColor(s.ts);
 
     return `
-    <div class="sig-card ${s.type.toLowerCase()}-card" onclick="openDrawer('${s.id}')">
+    <div class="sig-card ${s.type.toLowerCase()}-card">
       <div class="sig-inner">
         <!-- ROW 1: logo + symbol + prob -->
         <div class="sig-r1">
@@ -2428,156 +2404,9 @@ function renderSignals() {
     </div>`;
   }).join('');
 }
-// ══════════════════════════════════════════════════════════════════
-// SIGNAL DETAIL DRAWER
-// ══════════════════════════════════════════════════════════════════
-function openDrawer(idStr) {
-  const sig = S.signals.find(s => String(s.id) === String(idStr));
-  if (!sig) return;
-  const probColor = sig.prob>=80?'var(--green)':sig.prob>=70?'var(--amber)':'var(--text2)';
-  document.getElementById('drawerContent').innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <span class="sig-type ${sig.type.toLowerCase()}" style="font-size:13px">${sig.type}</span>
-      <div class="drawer-title">${sig.sym}</div>
-    </div>
-    <div class="drawer-sub">${sig.strike} · ${sig.expiry} · ${sig.time} <span class="live-badge">LIVE PREMIUM</span></div>
-
-    <div class="drawer-grid">
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Premium</div>
-        <div class="drawer-cell-val" style="color:var(--amber)">₹${Number(sig.premium).toFixed(2)}</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Score / Prob</div>
-        <div class="drawer-cell-val" style="color:${probColor}">${sig.score||0}<span style="font-size:13px;color:var(--text3)">/100</span> · ${sig.prob}%</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Target</div>
-        <div class="drawer-cell-val" style="color:var(--green)">₹${Number(sig.target).toFixed(2)}</div>
-      </div>
-      <div class="drawer-cell">
-        <div class="drawer-cell-label">Stop Loss</div>
-        <div class="drawer-cell-val" style="color:var(--red)">₹${Number(sig.sl).toFixed(2)}</div>
-      </div>
-    </div>
-
-    <!-- Verdict banner -->
-    <div style="padding:9px 13px;border-radius:8px;margin-bottom:12px;text-align:center;
-      background:${sig.verdict==='STRONG'?'var(--green-bg)':sig.verdict==='MODERATE'?'var(--amber-bg)':'var(--red-bg)'};
-      border:1px solid ${sig.verdict==='STRONG'?'#0FA95840':sig.verdict==='MODERATE'?'#ffb62740':'#E5393540'}">
-      <span style="font-size:13px;font-weight:800;font-family:var(--font-mono);letter-spacing:.08em;
-        color:${sig.verdict==='STRONG'?'var(--green)':sig.verdict==='MODERATE'?'var(--amber)':'var(--red)'}">
-        ${sig.verdict||'SIGNAL'} · ${sig.score||0}/100 pts
-      </span>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--font-sans)">
-        ${sig.verdict==='STRONG'?'High conviction — normal position size'
-          :sig.verdict==='MODERATE'?'Good setup — consider half position size'
-          :'Marginal — watch only'}
-      </div>
-    </div>
-
-    <div class="drawer-row"><span class="drawer-row-label">Lot Size</span><span class="drawer-row-val">${sig.lot}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Lots Affordable</span><span class="drawer-row-val">${sig.lots}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Total Capital</span><span class="drawer-row-val">₹${sig.capital.toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Profit</span><span class="drawer-row-val" style="color:var(--green)">+₹${Math.max(0,(sig.target-(sig.entryPremium||sig.premium))*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Loss</span><span class="drawer-row-val" style="color:var(--red)">-₹${Math.max(0,((sig.entryPremium||sig.premium)-sig.sl)*sig.lot*sig.lots).toLocaleString('en-IN')}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">R:R Ratio</span><span class="drawer-row-val" style="color:var(--cyan)">${sig.rr}:1</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">RSI-14</span><span class="drawer-row-val" style="color:${sig.rsi<40||sig.rsi>60?'var(--amber)':'var(--text)'}">${sig.rsi ?? '–'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">EMA Bias</span><span class="drawer-row-val" style="color:${sig.bias==='BULLISH'?'var(--green)':sig.bias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.bias||'–'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">MACD</span><span class="drawer-row-val" style="color:${sig.macd?.crossover==='BULLISH'?'var(--green)':sig.macd?.crossover==='BEARISH'?'var(--red)':'var(--text3)'}">
-      ${sig.macd ? (sig.macd.crossover !== 'NONE' ? sig.macd.crossover+' CROSS' : (sig.macd.aboveSignal ? 'Above Signal' : 'Below Signal')) : '–'}
-    </span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Supertrend</span><span class="drawer-row-val" style="color:${sig.supertrend?.trend==='UP'?'var(--green)':'var(--red)'}">
-      ${sig.supertrend ? sig.supertrend.trend + (sig.supertrend.signal!=='HOLD'?' · '+sig.supertrend.signal:'') : '–'}
-    </span></div>
-    <div class="drawer-row"><span class="drawer-row-label">India VIX</span><span class="drawer-row-val" style="color:${sig.vixValue<16?'var(--green)':sig.vixValue<20?'var(--text)':sig.vixValue<25?'var(--amber)':'var(--red)'}">
-      ${sig.vixValue ? sig.vixValue.toFixed(1)+' ('+sig.vixRegime+')' : '–'}
-    </span></div>
-    <div class="drawer-row"><span class="drawer-row-label">PCR</span><span class="drawer-row-val" style="color:${sig.pcrBias==='BULLISH'?'var(--green)':sig.pcrBias==='BEARISH'?'var(--red)':'var(--text3)'}">
-      ${sig.pcr ? sig.pcr.toFixed(2)+' ('+sig.pcrBias+')' : '–'}
-    </span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Max Pain</span><span class="drawer-row-val">${sig.maxPain ? '₹'+sig.maxPain.toLocaleString('en-IN') : '–'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">Volume Ratio</span><span class="drawer-row-val">${sig.volRatio ? sig.volRatio.toFixed(1)+'x' : '–'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">FII/DII Bias</span><span class="drawer-row-val" style="color:${sig.instBias==='BULLISH'?'var(--green)':sig.instBias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.instBias||'–'}</span></div>
-    <div class="drawer-row"><span class="drawer-row-label">News Sentiment</span><span class="drawer-row-val" style="color:${sig.newsSentimentScore>60?'var(--green)':sig.newsSentimentScore<40?'var(--red)':'var(--text3)'}">
-      ${sig.newsSentiment||'–'} (${sig.newsSentimentScore||50}%)
-    </span></div>
-    ${sig.isExpiryDay ? `<div class="drawer-row"><span class="drawer-row-label" style="color:var(--amber)">⚡ Expiry Day</span><span class="drawer-row-val" style="color:var(--amber)">${['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','MIDCAP'].includes((sig.sym||'').toUpperCase()) ? '⚠ Index expiry — high gamma/theta, only STRONG signals, 0DTE risk' : sig.sym+' monthly expiry today'}</span></div>` : ''}
-    ${sig.warnings?.length ? `<div style="margin:10px 0 4px;font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Warnings</div>
-    ${sig.warnings.map(w=>`<div style="font-size:11px;color:var(--amber);padding:3px 0;border-bottom:1px solid var(--border)">${w}</div>`).join('')}` : ''}
-
-    <!-- RAMESH / SURESH OI BATTLE PANEL -->
-    ${(sig.oiBattleBias || sig.rameshTrapped || sig.sureshTrapped) ? `
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0">
-      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚔️ Ramesh vs Suresh — OI Battle</div>
-
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <div style="flex:1;background:${sig.rameshTrapped?'rgba(239,68,68,0.15)':'var(--bg2)'};border:1px solid ${sig.rameshTrapped?'var(--red)':'var(--border)'};border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:16px">😤</div>
-          <div style="font-size:11px;font-weight:700;color:var(--red)">Ramesh</div>
-          <div style="font-size:10px;color:var(--text3)">Call Writer</div>
-          <div style="font-size:10px;color:var(--text2);margin-top:2px">Resist: ${sig.oiResistStrike||'–'}</div>
-          ${sig.rameshTrapped ? `<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:3px">🔥 TRAPPED!</div>` : ''}
-        </div>
-        <div style="display:flex;align-items:center;font-size:16px;color:var(--amber)">⚔️</div>
-        <div style="flex:1;background:${sig.sureshTrapped?'rgba(239,68,68,0.15)':'var(--bg2)'};border:1px solid ${sig.sureshTrapped?'var(--red)':'var(--border)'};border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:16px">😎</div>
-          <div style="font-size:11px;font-weight:700;color:#3b82f6">Suresh</div>
-          <div style="font-size:10px;color:var(--text3)">Put Writer</div>
-          <div style="font-size:10px;color:var(--text2);margin-top:2px">Support: ${sig.oiSupportStrike||'–'}</div>
-          ${sig.sureshTrapped ? `<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:3px">🔥 TRAPPED!</div>` : ''}
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--text3)">OI Battle Bias</span>
-        <span style="font-size:12px;font-weight:700;color:${sig.oiBattleBias==='BULLISH'?'var(--green)':sig.oiBattleBias==='BEARISH'?'var(--red)':'var(--text3)'}">${sig.oiBattleBias||'NEUTRAL'}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:11px;color:var(--text3)">ATM PCR</span>
-        <span style="font-size:12px;font-weight:700;color:var(--text2)">${sig.atmPCR!=null?sig.atmPCR:'–'}</span>
-      </div>
-      ${sig.shortSqueezePotential ? `<div style="font-size:11px;color:var(--green);padding:4px 0;border-top:1px solid var(--border);margin-top:4px">🚀 Short squeeze potential — Ramesh buying back!</div>` : ''}
-      ${sig.putSqueezePotential   ? `<div style="font-size:11px;color:var(--red);padding:4px 0;border-top:1px solid var(--border);margin-top:4px">📉 Put squeeze potential — Suresh buying back!</div>` : ''}
-
-      ${sig.oiBattleSummary?.length ? `
-      <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
-        ${sig.oiBattleSummary.map(s=>`<div style="font-size:11px;color:${s.includes('CONFLICT')?'var(--amber)':s.includes('trapped')||s.includes('squeeze')?'var(--green)':'var(--text3)'};padding:2px 0">${s.includes('CONFLICT')?'⚠️ ':s.includes('trapped')||s.includes('squeeze')?'✓ ':'• '}${s}</div>`).join('')}
-      </div>` : ''}
-
-      ${sig.breakdown?.oiBattle ? `
-      <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
-        <span style="font-size:10px;color:var(--text3)">OI Battle Score: </span>
-        <span style="font-size:11px;font-weight:700;color:${sig.breakdown.oiBattle.earned>=6?'var(--green)':sig.breakdown.oiBattle.earned>=3?'var(--amber)':'var(--red)'}">${sig.breakdown.oiBattle.earned}/${sig.breakdown.oiBattle.max}</span>
-        <span style="font-size:11px;color:var(--text3)"> — ${sig.breakdown.oiBattle.note}</span>
-      </div>` : ''}
-    </div>` : ''}
-
-
-    <!-- DILIP OI BATTLEFIELD -->
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin:12px 0">
-      <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">⚔️ OI Battlefield</div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;color:var(--text2)">Formula</span><span style="font-size:12px;font-weight:800;color:${sig.dilipFormula==='CE'?'var(--green)':sig.dilipFormula==='PE'?'var(--red)':'var(--amber)'}">${sig.dilipFormula||'NEUTRAL'}</span></div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sig.dilipFormulaNote||'–'}</div>
-      ${sig.putTrapRisk?'<div style="color:var(--red);font-size:11px;font-weight:700">☠️ PUT TRAP RISK!</div>':''}
-      ${sig.callTrapRisk?'<div style="color:var(--red);font-size:11px;font-weight:700">☠️ CALL TRAP RISK!</div>':''}
-      ${sig.ceSignal?`<div style="font-size:11px;color:var(--text3)">CE: ${sig.ceSignal.note||''}</div>`:''}
-      ${sig.peSignal?`<div style="font-size:11px;color:var(--text3)">PE: ${sig.peSignal.note||''}</div>`:''}
-      <div style="margin-top:6px;display:flex;justify-content:space-between"><span style="font-size:11px;color:var(--text3)">OI Score</span><span style="font-size:12px;font-weight:800;color:${(sig.oiScore||0)>=70?'var(--green)':(sig.oiScore||0)>=50?'var(--amber)':'var(--red)'}">${sig.oiScore||0}/100</span></div>
-    </div>
-    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin:12px 0;font-size:12px;color:var(--text2);line-height:1.6">
-      <b style="color:var(--text3);font-size:10px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em">Signal Reason</b><br>
-      ${sig.reason}
-    </div>
-
-    <button class="big-btn outline" style="margin-top:6px" onclick="closeDrawer()">Close</button>
-  `;
-  document.getElementById('drawer').classList.add('open');
-}
-
-function closeDrawer() {
-  document.getElementById('drawer').classList.remove('open');
-}
+// Drawer removed — everything shown on signal card directly
+function openDrawer(idStr) {}
+function closeDrawer() {}
 
 function exitSignal(idStr) {
   const idx = S.signals.findIndex(s => String(s.id) === String(idStr));
@@ -2587,7 +2416,7 @@ function exitSignal(idStr) {
   sig.status = 'CLOSED_MANUAL';
   sig.closedPnl = Math.round((lp - (sig.entryPremium || sig.premium)) * sig.lot * (sig.lots || 1));
   sig.closedAt = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  sig.sl = lp; // mark SL as exit price for display
+  sig.sl = lp;
   S.closedSignals.push(sig);
   S.signals.splice(idx, 1);
   document.getElementById('mSigs').textContent = S.signals.length;
@@ -2599,12 +2428,6 @@ function exitSignal(idStr) {
   renderSignals();
 }
 
-// Swipe down to close drawer
-let startY = 0;
-document.getElementById('drawerSheet').addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, {passive:true});
-document.getElementById('drawerSheet').addEventListener('touchend', e => {
-  if (e.changedTouches[0].clientY - startY > 80) closeDrawer();
-}, {passive:true});
 
 // ══════════════════════════════════════════════════════════════════
 // NOTIFICATIONS
@@ -2708,46 +2531,86 @@ function buildWhyTags(sig) {
   const tags = [];
   const isCE = sig.type === 'CE';
 
-  // Use server breakdown to pick the TOP 3 most impactful factors
-  if (sig.breakdown && Object.keys(sig.breakdown).length) {
-    const bd = sig.breakdown;
+  // ── 1. SIGNAL TYPE TAG ──────────────────────────────────────────
+  if (sig.setupType) {
+    const setupCls = {'ORB BREAKOUT':'b','REVERSAL':'b','BREAKOUT':'g','PULLBACK':'a','MOMENTUM':'b'}[sig.setupType]||'b';
+    tags.push(`<span class="sig-why-tag ${setupCls}">${sig.setupType}</span>`);
+  }
 
-    // Sort all checks: passed first (by earned desc), then failed
-    const sorted = Object.entries(bd)
-      .filter(([, v]) => v.pass !== null) // skip neutral/skipped
-      .sort((a, b) => {
-        // Prioritise: passed checks with high earned, then failed checks
-        const aPassed = a[1].pass !== false;
-        const bPassed = b[1].pass !== false;
-        if (aPassed !== bPassed) return aPassed ? -1 : 1;
-        return b[1].earned - a[1].earned;
-      });
-
-    // Take top 2 passing and top 1 failing (if any)
-    const passing = sorted.filter(([,v]) => v.pass !== false).slice(0, 2);
-    const failing  = sorted.filter(([,v]) => v.pass === false).slice(0, 1);
-    const selected = [...passing, ...failing];
-
-    for (const [, v] of selected) {
-      const note = v.note || '';
-      // Shorten: strip unicode checkmarks, keep core words
-      const label = note
-        .replace(/✓✓|✓|★/g, '').replace(/\s{2,}/g, ' ')
-        .replace(/—\s*against\s*(CE|PE)/i, '').trim()
-        .split('—')[0].trim(); // take only first part before dash
-      if (!label) continue;
-      const cls = v.pass === false ? 'r' : v.earned >= v.max * 0.9 ? 'g' : 'a';
-      tags.push(`<span class="sig-why-tag ${cls}">${label}</span>`);
+  // ── 2. RAMESH CHECK (CE OI above spot) ─────────────────────────
+  // CE OI rising above spot = WALL = RED for CE buyer, GREEN for PE buyer
+  // CE OI falling above spot = RUNNING = GREEN for CE buyer
+  if (sig.oiBattleBias || sig.ceOiTrend || sig.rameshTrapped !== undefined) {
+    const ceRising = sig.ceOiChange > 10; // CE OI rising >10%
+    const rameshTrapped = sig.rameshTrapped;
+    if (rameshTrapped) {
+      // Ramesh trapped = forced to buy back = helps CE
+      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">🏃 RAMESH TRAPPED${isCE?' ✅':' ⚠️'}</span>`);
+    } else if (ceRising) {
+      // CE OI building = wall forming
+      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RAMESH WALL${isCE?' ⚠️':' ✅'}</span>`);
+    } else if (sig.oiResistStrike) {
+      tags.push(`<span class="sig-why-tag b">RESIST ${sig.oiResistStrike}</span>`);
     }
   }
 
-  // Verdict badge — always last
-  if (sig.verdict) {
-    const verdictCls = sig.verdict === 'STRONG' ? 'g' : sig.verdict === 'MODERATE' ? 'a' : 'r';
-    tags.push(`<span class="sig-why-tag ${verdictCls}">${sig.verdict} ${sig.score || ''}pts</span>`);
+  // ── 3. SURESH CHECK (PE OI) ────────────────────────────────────
+  // PE OI strong BELOW spot = FLOOR = GREEN for CE, RED for PE buyer (bounce danger)
+  // PE OI weak below spot = GREEN for PE (safe path)
+  // PE OI rising ABOVE spot = RESISTANCE = RED for CE, RED for PE (blocks profit)
+  if (sig.sureshTrapped !== undefined || sig.oiSupportStrike || sig.peOiChange !== undefined) {
+    const sureshTrapped = sig.sureshTrapped;
+    const peFloorStrong = sig.peOiChange > 15 && sig.oiSupportStrike;
+    if (sureshTrapped) {
+      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🏃 SURESH TRAPPED${isCE?' ⚠️':' ✅'}</span>`);
+    } else if (peFloorStrong) {
+      // Strong floor below spot
+      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SURESH FLOOR${isCE?' ✅':' ⚠️BOUNCE'}</span>`);
+    } else if (sig.oiSupportStrike) {
+      tags.push(`<span class="sig-why-tag b">SUPPORT ${sig.oiSupportStrike}</span>`);
+    }
   }
 
-  if (!tags.length) return `<span class="sig-why-tag a">${sig.reason || 'MOMENTUM SETUP'}</span>`;
+  // ── 4. TRAP DETECTION ──────────────────────────────────────────
+  if (sig.putTrapRisk)  tags.push(`<span class="sig-why-tag r">☠️ PUT TRAP</span>`);
+  if (sig.callTrapRisk) tags.push(`<span class="sig-why-tag r">☠️ CALL TRAP</span>`);
+  if (sig.shortSqueezePotential) tags.push(`<span class="sig-why-tag g">🚀 SHORT SQUEEZE</span>`);
+  if (sig.putSqueezePotential)   tags.push(`<span class="sig-why-tag g">📉 PUT SQUEEZE</span>`);
+
+  // ── 5. INDEX / BIAS TAG ────────────────────────────────────────
+  if (sig.bias) {
+    const biasCls = sig.bias==='BULLISH'?'g':sig.bias==='BEARISH'?'r':'a';
+    tags.push(`<span class="sig-why-tag ${biasCls}">IDX ${sig.bias}</span>`);
+  }
+
+  // ── 6. OI BATTLE BIAS ─────────────────────────────────────────
+  if (sig.oiBattleBias && sig.oiBattleBias !== 'NEUTRAL') {
+    const oiCls = sig.oiBattleBias==='BULLISH'?'g':'r';
+    tags.push(`<span class="sig-why-tag ${oiCls}">OI ${sig.oiBattleBias}</span>`);
+  }
+
+  // ── 7. NEWS ────────────────────────────────────────────────────
+  if (sig.newsSentiment && sig.newsSentiment !== 'NEUTRAL') {
+    const nCls = sig.newsSentiment==='POSITIVE'?'g':sig.newsSentiment==='NEGATIVE'?'r':'a';
+    tags.push(`<span class="sig-why-tag ${nCls}">NEWS ${sig.newsSentiment}</span>`);
+  }
+
+  // ── 8. TECHNICALS (reference) ─────────────────────────────────
+  if (sig.rsi) {
+    const rsiCls = sig.rsi < 35 ? 'g' : sig.rsi > 65 ? 'r' : 'a';
+    tags.push(`<span class="sig-why-tag ${rsiCls}">RSI ${sig.rsi}</span>`);
+  }
+
+  // ── 9. EXPIRY WARNING ─────────────────────────────────────────
+  if (sig.isExpiryDay) tags.push(`<span class="sig-why-tag a">⚡ EXPIRY DAY</span>`);
+
+  // ── 10. VERDICT — always last ─────────────────────────────────
+  if (sig.verdict) {
+    const verdictCls = sig.verdict==='STRONG'?'g':sig.verdict==='MODERATE'?'a':'r';
+    tags.push(`<span class="sig-why-tag ${verdictCls}">${sig.verdict} ${sig.score||''}pts</span>`);
+  }
+
+  if (!tags.length) return `<span class="sig-why-tag a">${sig.reason||'MOMENTUM SETUP'}</span>`;
   return tags.join('');
 }
 
