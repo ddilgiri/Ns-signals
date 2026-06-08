@@ -2538,36 +2538,34 @@ function buildWhyTags(sig) {
   }
 
   // ── 2. RAMESH CHECK (CE OI above spot) ─────────────────────────
-  // CE OI rising above spot = WALL = RED for CE buyer, GREEN for PE buyer
-  // CE OI falling above spot = RUNNING = GREEN for CE buyer
-  if (sig.oiBattleBias || sig.ceOiTrend || sig.rameshTrapped !== undefined) {
-    const ceRising = sig.ceOiChange > 10; // CE OI rising >10%
+  if (sig.oiBattleBias || sig.ceOiTrend || sig.rameshTrapped !== undefined || sig.oiResistStrike) {
+    const ceRising = sig.ceOiChange > 10;
     const rameshTrapped = sig.rameshTrapped;
     if (rameshTrapped) {
-      // Ramesh trapped = forced to buy back = helps CE
       tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">🏃 RAMESH TRAPPED${isCE?' ✅':' ⚠️'}</span>`);
     } else if (ceRising) {
-      // CE OI building = wall forming
       tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RAMESH WALL${isCE?' ⚠️':' ✅'}</span>`);
     } else if (sig.oiResistStrike) {
-      tags.push(`<span class="sig-why-tag b">RESIST ${sig.oiResistStrike}</span>`);
+      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RESIST ${sig.oiResistStrike}${isCE?' ⚠️':' ✅'}</span>`);
+    } else {
+      // rameshTrapped is false = Ramesh sitting strong
+      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RAMESH WALL${isCE?' ⚠️':' ✅'}</span>`);
     }
   }
 
   // ── 3. SURESH CHECK (PE OI) ────────────────────────────────────
-  // PE OI strong BELOW spot = FLOOR = GREEN for CE, RED for PE buyer (bounce danger)
-  // PE OI weak below spot = GREEN for PE (safe path)
-  // PE OI rising ABOVE spot = RESISTANCE = RED for CE, RED for PE (blocks profit)
   if (sig.sureshTrapped !== undefined || sig.oiSupportStrike || sig.peOiChange !== undefined) {
     const sureshTrapped = sig.sureshTrapped;
-    const peFloorStrong = sig.peOiChange > 15 && sig.oiSupportStrike;
+    const peFloorStrong = sig.peOiChange > 15 || sig.oiSupportStrike;
     if (sureshTrapped) {
       tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🏃 SURESH TRAPPED${isCE?' ⚠️':' ✅'}</span>`);
     } else if (peFloorStrong) {
-      // Strong floor below spot
       tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SURESH FLOOR${isCE?' ✅':' ⚠️BOUNCE'}</span>`);
     } else if (sig.oiSupportStrike) {
-      tags.push(`<span class="sig-why-tag b">SUPPORT ${sig.oiSupportStrike}</span>`);
+      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SUPPORT ${sig.oiSupportStrike}${isCE?' ✅':' ⚠️'}</span>`);
+    } else {
+      // sureshTrapped false = Suresh sitting strong below
+      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SURESH FLOOR${isCE?' ✅':' ⚠️BOUNCE'}</span>`);
     }
   }
 
