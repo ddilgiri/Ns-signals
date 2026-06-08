@@ -2572,25 +2572,25 @@ function buildWhyTags(sig) {
 
   // Ramesh check
   if (sig.rameshTrapped !== undefined || sig.oiResistStrike || sig.oiBattleBias) {
+    var resistStrike = sig.oiResistStrike ? ' ' + sig.oiResistStrike : '';
     if (sig.rameshTrapped) {
-      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">🏃 RAMESH TRAPPED' + (isCE?' ✅':' ⚠️') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">🏃 RAMESH' + resistStrike + (isCE?' TRAPPED✅':' TRAPPED⚠️') + '</span>');
     } else if (sig.ceOiChange > 10) {
-      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH WALL' + (isCE?' ⚠️':' ✅') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH' + resistStrike + (isCE?' WALL⚠️':' WALL✅') + '</span>');
     } else if (sig.oiResistStrike) {
-      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RESIST ' + sig.oiResistStrike + (isCE?' ⚠️':' ✅') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH' + resistStrike + (isCE?' WALL⚠️':' WALL✅') + '</span>');
     } else {
-      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH WALL' + (isCE?' ⚠️':' ✅') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH' + resistStrike + (isCE?' WALL⚠️':' WALL✅') + '</span>');
     }
   }
 
   // Suresh check
   if (sig.sureshTrapped !== undefined || sig.oiSupportStrike) {
+    var supportStrike = sig.oiSupportStrike ? ' ' + sig.oiSupportStrike : '';
     if (sig.sureshTrapped) {
-      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🏃 SURESH TRAPPED' + (isCE?' ⚠️':' ✅') + '</span>');
-    } else if (sig.oiSupportStrike) {
-      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">💪 SURESH FLOOR' + (isCE?' ✅':' ⚠️BOUNCE') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🏃 SURESH' + supportStrike + (isCE?' TRAPPED⚠️':' TRAPPED✅') + '</span>');
     } else {
-      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">💪 SURESH FLOOR' + (isCE?' ✅':' ⚠️BOUNCE') + '</span>');
+      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">💪 SURESH' + supportStrike + (isCE?' FLOOR✅':' FLOOR⚠️') + '</span>');
     }
   }
 
@@ -2996,12 +2996,10 @@ function renderOIChain(d) {
   var oiScore = d.oiScore||0;
   var scoreColor = oiScore>=70?'#0FA958':oiScore>=50?'#FFB627':'#E53935';
   var caps = '';
-  if(d.rameshTrapped) caps+='<span class="scap gr">🏃 RAMESH TRAPPED</span>';
-  else if(d.ceWalls&&d.ceWalls.length) caps+='<span class="scap gr">✅ WALL '+d.ceWalls[0].strike+'</span>';
-  if(d.sureshTrapped) caps+='<span class="scap am">🏃 SURESH TRAPPED</span>';
-  else if(d.peFloors&&d.peFloors.length) caps+='<span class="scap re">🔴 FLOOR '+d.peFloors[0].strike+'</span>';
   if(d.putTrapRisk)  caps+='<span class="scap re">☠️ PUT TRAP</span>';
   if(d.callTrapRisk) caps+='<span class="scap re">☠️ CALL TRAP</span>';
+  if(d.rameshTrapped) caps+='<span class="scap gr">🏃 RAMESH TRAPPED</span>';
+  if(d.sureshTrapped) caps+='<span class="scap am">🏃 SURESH TRAPPED</span>';
 
   return '<div class="rp-head"><span class="dir-badge '+dir+'">'+dirTxt+'</span></div><div class="col-h"><div class="ch" style="color:#E53935">🔴 CE (Ramesh)</div><div class="ch">Strike</div><div class="ch" style="color:#0FA958">🟢 PE (Suresh)</div></div>'+rowsHtml+'<div class="score-row">'+caps+'<div class="oi-score"><span class="oi-score-lbl">OI SCORE</span><span class="oi-score-num" style="color:'+scoreColor+'">'+oiScore+'</span></div></div>';
 }
