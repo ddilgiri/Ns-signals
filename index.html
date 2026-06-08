@@ -279,6 +279,59 @@ input[type=range]{flex:1;accent-color:var(--green);height:4px;cursor:pointer}
 .server-row{display:flex;gap:8px;margin-bottom:14px}
 .server-row .field-input{flex:1;margin-bottom:0}
 .server-test{padding:12px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;white-space:nowrap}
+
+/* ── OI BATTLEFIELD ── */
+.oi-toggle{display:flex;align-items:center;gap:7px;padding:9px 14px;cursor:pointer;border-top:1px solid var(--border);background:var(--bg3);user-select:none;}
+.oi-toggle:active{opacity:.7}
+.oi-toggle-lbl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;flex:1}
+.oi-toggle-arr{font-size:10px;color:var(--text3);transition:transform .2s}
+.oi-toggle-arr.open{transform:rotate(180deg)}
+.oi-chain-panel{background:#0D1117;border-top:1px solid rgba(255,255,255,0.08)}
+.oi-chain-panel .rp-head{display:flex;align-items:center;padding:10px 12px 0}
+.oi-chain-panel .dir-badge{padding:3px 12px;border-radius:10px;font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.oi-chain-panel .dir-badge.up{background:rgba(15,169,88,0.15);color:#0FA958;border:1px solid rgba(15,169,88,0.3)}
+.oi-chain-panel .dir-badge.dn{background:rgba(229,57,53,0.15);color:#E53935;border:1px solid rgba(229,57,53,0.3)}
+.oi-chain-panel .dir-badge.ne{background:rgba(255,182,39,0.15);color:#FFB627;border:1px solid rgba(255,182,39,0.3)}
+.oi-chain-panel .col-h{display:grid;grid-template-columns:1fr 50px 1fr;gap:4px;margin-bottom:5px;padding:0 12px}
+.oi-chain-panel .ch{font-size:8px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding:2px 0}
+.oi-chain-panel .sr{display:grid;grid-template-columns:1fr 50px 1fr;gap:4px;margin-bottom:4px;align-items:center;padding:0 12px}
+.oi-chain-panel .cs{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.oi-chain-panel .ps{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.oi-chain-panel .st-cap{background:#0D1117;border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:3px 6px;font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#8B949E;text-align:center;width:100%}
+.oi-chain-panel .st-cap.atm{border-color:#FFB627;color:#FFB627}
+.oi-chain-panel .cb{height:18px;border-radius:5px;overflow:hidden;display:flex;align-items:center;width:100%}
+.oi-chain-panel .cb.ce{justify-content:flex-end}
+.oi-chain-panel .cb.pe{justify-content:flex-start}
+.oi-chain-panel .cf{height:100%;border-radius:5px;display:flex;align-items:center;padding:0 3px}
+.oi-chain-panel .cf.cr{background:linear-gradient(270deg,#E53935,rgba(229,57,53,0.15));justify-content:flex-start}
+.oi-chain-panel .cf.cg{background:linear-gradient(90deg,#0FA958,rgba(15,169,88,0.15))}
+.oi-chain-panel .cf.ca{background:linear-gradient(90deg,#FFB627,rgba(255,182,39,0.15))}
+.oi-chain-panel .cf.cx{background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.07)}
+.oi-chain-panel .cf.crf{background:linear-gradient(90deg,#E53935,rgba(229,57,53,0.15))}
+.oi-chain-panel .pp{font-size:8px;letter-spacing:-1px;color:#E6EDF3}
+.oi-chain-panel .pr{font-size:9px;color:#E6EDF3}
+.oi-chain-panel .si{display:flex;align-items:center;gap:3px}
+.oi-chain-panel .sp{font-size:9px;font-family:'JetBrains Mono',monospace;font-weight:700}
+.oi-chain-panel .ss{font-size:8px;font-family:'JetBrains Mono',monospace;font-weight:800}
+.oi-chain-panel .vrow{margin:7px 12px;position:relative}
+.oi-chain-panel .vline{height:1px;background:rgba(255,255,255,0.07);position:absolute;top:50%;left:0;right:0}
+.oi-chain-panel .vwrap{display:flex;justify-content:center;position:relative;z-index:1}
+.oi-chain-panel .vehicle{border:1.5px solid;border-radius:10px;padding:5px 10px;background:#161B22;box-shadow:0 0 12px rgba(0,0,0,0.5)}
+.oi-chain-panel .vehicle.up{border-color:#0FA958}
+.oi-chain-panel .vehicle.dn{border-color:#E53935}
+.oi-chain-panel .v-share{display:flex;flex-direction:column;align-items:center;background:#1C2333;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:3px 8px}
+.oi-chain-panel .v-share-lbl{font-size:7px;color:#484F58;font-family:'JetBrains Mono',monospace;text-transform:uppercase;display:flex;align-items:center;gap:3px}
+.oi-chain-panel .v-share-val{font-size:12px;font-weight:800;color:#E6EDF3}
+.oi-chain-panel .live-b2{background:rgba(15,169,88,0.15);color:#0FA958;border:1px solid rgba(15,169,88,0.3);font-size:7px;padding:1px 4px;border-radius:3px;font-weight:700}
+.oi-chain-panel .score-row{display:flex;align-items:center;gap:6px;margin:8px 12px 12px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);flex-wrap:wrap}
+.oi-chain-panel .scap{padding:3px 10px;border-radius:20px;font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;border:1px solid}
+.oi-chain-panel .scap.gr{color:#0FA958;background:rgba(15,169,88,0.1);border-color:rgba(15,169,88,0.3)}
+.oi-chain-panel .scap.re{color:#E53935;background:rgba(229,57,53,0.1);border-color:rgba(229,57,53,0.3)}
+.oi-chain-panel .scap.am{color:#FFB627;background:rgba(255,182,39,0.1);border-color:rgba(255,182,39,0.3)}
+.oi-chain-panel .oi-score{margin-left:auto;display:flex;align-items:center;gap:4px}
+.oi-chain-panel .oi-score-num{font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.oi-chain-panel .oi-score-lbl{font-size:8px;font-family:'JetBrains Mono',monospace;color:#484F58}
+.oi-chain-panel .oic-loading{text-align:center;padding:16px;font-size:11px;color:#8B949E}
 </style>
 </head>
 <body>
@@ -2400,6 +2453,14 @@ function renderSignals() {
         </div>
       </div>
 
+      <!-- OI BATTLEFIELD TOGGLE -->
+      <div class="oi-toggle" onclick="toggleOIChain('${s.id}','${s.sym}',${s.sharePrice||s.ltp||0})">
+        <span>⚔️</span>
+        <span class="oi-toggle-lbl">OI BATTLEFIELD</span>
+        <span class="oi-toggle-arr" id="oi-arr-${s.id}">▼</span>
+      </div>
+      <div class="oi-chain-panel" id="oi-panel-${s.id}" style="display:none"></div>
+
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
     </div>`;
   }).join('');
@@ -2531,90 +2592,67 @@ function buildWhyTags(sig) {
   const tags = [];
   const isCE = sig.type === 'CE';
 
-  // ── 1. SIGNAL TYPE TAG ──────────────────────────────────────────
   if (sig.setupType) {
     const setupCls = {'ORB BREAKOUT':'b','REVERSAL':'b','BREAKOUT':'g','PULLBACK':'a','MOMENTUM':'b'}[sig.setupType]||'b';
-    tags.push(`<span class="sig-why-tag ${setupCls}">${sig.setupType}</span>`);
+    tags.push('<span class="sig-why-tag ' + setupCls + '">' + sig.setupType + '</span>');
   }
 
-  // ── 2. RAMESH CHECK (CE OI above spot) ─────────────────────────
-  if (sig.oiBattleBias || sig.ceOiTrend || sig.rameshTrapped !== undefined || sig.oiResistStrike) {
-    const ceRising = sig.ceOiChange > 10;
-    const rameshTrapped = sig.rameshTrapped;
-    if (rameshTrapped) {
-      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">🏃 RAMESH TRAPPED${isCE?' ✅':' ⚠️'}</span>`);
-    } else if (ceRising) {
-      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RAMESH WALL${isCE?' ⚠️':' ✅'}</span>`);
+  // Ramesh check
+  if (sig.rameshTrapped !== undefined || sig.oiResistStrike || sig.oiBattleBias) {
+    if (sig.rameshTrapped) {
+      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">🏃 RAMESH TRAPPED' + (isCE?' ✅':' ⚠️') + '</span>');
+    } else if (sig.ceOiChange > 10) {
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH WALL' + (isCE?' ⚠️':' ✅') + '</span>');
     } else if (sig.oiResistStrike) {
-      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RESIST ${sig.oiResistStrike}${isCE?' ⚠️':' ✅'}</span>`);
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RESIST ' + sig.oiResistStrike + (isCE?' ⚠️':' ✅') + '</span>');
     } else {
-      // rameshTrapped is false = Ramesh sitting strong
-      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🛑 RAMESH WALL${isCE?' ⚠️':' ✅'}</span>`);
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🛑 RAMESH WALL' + (isCE?' ⚠️':' ✅') + '</span>');
     }
   }
 
-  // ── 3. SURESH CHECK (PE OI) ────────────────────────────────────
-  if (sig.sureshTrapped !== undefined || sig.oiSupportStrike || sig.peOiChange !== undefined) {
-    const sureshTrapped = sig.sureshTrapped;
-    const peFloorStrong = sig.peOiChange > 15 || sig.oiSupportStrike;
-    if (sureshTrapped) {
-      tags.push(`<span class="sig-why-tag ${isCE?'r':'g'}">🏃 SURESH TRAPPED${isCE?' ⚠️':' ✅'}</span>`);
-    } else if (peFloorStrong) {
-      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SURESH FLOOR${isCE?' ✅':' ⚠️BOUNCE'}</span>`);
+  // Suresh check
+  if (sig.sureshTrapped !== undefined || sig.oiSupportStrike) {
+    if (sig.sureshTrapped) {
+      tags.push('<span class="sig-why-tag ' + (isCE?'r':'g') + '">🏃 SURESH TRAPPED' + (isCE?' ⚠️':' ✅') + '</span>');
     } else if (sig.oiSupportStrike) {
-      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SUPPORT ${sig.oiSupportStrike}${isCE?' ✅':' ⚠️'}</span>`);
+      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">💪 SURESH FLOOR' + (isCE?' ✅':' ⚠️BOUNCE') + '</span>');
     } else {
-      // sureshTrapped false = Suresh sitting strong below
-      tags.push(`<span class="sig-why-tag ${isCE?'g':'r'}">💪 SURESH FLOOR${isCE?' ✅':' ⚠️BOUNCE'}</span>`);
+      tags.push('<span class="sig-why-tag ' + (isCE?'g':'r') + '">💪 SURESH FLOOR' + (isCE?' ✅':' ⚠️BOUNCE') + '</span>');
     }
   }
 
-  // ── 4. TRAP DETECTION ──────────────────────────────────────────
-  if (sig.putTrapRisk)  tags.push(`<span class="sig-why-tag r">☠️ PUT TRAP</span>`);
-  if (sig.callTrapRisk) tags.push(`<span class="sig-why-tag r">☠️ CALL TRAP</span>`);
-  if (sig.shortSqueezePotential) tags.push(`<span class="sig-why-tag g">🚀 SHORT SQUEEZE</span>`);
-  if (sig.putSqueezePotential)   tags.push(`<span class="sig-why-tag g">📉 PUT SQUEEZE</span>`);
+  if (sig.putTrapRisk)  tags.push('<span class="sig-why-tag r">☠️ PUT TRAP</span>');
+  if (sig.callTrapRisk) tags.push('<span class="sig-why-tag r">☠️ CALL TRAP</span>');
 
-  // ── 5. INDEX / BIAS TAG ────────────────────────────────────────
   if (sig.bias) {
     const biasCls = sig.bias==='BULLISH'?'g':sig.bias==='BEARISH'?'r':'a';
-    tags.push(`<span class="sig-why-tag ${biasCls}">IDX ${sig.bias}</span>`);
+    tags.push('<span class="sig-why-tag ' + biasCls + '">IDX ' + sig.bias + '</span>');
   }
 
-  // ── 6. OI BATTLE BIAS ─────────────────────────────────────────
   if (sig.oiBattleBias && sig.oiBattleBias !== 'NEUTRAL') {
-    const oiCls = sig.oiBattleBias==='BULLISH'?'g':'r';
-    tags.push(`<span class="sig-why-tag ${oiCls}">OI ${sig.oiBattleBias}</span>`);
+    tags.push('<span class="sig-why-tag ' + (sig.oiBattleBias==='BULLISH'?'g':'r') + '">OI ' + sig.oiBattleBias + '</span>');
   }
 
-  // ── 7. NEWS ────────────────────────────────────────────────────
   if (sig.newsSentiment && sig.newsSentiment !== 'NEUTRAL') {
     const nCls = sig.newsSentiment==='POSITIVE'?'g':sig.newsSentiment==='NEGATIVE'?'r':'a';
-    tags.push(`<span class="sig-why-tag ${nCls}">NEWS ${sig.newsSentiment}</span>`);
+    tags.push('<span class="sig-why-tag ' + nCls + '">NEWS ' + sig.newsSentiment + '</span>');
   }
 
-  // ── 8. TECHNICALS (reference) ─────────────────────────────────
   if (sig.rsi) {
     const rsiCls = sig.rsi < 35 ? 'g' : sig.rsi > 65 ? 'r' : 'a';
-    tags.push(`<span class="sig-why-tag ${rsiCls}">RSI ${sig.rsi}</span>`);
+    tags.push('<span class="sig-why-tag ' + rsiCls + '">RSI ' + sig.rsi.toFixed(2) + '</span>');
   }
 
-  // ── 9. EXPIRY WARNING ─────────────────────────────────────────
-  if (sig.isExpiryDay) tags.push(`<span class="sig-why-tag a">⚡ EXPIRY DAY</span>`);
+  if (sig.isExpiryDay) tags.push('<span class="sig-why-tag a">⚡ EXPIRY DAY</span>');
 
-  // ── 10. VERDICT — always last ─────────────────────────────────
   if (sig.verdict) {
     const verdictCls = sig.verdict==='STRONG'?'g':sig.verdict==='MODERATE'?'a':'r';
-    tags.push(`<span class="sig-why-tag ${verdictCls}">${sig.verdict} ${sig.score||''}pts</span>`);
+    tags.push('<span class="sig-why-tag ' + verdictCls + '">' + sig.verdict + ' ' + (sig.score||'') + 'pts</span>');
   }
 
-  if (!tags.length) return `<span class="sig-why-tag a">${sig.reason||'MOMENTUM SETUP'}</span>`;
+  if (!tags.length) return '<span class="sig-why-tag a">' + (sig.reason||'MOMENTUM SETUP') + '</span>';
   return tags.join('');
 }
-
-// ══════════════════════════════════════════════════════════════════
-// THEME TOGGLE
-// ══════════════════════════════════════════════════════════════════
 function toggleTheme() {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
   const newTheme = isLight ? 'dark' : 'light';
@@ -2871,6 +2909,128 @@ function clearSignals() {
     addLog('Auto-login error: ' + e.message, 'warn');
   }
 })();
+
+
+const _oiCache = {};
+
+async function toggleOIChain(id, sym, spot) {
+  const panel = document.getElementById('oi-panel-' + id);
+  const arr = document.getElementById('oi-arr-' + id);
+  if (!panel) return;
+  if (panel.style.display !== 'none') {
+    panel.style.display = 'none';
+    if (arr) arr.classList.remove('open');
+    return;
+  }
+  panel.style.display = 'block';
+  if (arr) arr.classList.add('open');
+  panel.innerHTML = '<div class="oic-loading">Loading OI data for ' + sym + '...</div>';
+  try {
+    let data = _oiCache[sym];
+    if (!data) {
+      const sig = S.signals.find(function(s){ return String(s.id) === String(id); });
+      const expiry = sig ? (sig.expiry || '') : '';
+      const r = await fetch('/oi-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sym, spotPrice: spot, expiry: expiry })
+      });
+      data = await r.json();
+      if (data.status) _oiCache[sym] = data;
+    }
+    if (!data.status) {
+      panel.innerHTML = '<div class="oic-loading" style="color:#E53935">OI data unavailable: ' + (data.message||'') + '</div>';
+      return;
+    }
+    panel.innerHTML = renderOIChain(data);
+  } catch(err) {
+    panel.innerHTML = '<div class="oic-loading" style="color:#E53935">Network error</div>';
+  }
+}
+
+function renderOIChain(d) {
+  var spot = d.spotPrice;
+  var atm = d.atmStrike;
+  var chain = (d.chain || []).slice().sort(function(a,b){return a.strike-b.strike;});
+  var atmIdx = 0;
+  for(var i=0;i<chain.length;i++){ if(chain[i].strike>=atm){atmIdx=i;break;} }
+  var start = Math.max(0, atmIdx-3);
+  var rows = chain.slice(start, start+7);
+  var maxOI = 1;
+  for(var i=0;i<rows.length;i++){
+    if((rows[i].CE_oi||0)>maxOI) maxOI=rows[i].CE_oi;
+    if((rows[i].PE_oi||0)>maxOI) maxOI=rows[i].PE_oi;
+  }
+
+  var dir = d.oiRecommendation==='CE'?'up':d.oiRecommendation==='PE'?'dn':'ne';
+  var dirTxt = d.oiRecommendation==='CE'?'GO UP':d.oiRecommendation==='PE'?'GO DOWN':'NEUTRAL';
+
+  var rowsHtml = '';
+  var vehiclePlaced = false;
+
+  for(var ri=0;ri<rows.length;ri++){
+    var r = rows[ri];
+    if(!vehiclePlaced && r.strike >= spot){
+      vehiclePlaced = true;
+      var vDir = 'dn';
+      rowsHtml += '<div class="vrow"><div class="vline"></div><div class="vwrap"><div class="vehicle ' + vDir + '"><div class="v-share"><div class="v-share-lbl">SHARE <span class="live-b2">LIVE</span></div><div class="v-share-val">₹' + spot.toLocaleString('en-IN') + '</div></div></div></div></div>';
+    }
+    var ceW = Math.round(((r.CE_oi||0)/maxOI)*90);
+    var peW = Math.round(((r.PE_oi||0)/maxOI)*90);
+    var chgCE = r.CE_oiChange||0;
+    var chgPE = r.PE_oiChange||0;
+    var strCE = r.rameshStrength||'WEAK';
+    var strPE = r.sureshStrength||'WEAK';
+    var below = r.strike < spot;
+    var isAtm = r.strike===atm;
+
+    // CE class
+    var ceCls = 'cx';
+    if(chgCE<-5) ceCls='cx';
+    else if(strCE==='STRONG') ceCls='cr';
+    else if(strCE==='MEDIUM') ceCls='ca';
+
+    // PE class
+    var peCls = 'cx';
+    if(chgPE<-5) peCls='cx';
+    else if(below){ peCls = strPE==='STRONG'?'crf':strPE==='MEDIUM'?'ca':'cg'; }
+    else { peCls = strPE==='STRONG'?'crf':strPE==='MEDIUM'?'ca':'cx'; }
+
+    // CE crowd
+    var ceCrowd = chgCE<-5?'<span class="pr">🏃</span>':strCE==='STRONG'?'<span class="pp">👥👥👥</span>':strCE==='MEDIUM'?'<span class="pp">👥👥</span>':'<span class="pp">👤</span>';
+    var peCrowd = chgPE<-5?'<span class="pr">🏃</span>':strPE==='STRONG'?'<span class="pp">👥👥👥</span>':strPE==='MEDIUM'?'<span class="pp">👥👥</span>':'<span class="pp">👤</span>';
+
+    // CE label
+    var ceLabel, peLabel;
+    if(chgCE<-5) ceLabel='<span class="sp" style="color:#0FA958">'+chgCE.toFixed(1)+'%</span><span class="ss" style="color:#0FA958">🏃✅</span>';
+    else if(strCE==='STRONG') ceLabel='<span class="sp" style="color:#E53935">+'+Math.abs(chgCE).toFixed(1)+'%</span><span class="ss" style="color:#E53935">🛑WALL</span>';
+    else if(strCE==='MEDIUM') ceLabel='<span class="sp" style="color:#FFB627">+'+Math.abs(chgCE).toFixed(1)+'%</span><span class="ss" style="color:#FFB627">🟡MED</span>';
+    else ceLabel='<span class="sp" style="color:#484F58">+'+Math.abs(chgCE).toFixed(1)+'%</span><span class="ss" style="color:#0FA958">🏃✅</span>';
+
+    if(chgPE<-5) peLabel='<span class="sp" style="color:#0FA958">'+chgPE.toFixed(1)+'%</span><span class="ss" style="color:#0FA958">🏃✅</span>';
+    else if(strPE==='STRONG') peLabel=below?'<span class="sp" style="color:#E53935">+'+Math.abs(chgPE).toFixed(1)+'%</span><span class="ss" style="color:#E53935">🔴BOUNCE!</span>':'<span class="sp" style="color:#E53935">+'+Math.abs(chgPE).toFixed(1)+'%</span><span class="ss" style="color:#E53935">🔴RESIST</span>';
+    else if(strPE==='MEDIUM') peLabel='<span class="sp" style="color:#FFB627">+'+Math.abs(chgPE).toFixed(1)+'%</span><span class="ss" style="color:#FFB627">🟡MED</span>';
+    else peLabel='<span class="sp" style="color:#0FA958">+'+Math.abs(chgPE).toFixed(1)+'%</span><span class="ss" style="color:#0FA958">🟢WEAK✅</span>';
+
+    rowsHtml += '<div class="sr"><div class="cs"><div class="cb ce"><div class="cf '+ceCls+'" style="width:'+ceW+'%">'+ceCrowd+'</div></div><div class="si" style="justify-content:flex-end">'+ceLabel+'</div></div><div><div class="st-cap'+(isAtm?' atm':'')+'" >'+r.strike+'</div></div><div class="ps"><div class="cb pe"><div class="cf '+peCls+'" style="width:'+peW+'%">'+peCrowd+'</div></div><div class="si">'+peLabel+'</div></div></div>';
+  }
+
+  if(!vehiclePlaced){
+    rowsHtml += '<div class="vrow"><div class="vline"></div><div class="vwrap"><div class="vehicle dn"><div class="v-share"><div class="v-share-lbl">SHARE <span class="live-b2">LIVE</span></div><div class="v-share-val">₹'+spot.toLocaleString('en-IN')+'</div></div></div></div></div>';
+  }
+
+  var oiScore = d.oiScore||0;
+  var scoreColor = oiScore>=70?'#0FA958':oiScore>=50?'#FFB627':'#E53935';
+  var caps = '';
+  if(d.rameshTrapped) caps+='<span class="scap gr">🏃 RAMESH TRAPPED</span>';
+  else if(d.ceWalls&&d.ceWalls.length) caps+='<span class="scap gr">✅ WALL '+d.ceWalls[0].strike+'</span>';
+  if(d.sureshTrapped) caps+='<span class="scap am">🏃 SURESH TRAPPED</span>';
+  else if(d.peFloors&&d.peFloors.length) caps+='<span class="scap re">🔴 FLOOR '+d.peFloors[0].strike+'</span>';
+  if(d.putTrapRisk)  caps+='<span class="scap re">☠️ PUT TRAP</span>';
+  if(d.callTrapRisk) caps+='<span class="scap re">☠️ CALL TRAP</span>';
+
+  return '<div class="rp-head"><span class="dir-badge '+dir+'">'+dirTxt+'</span></div><div class="col-h"><div class="ch" style="color:#E53935">🔴 CE (Ramesh)</div><div class="ch">Strike</div><div class="ch" style="color:#0FA958">🟢 PE (Suresh)</div></div>'+rowsHtml+'<div class="score-row">'+caps+'<div class="oi-score"><span class="oi-score-lbl">OI SCORE</span><span class="oi-score-num" style="color:'+scoreColor+'">'+oiScore+'</span></div></div>';
+}
 
 </script>
 </body>
