@@ -2454,7 +2454,7 @@ function renderSignals() {
       </div>
 
       <!-- OI BATTLEFIELD TOGGLE -->
-      <div class="oi-toggle" onclick="toggleOIChain('${s.id}','${s.sym}',${s.sharePrice||s.ltp||0})">
+      <div class="oi-toggle" onclick="toggleOIChain('${s.id}','${s.sym}',${s.livePrice||s.entryPrice||0})">
         <span>⚔️</span>
         <span class="oi-toggle-lbl">OI BATTLEFIELD</span>
         <span class="oi-toggle-arr" id="oi-arr-${s.id}">▼</span>
