@@ -124,7 +124,7 @@ body{font-family:var(--font-sans);font-weight:400;color:var(--text);display:flex
 /* Removed old sig-bar — replaced by border-left on card */
 .sig-bar{display:none}
 /* Header row */
-.sig-r1{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sig-r1{display:flex;align-items:center;gap:8px;padding:12px 14px 10px 14px}
 .sig-type{font-size:11px;font-family:var(--font-sans);font-weight:800;padding:4px 10px;border-radius:7px;letter-spacing:.06em;text-transform:uppercase}
 .sig-type.ce{background:var(--green-bg);color:var(--green);border:1px solid #0FA95835}
 .sig-type.pe{background:var(--red-bg);color:var(--red);border:1px solid #E5393535}
@@ -2359,8 +2359,6 @@ function renderSignals() {
     const priceChg  = (s.livePrice    > 0 && s.entryPrice   > 0) ? (s.livePrice    - s.entryPrice)   : null;
     const pnl       = (premChg !== null) ? Math.round(premChg * s.lot * s.lots) : null;
 
-    // P&L shown in red if negative — signal stays visible (user decides to exit)
-
     // FIX 1: Entry text color — use --text (bright white) for full visibility
     const entryColor = 'var(--text)';
 
@@ -2393,77 +2391,49 @@ function renderSignals() {
 
     return `
     <div class="sig-card ${s.type.toLowerCase()}-card">
-      <div class="sig-inner">
-        <!-- ROW 1: logo + symbol + prob -->
-        <div class="sig-r1">
-          ${logoHtml}
-          <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
-          <div style="flex:1;min-width:0">
-            <div class="sig-name">${s.sym} <span style="font-weight:500;color:var(--text2);font-size:12px">${s.strike}</span></div>
-            <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:1px">${s.expiry} · <span style="color:${ageCol}">${ageStr}</span></div>
-          </div>
-          <div class="sig-prob-wrap" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-            <div style="display:flex;align-items:center;gap:6px">
-              <button onclick="event.stopPropagation();exitSignal('${s.id}')" style="padding:3px 9px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:9px;font-weight:700;font-family:var(--font-mono);cursor:pointer;letter-spacing:.03em;line-height:1.4">✕ EXIT</button>
-              <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
-            </div>
-            <span class="sig-prob-lbl">probability</span>
-          </div>
-        </div>
 
-        <!-- ROW 2: Option Premium + Share Price -->
-        <div class="sig-prices">
-          <div class="sig-price-box">
-            <div class="sig-price-lbl">Option Premium <span class="live-badge" style="${s.isRealPremium===false?'background:#ffb62720;color:var(--amber);border-color:#ffb62740':''}">
-              ${s.isRealPremium===false?'EST.':'LIVE'}</span></div>
-            <div id="sig-prem-${s.id}" class="sig-price-val" style="color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-            <div class="sig-price-entry">Entry ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
-          </div>
-          <div class="sig-price-box">
-            <div class="sig-price-lbl">Share Price <span class="live-badge">LIVE</span></div>
-            <div id="sig-price-${s.id}" class="sig-price-val" style="color:${priceColor}">${dispPrice?'₹'+dispPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}</div>
-            <div class="sig-price-entry">Entry ₹${s.entryPrice>0?s.entryPrice.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'–'}${priceChgTxt}</div>
-          </div>
+      <!-- ROW 1: logo + type + symbol + premium capsule + prob -->
+      <div class="sig-r1">
+        ${logoHtml}
+        <span class="sig-type ${s.type.toLowerCase()}">${s.type}</span>
+        <div style="flex:1;min-width:0">
+          <div class="sig-name">${s.sym} <span style="font-weight:500;color:var(--text2);font-size:11px">${s.strike}</span></div>
+          <div style="font-size:9px;font-family:var(--font-mono);color:var(--text3);margin-top:1px">${s.expiry} · <span style="color:${ageCol}">${ageStr}</span></div>
         </div>
-
-        <!-- ROW 3: Target / SL / PnL -->
-        <div class="sig-tsl">
-          <div class="sig-tsl-box" style="border-color:#0FA95820">
-            <div class="sig-tsl-lbl">Target</div>
-            <div class="sig-tsl-val" style="color:var(--green)">₹${Number(s.target).toFixed(2)}</div>
-            <div class="sig-tsl-sub">RR ${s.rr||'–'}:1</div>
-          </div>
-          <div class="sig-tsl-box" style="border-color:#E5393520">
-            <div class="sig-tsl-lbl">Stop Loss</div>
-            <div class="sig-tsl-val" style="color:var(--red)">₹${Number(s.sl).toFixed(2)}</div>
-            <div class="sig-tsl-sub">Lot ${s.lot} × ${s.lots}</div>
-          </div>
-          <div class="sig-tsl-box pnl" style="border-color:${pnl===null?'var(--border)':pnl>=0?'#0FA95825':'#E5393525'}">
-            <div class="sig-tsl-lbl">Live P&amp;L</div>
-            <div id="sig-pnl-${s.id}" class="sig-tsl-val" style="color:${pnl===null?'var(--text3)':pnl>=0?'var(--green)':'var(--red)'}">${pnl===null?'–':(pnl>=0?'+₹':'-₹')+Math.abs(pnl).toLocaleString('en-IN')}</div>
-            <div class="sig-tsl-sub">₹${(s.capital||0).toLocaleString('en-IN')} capital</div>
-          </div>
+        <!-- Premium inline capsule — v5 style -->
+        <div style="display:flex;flex-direction:column;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:4px 10px;flex-shrink:0">
+          <div style="font-size:8px;color:var(--text3);font-family:var(--font-mono);text-transform:uppercase;display:flex;align-items:center;gap:3px">Prem <span class="live-badge">${s.isRealPremium===false?'EST':'LIVE'}</span></div>
+          <div id="sig-prem-${s.id}" style="font-size:13px;font-weight:800;color:${premColor}">₹${dispPrem.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:8px;color:var(--text2)">Ent ₹${(s.entryPremium||s.premium).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}${premChgTxt}</div>
+        </div>
+        <!-- Prob + EXIT -->
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          <button onclick="event.stopPropagation();exitSignal('${s.id}')" style="padding:3px 9px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:9px;font-weight:700;font-family:var(--font-mono);cursor:pointer;letter-spacing:.03em;line-height:1.4">✕ EXIT</button>
+          <span class="sig-prob" style="color:${probColor(s.prob)}">${s.prob}%</span>
+          <span class="sig-prob-lbl">prob</span>
         </div>
       </div>
 
-      <!-- WHY TAGS — tags explain themselves -->
+      <!-- WHY TAGS -->
       <div class="sig-why">
         <div class="sig-why-tags">
           ${buildWhyTags(s)}
         </div>
       </div>
 
-      <!-- OI BATTLEFIELD TOGGLE -->
-      <div class="oi-toggle" onclick="toggleOIChain('${s.id}','${s.sym}',${s.livePrice||s.entryPrice||0})">
-        <span>⚔️</span>
-        <span class="oi-toggle-lbl">OI BATTLEFIELD</span>
-        <span class="oi-toggle-arr" id="oi-arr-${s.id}">▼</span>
+      <!-- OI BATTLEFIELD — always visible, v5 style -->
+      <div class="oi-chain-panel" id="oi-panel-${s.id}">
+        <div class="oic-loading" id="oi-load-${s.id}">⏳ Loading OI...</div>
       </div>
-      <div class="oi-chain-panel" id="oi-panel-${s.id}" style="display:none"></div>
 
       <div class="prob-bar"><div class="prob-fill" style="width:${s.prob}%"></div></div>
     </div>`;
   }).join('');
+
+  // Auto-load OI chain for each signal (always visible like v5)
+  sigs.forEach(function(s) {
+    autoLoadOIChain(String(s.id), s.sym, s.livePrice || s.entryPrice || 0);
+  });
 }
 // Drawer removed — everything shown on signal card directly
 function openDrawer(idStr) {}
@@ -2913,24 +2883,20 @@ function clearSignals() {
 
 const _oiCache = {};
 
-async function toggleOIChain(id, sym, spot) {
-  const panel = document.getElementById('oi-panel-' + id);
-  const arr = document.getElementById('oi-arr-' + id);
+// Auto-load OI chain — always visible, called after renderSignals
+async function autoLoadOIChain(id, sym, spot) {
+  var panel = document.getElementById('oi-panel-' + id);
   if (!panel) return;
-  if (panel.style.display !== 'none') {
-    panel.style.display = 'none';
-    if (arr) arr.classList.remove('open');
+  if (!sym || !spot) {
+    panel.innerHTML = '<div class="oic-loading">No price data</div>';
     return;
   }
-  panel.style.display = 'block';
-  if (arr) arr.classList.add('open');
-  panel.innerHTML = '<div class="oic-loading">Loading OI data for ' + sym + '...</div>';
   try {
-    let data = _oiCache[sym];
+    var data = _oiCache[sym];
     if (!data) {
-      const sig = S.signals.find(function(s){ return String(s.id) === String(id); });
-      const expiry = sig ? (sig.expiry || '') : '';
-      const r = await fetch('/oi-analysis', {
+      var sig = S.signals.find(function(s){ return String(s.id) === String(id); });
+      var expiry = sig ? (sig.expiry || '') : '';
+      var r = await fetch('/oi-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbol: sym, spotPrice: spot, expiry: expiry })
@@ -2939,13 +2905,18 @@ async function toggleOIChain(id, sym, spot) {
       if (data.status) _oiCache[sym] = data;
     }
     if (!data.status) {
-      panel.innerHTML = '<div class="oic-loading" style="color:#E53935">OI data unavailable: ' + (data.message||'') + '</div>';
+      panel.innerHTML = '<div class="oic-loading" style="color:#E53935">OI unavailable</div>';
       return;
     }
     panel.innerHTML = renderOIChain(data);
   } catch(err) {
     panel.innerHTML = '<div class="oic-loading" style="color:#E53935">Network error</div>';
   }
+}
+
+// Keep for backward compat
+async function toggleOIChain(id, sym, spot) {
+  autoLoadOIChain(id, sym, spot);
 }
 
 function renderOIChain(d) {
