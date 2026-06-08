@@ -1233,7 +1233,7 @@ app.post('/oi-analysis', async (req, res) => {
     log(`OI ${sym}: PCR=${pcr} OIRecommendation=${oiRecommendation} OIScore=${oiScore} DilipFormula=${dilipFormula} RameshTrapped=${rameshTrapped} SureshTrapped=${sureshTrapped} PutTrap=${putTrapRisk}`, 'INFO');
 
     res.json({
-      status: true, symbol: sym, expiry: chosenExpiryStr,
+      status: true, symbol: sym, expiry: chosenExpRaw,
       atmStrike: realAtm, spotPrice: spot,
       pcr, pcrBias, maxPain,
       totalCeOI, totalPeOI,
