@@ -161,7 +161,7 @@ body{font-family:var(--font-sans);font-weight:400;color:var(--text);display:flex
 .sig-why-lbl{font-size:7px;font-family:var(--font-sans);font-weight:300;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;display:flex;align-items:center;gap:5px}
 .sig-why-lbl::before{content:'';width:4px;height:4px;border-radius:50%;background:var(--amber);flex-shrink:0}
 .sig-why-tags{display:flex;flex-wrap:wrap;gap:3px}
-.sig-why-tag{font-size:6px;font-family:var(--font-sans);font-weight:700;padding:2px 6px;border-radius:20px;border:1px solid;letter-spacing:.02em}
+.sig-why-tag{font-size:8px;font-family:var(--font-sans);font-weight:700;padding:2px 6px;border-radius:20px;border:1px solid;letter-spacing:.02em}
 .sig-why-tag.g{color:var(--green);background:var(--green-bg);border-color:#0FA95835}
 .sig-why-tag.r{color:var(--red);background:var(--red-bg);border-color:#E5393535}
 .sig-why-tag.a{color:var(--amber);background:var(--amber-bg);border-color:#ffb62735}
@@ -2082,6 +2082,7 @@ async function toggleScan() {
   const btn = document.getElementById('scanBtn');
   if (S.scanning) {
     clearInterval(S.scanInt);
+    S.scanInt = null;
     S.scanning = false;
     btn.textContent = '▶ SCAN';
     btn.className = 'scan-btn go';
@@ -2112,6 +2113,7 @@ async function toggleScan() {
     addLog('Live prices loaded — starting scan', 'ok');
     runScan();
     S.scanInt = setInterval(runScan, (S.config.intervalSec||30)*1000);
+    S.livePriceInt = setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
   }
 }
 
@@ -2143,6 +2145,7 @@ async function runScan() {
   const { nseOpen } = getMarketStatus();
   if (!nseOpen) {
     clearInterval(S.scanInt);
+    S.scanInt = null;
     S.scanning = false;
     document.getElementById('scanBtn').textContent = '▶ SCAN';
     document.getElementById('scanBtn').className = 'scan-btn go';
@@ -2184,7 +2187,7 @@ async function runScan() {
     if (sig) {
       // Dedup: skip if same sym+strike+type already in last 20 signals
       const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
-      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+      if (!isDup && S.scanning) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
     }
   }
 
@@ -2206,7 +2209,7 @@ async function runScan() {
     const sig = await generateSignal(obj, false);
     if (sig) {
       const isDup = S.signals.slice(0,20).some(e => e.sym===sig.sym && e.strike===sig.strike && e.type===sig.type);
-      if (!isDup) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
+      if (!isDup && S.scanning) { S.signals.unshift(sig); newSigs++; fireNotif(sig); }
     }
   }
 
@@ -2253,7 +2256,7 @@ setInterval(() => { if (S.signals.length) renderSignals(); }, 60000);
 
 // Live price updater — every 5 seconds, updates premium + share price on all signal cards
 // Runs independently of scanner — keeps prices live even after scan stops
-setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
+S.livePriceInt = setInterval(() => { if (S.connected && S.signals.length) updateSignalLivePrices(); }, 5000);
 
 function switchSignalTab(tab) {
   S.signalTab = tab;
