@@ -49,13 +49,16 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .scan-btn.go{background:var(--green);color:#000}
 .scan-btn.stop{background:var(--red);color:#fff}
 
-.bottomnav{height:calc(56px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px);background:var(--card);border-top:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0;z-index:100;transition:background .3s}
-.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border:none;background:transparent;color:var(--text3);font-size:9px;font-weight:400;letter-spacing:.4px;padding-top:5px;transition:color .15s;position:relative;text-transform:uppercase}
+/* TOP TABS */
+.toptabs{background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0;z-index:99;transition:background .3s}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border:none;background:transparent;color:var(--text3);font-size:9px;font-weight:400;letter-spacing:.4px;padding:8px 4px 6px;transition:color .15s;position:relative;text-transform:uppercase}
 .nav-item.active{color:var(--blue);font-weight:700}
-.nav-item.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;background:var(--blue);border-radius:0 0 3px 3px}
+.nav-item.active::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:2px;background:var(--blue);border-radius:3px 3px 0 0}
 .nav-icon{font-size:18px;line-height:1}
 .nav-badge{position:absolute;top:4px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:8px;font-weight:700;border-radius:10px;padding:1px 4px;min-width:15px;text-align:center;display:none}
 .nav-badge.show{display:block}
+/* keep bottomnav class but empty — not used */
+.bottomnav{display:none}
 
 .pages{flex:1;overflow:hidden;position:relative}
 .page{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:16px;display:none}
@@ -249,6 +252,23 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
   </div>
 </div>
 
+<!-- TOP TABS -->
+<div class="toptabs">
+  <button class="nav-item active" onclick="showPage('signals',this)">
+    <div class="nav-icon">📡</div><span>Signals</span>
+    <span class="nav-badge" id="sigBadge">0</span>
+  </button>
+  <button class="nav-item" onclick="showPage('trades',this)">
+    <div class="nav-icon">📋</div><span>Trades</span>
+  </button>
+  <button class="nav-item" onclick="showPage('analyze',this)">
+    <div class="nav-icon">📊</div><span>Analyze</span>
+  </button>
+  <button class="nav-item" onclick="showPage('setup',this)">
+    <div class="nav-icon">⚙️</div><span>Setup</span>
+  </button>
+</div>
+
 <div class="pages">
 
   <!-- SIGNALS -->
@@ -363,21 +383,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 
 </div>
 
-<div class="bottomnav">
-  <button class="nav-item active" onclick="showPage('signals',this)">
-    <div class="nav-icon">📡</div><span>Signals</span>
-    <span class="nav-badge" id="sigBadge">0</span>
-  </button>
-  <button class="nav-item" onclick="showPage('trades',this)">
-    <div class="nav-icon">📋</div><span>Trades</span>
-  </button>
-  <button class="nav-item" onclick="showPage('analyze',this)">
-    <div class="nav-icon">📊</div><span>Analyze</span>
-  </button>
-  <button class="nav-item" onclick="showPage('setup',this)">
-    <div class="nav-icon">⚙️</div><span>Setup</span>
-  </button>
-</div>
+<!-- bottom spacer not needed -->
 
 <div id="toast"></div>
 
@@ -436,16 +442,18 @@ function getMarketStatus() {
   const h = ist.getHours(), m = ist.getMinutes(), d = ist.getDay();
   const mins = h * 60 + m;
   const isWeekday = d >= 1 && d <= 5;
-  const nseOpen = isWeekday && mins >= 555 && mins < 930;
-  return { nseOpen, ist };
+  const nseOpen = isWeekday && mins >= 555 && mins < 930;   // 9:15 – 15:30
+  const mcxOpen = isWeekday && mins >= 540 && mins < 1410;  // 9:00 – 23:30
+  return { nseOpen, mcxOpen, ist };
 }
 function updateClock() {
-  const { nseOpen, ist } = getMarketStatus();
+  const { nseOpen, mcxOpen, ist } = getMarketStatus();
   document.getElementById('mTime').textContent = ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  document.getElementById('mStatusLbl').textContent = nseOpen ? 'NSE Market OPEN' : 'NSE Market Closed';
+  document.getElementById('mStatusLbl').textContent = nseOpen ? 'NSE OPEN · MCX OPEN' : mcxOpen ? 'NSE Closed · MCX OPEN' : 'NSE & MCX Closed';
   const pill = document.getElementById('mPill');
-  pill.textContent = nseOpen ? '● OPEN' : '● CLOSED';
-  pill.className = 'market-pill ' + (nseOpen ? 'open' : 'closed');
+  if (nseOpen) { pill.textContent = '● NSE OPEN'; pill.className = 'market-pill open'; }
+  else if (mcxOpen) { pill.textContent = '● MCX OPEN'; pill.className = 'market-pill open'; }
+  else { pill.textContent = '● CLOSED'; pill.className = 'market-pill closed'; }
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -499,6 +507,8 @@ async function doLogin() {
       toast('✅ Connected to Angel One!');
       localStorage.setItem('fxo-client', clientCode);
       localStorage.setItem('fxo-api', apiKey);
+      localStorage.setItem('fxo-pass', btoa(password)); // base64 encode for basic obfuscation
+      localStorage.setItem('fxo-totp', totpSecret);
       loadIndices();
       loadVix();
       loadMcx();
@@ -915,11 +925,12 @@ async function toggleScan() {
   }
   if (!S.connected) { toast('⚠️ Login first in Setup tab'); return; }
   var marketSt = getMarketStatus();
-  if (!marketSt.nseOpen) { toast('⏰ NSE Market is closed'); addLog('Scan blocked — market closed', 'warn'); return; }
+  if (!marketSt.nseOpen && !marketSt.mcxOpen) { toast('⏰ Both NSE & MCX are closed'); addLog('Scan blocked — markets closed', 'warn'); return; }
   S.scanning = true;
   btn.textContent = '⏹ STOP';
   btn.className = 'scan-btn stop';
-  addLog('Scanner started — ' + NSE_STOCKS.length + ' stocks + 3 indices', 'ok');
+  var scanWhat = marketSt.nseOpen ? 'NSE stocks + indices' : 'MCX commodities only';
+  addLog('Scanner started — ' + scanWhat, 'ok');
   runScan();
   S.scanInt = setInterval(runScan, 45000);
 }
@@ -927,35 +938,82 @@ async function toggleScan() {
 async function runScan() {
   if (!S.scanning) return;
   var mkt = getMarketStatus();
-  if (!mkt.nseOpen) {
+  if (!mkt.nseOpen && !mkt.mcxOpen) {
     clearInterval(S.scanInt);
     S.scanning = false;
     document.getElementById('scanBtn').textContent = '▶ SCAN';
     document.getElementById('scanBtn').className = 'scan-btn go';
-    addLog('Market closed — scanner stopped', 'warn');
+    addLog('Markets closed — scanner stopped', 'warn');
     return;
   }
   addLog('Scanning cycle...', '');
 
-  // Indices first
-  for (var i = 0; i < IDX_LIST.length; i++) {
-    var idx = IDX_LIST[i];
-    await scanSymbol(idx.sym, idx.token, idx.lot, true);
+  // Scan NSE indices + stocks only during NSE hours
+  if (mkt.nseOpen) {
+    for (var i = 0; i < IDX_LIST.length; i++) {
+      var idx = IDX_LIST[i];
+      await scanSymbol(idx.sym, idx.token, idx.lot, true);
+    }
+    var batch = NSE_STOCKS.slice(scanOffset, scanOffset + SCAN_BATCH);
+    if (batch.length === 0) { scanOffset = 0; batch = NSE_STOCKS.slice(0, SCAN_BATCH); }
+    scanOffset = (scanOffset + SCAN_BATCH) % NSE_STOCKS.length;
+    S.scannedCount += batch.length;
+    for (var j = 0; j < batch.length; j++) {
+      if (!S.scanning) break;
+      await scanSymbol(batch[j].sym, batch[j].token, batch[j].lot, false);
+    }
   }
 
-  // Stocks batch
-  var batch = NSE_STOCKS.slice(scanOffset, scanOffset + SCAN_BATCH);
-  if (batch.length === 0) { scanOffset = 0; batch = NSE_STOCKS.slice(0, SCAN_BATCH); }
-  scanOffset = (scanOffset + SCAN_BATCH) % NSE_STOCKS.length;
-  S.scannedCount += batch.length;
-
-  for (var j = 0; j < batch.length; j++) {
-    if (!S.scanning) break;
-    await scanSymbol(batch[j].sym, batch[j].token, batch[j].lot, false);
+  // Scan MCX commodities during MCX hours
+  if (mkt.mcxOpen) {
+    await scanMcx();
   }
 
   renderSignals();
   updateAnalytics();
+}
+
+// MCX commodity scan
+async function scanMcx() {
+  try {
+    var r = await fetch(getServer() + '/mcx');
+    var d = await r.json();
+    if (!d.status || !d.data) return;
+    var keys = Object.keys(d.data);
+    keys.forEach(function(sym) {
+      var c = d.data[sym];
+      if (!c.ltp) return;
+      var isDup = S.signals.some(function(s) { return s.sym === sym && s.isCommodity && (Date.now() - (s.ts||0)) < 300000; });
+      if (isDup) return;
+      var bull = c.changePct >= 0;
+      // Simple commodity signal — based on price direction + momentum
+      if (Math.abs(c.changePct) < 0.3) return; // skip flat commodities
+      var sig = {
+        id:           sym + '_COM_' + Date.now(),
+        sym:          sym,
+        type:         bull ? 'CE' : 'PE',
+        lot:          1,
+        score:        60,
+        verdict:      Math.abs(c.changePct) > 1 ? 'STRONG' : 'MODERATE',
+        spotPrice:    c.ltp,
+        premium:      0,
+        strike:       Math.round(c.ltp / 100) * 100,
+        isExpiry:     false,
+        isCommodity:  true,
+        bias:         bull ? 'BULLISH' : 'BEARISH',
+        volRatio:     1,
+        atr:          c.ltp * 0.01,
+        ts:           Date.now(),
+        ceWalls:      [],
+        peFloors:     [],
+        ceSignal:     bull ? 'LONG_BUILDUP' : 'SHORT_BUILDUP',
+      };
+      computeLevels(sig);
+      S.signals.unshift(sig);
+      if (S.signals.length > 50) S.signals.pop();
+      addLog('🪙 MCX ' + sym + ': ' + (bull ? '+' : '') + c.changePct + '%', 'ok');
+    });
+  } catch(e) { addLog('MCX scan err: ' + e.message, 'warn'); }
 }
 
 async function scanSymbol(sym, token, lot, isIndex) {
@@ -1048,8 +1106,12 @@ window.addEventListener('DOMContentLoaded', function() {
   // Restore credentials
   var client = localStorage.getItem('fxo-client');
   var api    = localStorage.getItem('fxo-api');
+  var pass   = localStorage.getItem('fxo-pass');
+  var totp   = localStorage.getItem('fxo-totp');
   if (client) document.getElementById('cfgClient').value = client;
   if (api)    document.getElementById('cfgApi').value    = api;
+  if (pass)   { try { document.getElementById('cfgPass').value = atob(pass); } catch(e) {} }
+  if (totp)   document.getElementById('cfgTotp').value   = totp;
   // Load data
   loadPaperTrades();
   renderSignals();
