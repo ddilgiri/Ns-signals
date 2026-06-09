@@ -168,19 +168,21 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .cap-ok{background:var(--green-bg);border-color:rgba(34,197,94,.3);color:var(--green)}
 .cap-warn{background:var(--amber-bg);border-color:rgba(245,158,11,.3);color:var(--amber)}
 
-.live-spot-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:9px;margin-bottom:11px;background:var(--card2);border:1px solid var(--border);transition:all .3s}
-.live-spot-bar.zone-hold{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3)}
-.live-spot-bar.zone-hold-strong{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3)}
-.live-spot-bar.zone-exit{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);animation:pulse-red 1s infinite}
-@keyframes pulse-red{0%,100%{opacity:1}50%{opacity:.6}}
-.ls-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;flex-shrink:0}
-.ls-val{font-size:15px;font-weight:900;font-family:'Roboto Mono',monospace;color:var(--text);flex:1}
-.ls-arrow{font-size:12px;font-weight:700}
-.ls-zone{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;flex-shrink:0}
-.ls-zone.hold{background:rgba(245,158,11,.15);color:var(--amber)}
-.ls-zone.hold-strong{background:rgba(34,197,94,.15);color:var(--green)}
-.ls-zone.exit{background:rgba(239,68,68,.2);color:var(--red)}
-.ls-zone.neutral{background:var(--card2);color:var(--text3)}
+/* CARD LIVE BAR — always visible */
+.card-live-bar{display:flex;align-items:center;padding:7px 13px;gap:0;background:var(--card2);border-top:1px solid var(--border);transition:background .3s}
+.card-live-bar.zone-hold{background:rgba(245,158,11,.08)}
+.card-live-bar.zone-hold-strong{background:rgba(34,197,94,.08)}
+.card-live-bar.zone-exit{background:rgba(239,68,68,.12);animation:pulse-red 1s infinite}
+.clb-item{display:flex;flex-direction:column;align-items:center;flex:1;gap:1px}
+.clb-lbl{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.clb-val{font-size:13px;font-weight:900;font-family:'Roboto Mono',monospace;color:var(--text)}
+.clb-arr{font-size:11px;font-weight:700;margin-top:1px}
+.clb-divider{width:1px;height:28px;background:var(--border);flex-shrink:0;margin:0 8px}
+.clb-zone{font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.clb-zone.hold{background:rgba(245,158,11,.15);color:var(--amber)}
+.clb-zone.hold-strong{background:rgba(34,197,94,.15);color:var(--green)}
+.clb-zone.exit{background:rgba(239,68,68,.2);color:var(--red);font-size:11px}
+.clb-zone.neutral{background:var(--card2);color:var(--text3)}
 .lv-row.active-zone{box-shadow:0 0 0 2px currentColor;opacity:1}
 .lv-row:not(.active-zone){opacity:.7}
 .paper-btn{width:100%;padding:10px;border-radius:9px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;text-align:center;transition:all .2s}
@@ -603,26 +605,45 @@ function computeLevels(sig) {
   var isBear = sig.type === 'PE';
   var atr    = sig.atr || (spot * 0.006);
   if (!spot) return sig;
-  var wall  = (sig.ceWalls && sig.ceWalls.length) ? sig.ceWalls[0].strike  : (spot + 2 * atr);
-  var floor = (sig.peFloors && sig.peFloors.length) ? sig.peFloors[0].strike : (spot - 2 * atr);
+
+  // Use REAL Ramesh/Suresh strikes if available
+  var rameshWall  = (sig.ceWalls  && sig.ceWalls.length)  ? sig.ceWalls[0].strike  : (spot + 2 * atr);
+  var sureshFloor = (sig.peFloors && sig.peFloors.length) ? sig.peFloors[0].strike : (spot - 2 * atr);
+  var rameshPct   = (sig.ceWalls  && sig.ceWalls.length)  ? (sig.ceWalls[0].oiChange||0).toFixed(0)  : 0;
+  var sureshPct   = (sig.peFloors && sig.peFloors.length) ? (sig.peFloors[0].oiChange||0).toFixed(0) : 0;
+
   if (isBear) {
-    sig.holdZone         = '' + Math.round(spot + 0.3*atr) + ' – ' + Math.round(spot + 0.8*atr);
-    sig.holdStrong       = '' + Math.round(spot - 0.5*atr);
-    sig.exitZone         = '' + Math.round(wall) + ' – ' + Math.round(wall + atr*0.5);
-    sig.holdReason       = 'Ramesh wall at ' + wall + ' holding strong';
-    sig.holdStrongReason = 'Suresh floor taking over — target approaching';
-    sig.exitReason       = 'Ramesh wall broken — signal failed';
-    sig.target1          = parseFloat(floor.toFixed(2));
-    sig.target2          = parseFloat((floor - atr).toFixed(2));
+    // PE trade — spot should fall
+    // Hold: between spot and Ramesh wall (small bounce is ok)
+    var holdLow  = Math.round(spot);
+    var holdHigh = Math.round(spot + atr * 0.5);
+    sig.holdZone         = holdLow + ' – ' + holdHigh;
+    sig.holdReason       = 'Ramesh wall ' + rameshWall + ' holding (+' + rameshPct + '% OI)';
+    // Hold Strong: near Suresh floor — breakdown confirmed
+    sig.holdStrong       = '' + Math.round(sureshFloor + atr * 0.3);
+    sig.holdStrongReason = 'Suresh floor ' + sureshFloor + ' taking over — target near';
+    // Exit: Ramesh wall level — if spot reaches here, signal failed
+    sig.exitZone         = Math.round(rameshWall) + ' – ' + Math.round(rameshWall + atr * 0.3);
+    sig.exitReason       = 'Ramesh wall ' + rameshWall + ' broken — signal failed';
+    // Targets: Suresh floor and below
+    sig.target1          = parseFloat(sureshFloor.toFixed(2));
+    sig.target2          = parseFloat((sureshFloor - atr).toFixed(2));
   } else {
-    sig.holdZone         = '' + Math.round(spot - 0.8*atr) + ' – ' + Math.round(spot - 0.3*atr);
-    sig.holdStrong       = '' + Math.round(spot + 0.5*atr);
-    sig.exitZone         = '' + Math.round(floor) + ' – ' + Math.round(floor - atr*0.5);
-    sig.holdReason       = 'Suresh floor at ' + floor + ' intact';
-    sig.holdStrongReason = 'Ramesh wall breaking — short cover rally near';
-    sig.exitReason       = 'Suresh floor broken — signal failed';
-    sig.target1          = parseFloat(wall.toFixed(2));
-    sig.target2          = parseFloat((wall + atr).toFixed(2));
+    // CE trade — spot should rise
+    // Hold: between Suresh floor and spot (small dip is ok)
+    var holdLow2  = Math.round(spot - atr * 0.5);
+    var holdHigh2 = Math.round(spot);
+    sig.holdZone         = holdLow2 + ' – ' + holdHigh2;
+    sig.holdReason       = 'Suresh floor ' + sureshFloor + ' intact (+' + sureshPct + '% OI)';
+    // Hold Strong: near Ramesh wall — breakout near
+    sig.holdStrong       = '' + Math.round(rameshWall - atr * 0.3);
+    sig.holdStrongReason = 'Ramesh wall ' + rameshWall + ' breaking — short cover rally near';
+    // Exit: Suresh floor — if spot falls here, signal failed
+    sig.exitZone         = Math.round(sureshFloor - atr * 0.3) + ' – ' + Math.round(sureshFloor);
+    sig.exitReason       = 'Suresh floor ' + sureshFloor + ' broken — signal failed';
+    // Targets: Ramesh wall and above
+    sig.target1          = parseFloat(rameshWall.toFixed(2));
+    sig.target2          = parseFloat((rameshWall + atr).toFixed(2));
   }
   return sig;
 }
@@ -669,32 +690,45 @@ function buildCard(sig) {
   var spotStr = (sig.spotPrice || sig.ltp || 0).toLocaleString('en-IN', {maximumFractionDigits:2});
 
   return '<div class="sig-card ' + cls + strong + '" onclick="toggleCard(this)" id="card-' + sig.id + '">'
+
+    // ── COLLAPSED VIEW ──────────────────────────────────────
     + '<div class="card-col">'
     + '<div class="stk-logo">' + logo + '</div>'
     + '<div class="card-mid">'
     + '<div class="badge-row">' + tbadge + confBadge + vbadge + expBadge + '</div>'
     + '<div class="stk-name">' + sig.sym + '</div>'
-    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · NSE · Monthly</div>'
+    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · NSE</div>'
     + '</div>'
     + '<div class="card-right">'
-    + '<div class="prem-val">₹' + (sig.premium||0).toFixed(2) + '</div>'
-    + '<div class="prem-chg">' + sig.type + ' premium</div>'
-    + pnlHtml
+    + '<div class="prem-val" id="cpm-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</div>'
+    + '<div class="prem-chg">premium</div>'
     + '</div></div>'
+
+    // ── LIVE BAR (always visible) ────────────────────────────
+    + '<div class="card-live-bar" id="clbar-' + sig.id + '">'
+    + '<div class="clb-item">'
+    + '<span class="clb-lbl">SPOT</span>'
+    + '<span class="clb-val" id="clspot-' + sig.id + '">₹' + spotStr + '</span>'
+    + '<span class="clb-arr" id="clarr-' + sig.id + '">—</span>'
+    + '</div>'
+    + '<div class="clb-divider"></div>'
+    + '<div class="clb-item">'
+    + '<span class="clb-lbl">PREMIUM</span>'
+    + '<span class="clb-val" id="clprem-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</span>'
+    + '</div>'
+    + '<div class="clb-divider"></div>'
+    + '<div class="clb-zone" id="clzone-' + sig.id + '">—</div>'
+    + '</div>'
+
+    // ── EXPANDED VIEW ────────────────────────────────────────
     + '<div class="card-divider"></div>'
     + '<div class="card-exp">'
-    + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot" id="spot-' + sig.id + '">Spot ₹' + spotStr + '</span></div>'
-    + '<div class="live-spot-bar" id="lsbar-' + sig.id + '">'
-    + '<span class="ls-lbl">LIVE SPOT</span>'
-    + '<span class="ls-val" id="ls-' + sig.id + '">₹' + spotStr + '</span>'
-    + '<span class="ls-arrow" id="lsarr-' + sig.id + '">—</span>'
-    + '<span class="ls-zone" id="lszone-' + sig.id + '">—</span>'
-    + '</div>'
+    + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot">Spot ₹' + spotStr + '</span></div>'
     + '<div class="buy-box">'
     + '<div><div class="buy-lbl">Strike</div><div class="buy-strike">' + sig.strike + ' ' + sig.type + '</div></div>'
     + '<div style="text-align:right"><div class="pm-lbl">Live Premium</div><div class="pm-val" id="pm-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</div></div>'
     + '</div>'
-    + '<div class="levels" id="lvls-' + sig.id + '">'
+    + '<div class="levels">'
     + '<div class="lv-row hold" id="lv-hold-' + sig.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + (sig.holdZone||'--') + ' = HOLD</div><div class="lv-reason">' + (sig.holdReason||'') + '</div></div></div>'
     + '<div class="lv-row hold-strong" id="lv-hs-' + sig.id + '"><div class="lv-icon">💪</div><div><div class="lv-spot">' + (sig.holdStrong||'--') + ' = HOLD STRONG</div><div class="lv-reason">' + (sig.holdStrongReason||'') + '</div></div></div>'
     + '<div class="lv-row exit" id="lv-exit-' + sig.id + '"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + (sig.exitZone||'--') + ' = EXIT</div><div class="lv-reason">' + (sig.exitReason||'') + '</div></div></div>'
@@ -750,17 +784,23 @@ async function updateLiveSpot(sigId) {
     var prevSpot = sig.spotPrice || ltp;
     sig.spotPrice = ltp;
 
-    // Update live spot display
-    var lsEl   = document.getElementById('ls-' + sigId);
-    var arrEl  = document.getElementById('lsarr-' + sigId);
-    var zoneEl = document.getElementById('lszone-' + sigId);
-    var barEl  = document.getElementById('lsbar-' + sigId);
-    var pmEl   = document.getElementById('pm-' + sigId);
-    if (!lsEl) return;
+    // Update collapsed live bar
+    var clSpot = document.getElementById('clspot-' + sigId);
+    var clArr  = document.getElementById('clarr-'  + sigId);
+    var clZone = document.getElementById('clzone-'  + sigId);
+    var clBar  = document.getElementById('clbar-'   + sigId);
+    var clPrem = document.getElementById('clprem-'  + sigId);
+    var pmEl   = document.getElementById('pm-'      + sigId);
+    var cpmEl  = document.getElementById('cpm-'     + sigId);
+    if (!clSpot) return;
 
-    lsEl.textContent = '₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2});
-    arrEl.textContent = ltp > prevSpot ? '▲' : ltp < prevSpot ? '▼' : '—';
-    arrEl.style.color = ltp > prevSpot ? 'var(--green)' : ltp < prevSpot ? 'var(--red)' : 'var(--text3)';
+    // Spot display
+    var ltpStr = '₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2});
+    clSpot.textContent = ltpStr;
+    var arrStr = ltp > prevSpot ? '▲' : ltp < prevSpot ? '▼' : '—';
+    var arrClr = ltp > prevSpot ? 'var(--green)' : ltp < prevSpot ? 'var(--red)' : 'var(--text3)';
+    clArr.textContent  = arrStr;
+    clArr.style.color  = arrClr;
 
     // Parse exit zone numbers
     var exitParts = (sig.exitZone||'').replace(/[^0-9–\-]/g,'').split(/[–\-]/);
@@ -791,9 +831,14 @@ async function updateLiveSpot(sigId) {
 
     // Update zone display
     var zoneLabels = { 'hold':'💛 HOLD', 'hold-strong':'💪 HOLD STRONG', 'exit':'🛑 EXIT NOW', 'neutral':'—' };
-    zoneEl.textContent = zoneLabels[zone] || '—';
-    zoneEl.className   = 'ls-zone ' + zone;
-    barEl.className    = 'live-spot-bar zone-' + zone;
+    clZone.textContent = zoneLabels[zone] || '—';
+    clZone.className   = 'clb-zone ' + zone;
+    if (clBar) clBar.className = 'card-live-bar zone-' + zone;
+
+    // Update premiums
+    if (pmEl)  pmEl.textContent  = '₹' + (sig.premium||0).toFixed(2);
+    if (cpmEl) cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
+    if (clPrem) clPrem.textContent = '₹' + (sig.premium||0).toFixed(2);
 
     // Highlight active level row
     ['lv-hold-','lv-hs-','lv-exit-'].forEach(function(pfx) {
@@ -852,6 +897,8 @@ function renderSignals() {
     normalSigs.forEach(function(s) { html += buildCard(s); });
   }
   list.innerHTML = html;
+  // Start live spot for all cards immediately
+  S.signals.forEach(function(s) { startLiveSpot(s.id); });
 }
 
 // ─── PAPER TRADES ─────────────────────────────────────────────────────────────
