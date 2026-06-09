@@ -168,7 +168,23 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .cap-ok{background:var(--green-bg);border-color:rgba(34,197,94,.3);color:var(--green)}
 .cap-warn{background:var(--amber-bg);border-color:rgba(245,158,11,.3);color:var(--amber)}
 
+.live-spot-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:9px;margin-bottom:11px;background:var(--card2);border:1px solid var(--border);transition:all .3s}
+.live-spot-bar.zone-hold{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3)}
+.live-spot-bar.zone-hold-strong{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3)}
+.live-spot-bar.zone-exit{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);animation:pulse-red 1s infinite}
+@keyframes pulse-red{0%,100%{opacity:1}50%{opacity:.6}}
+.ls-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;flex-shrink:0}
+.ls-val{font-size:15px;font-weight:900;font-family:'Roboto Mono',monospace;color:var(--text);flex:1}
+.ls-arrow{font-size:12px;font-weight:700}
+.ls-zone{font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.ls-zone.hold{background:rgba(245,158,11,.15);color:var(--amber)}
+.ls-zone.hold-strong{background:rgba(34,197,94,.15);color:var(--green)}
+.ls-zone.exit{background:rgba(239,68,68,.2);color:var(--red)}
+.ls-zone.neutral{background:var(--card2);color:var(--text3)}
+.lv-row.active-zone{box-shadow:0 0 0 2px currentColor;opacity:1}
+.lv-row:not(.active-zone){opacity:.7}
 .paper-btn{width:100%;padding:10px;border-radius:9px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;text-align:center;transition:all .2s}
+.paper-btn:active{opacity:.7}
 .paper-btn:active{opacity:.7}
 
 .empty-state{text-align:center;padding:50px 20px;color:var(--text3)}
@@ -667,15 +683,21 @@ function buildCard(sig) {
     + '</div></div>'
     + '<div class="card-divider"></div>'
     + '<div class="card-exp">'
-    + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot">Spot ₹' + spotStr + '</span></div>'
+    + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot" id="spot-' + sig.id + '">Spot ₹' + spotStr + '</span></div>'
+    + '<div class="live-spot-bar" id="lsbar-' + sig.id + '">'
+    + '<span class="ls-lbl">LIVE SPOT</span>'
+    + '<span class="ls-val" id="ls-' + sig.id + '">₹' + spotStr + '</span>'
+    + '<span class="ls-arrow" id="lsarr-' + sig.id + '">—</span>'
+    + '<span class="ls-zone" id="lszone-' + sig.id + '">—</span>'
+    + '</div>'
     + '<div class="buy-box">'
     + '<div><div class="buy-lbl">Strike</div><div class="buy-strike">' + sig.strike + ' ' + sig.type + '</div></div>'
-    + '<div style="text-align:right"><div class="pm-lbl">Live Premium</div><div class="pm-val">₹' + (sig.premium||0).toFixed(2) + '</div></div>'
+    + '<div style="text-align:right"><div class="pm-lbl">Live Premium</div><div class="pm-val" id="pm-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</div></div>'
     + '</div>'
-    + '<div class="levels">'
-    + '<div class="lv-row hold"><div class="lv-icon">💛</div><div><div class="lv-spot">' + (sig.holdZone||'--') + ' = HOLD</div><div class="lv-reason">' + (sig.holdReason||'') + '</div></div></div>'
-    + '<div class="lv-row hold-strong"><div class="lv-icon">💪</div><div><div class="lv-spot">' + (sig.holdStrong||'--') + ' = HOLD STRONG</div><div class="lv-reason">' + (sig.holdStrongReason||'') + '</div></div></div>'
-    + '<div class="lv-row exit"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + (sig.exitZone||'--') + ' = EXIT</div><div class="lv-reason">' + (sig.exitReason||'') + '</div></div></div>'
+    + '<div class="levels" id="lvls-' + sig.id + '">'
+    + '<div class="lv-row hold" id="lv-hold-' + sig.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + (sig.holdZone||'--') + ' = HOLD</div><div class="lv-reason">' + (sig.holdReason||'') + '</div></div></div>'
+    + '<div class="lv-row hold-strong" id="lv-hs-' + sig.id + '"><div class="lv-icon">💪</div><div><div class="lv-spot">' + (sig.holdStrong||'--') + ' = HOLD STRONG</div><div class="lv-reason">' + (sig.holdStrongReason||'') + '</div></div></div>'
+    + '<div class="lv-row exit" id="lv-exit-' + sig.id + '"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + (sig.exitZone||'--') + ' = EXIT</div><div class="lv-reason">' + (sig.exitReason||'') + '</div></div></div>'
     + '</div>'
     + '<div class="target-row">'
     + '<div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">' + t1str + '</div></div>'
@@ -687,7 +709,110 @@ function buildCard(sig) {
     + '</div></div>';
 }
 
-function toggleCard(el) { el.classList.toggle('open'); }
+var spotTimers = {};
+
+function toggleCard(el) {
+  el.classList.toggle('open');
+  var sigId = el.id.replace('card-', '');
+  if (el.classList.contains('open')) {
+    startLiveSpot(sigId);
+  } else {
+    stopLiveSpot(sigId);
+  }
+}
+
+function startLiveSpot(sigId) {
+  stopLiveSpot(sigId);
+  updateLiveSpot(sigId);
+  spotTimers[sigId] = setInterval(function() { updateLiveSpot(sigId); }, 15000);
+}
+
+function stopLiveSpot(sigId) {
+  if (spotTimers[sigId]) { clearInterval(spotTimers[sigId]); delete spotTimers[sigId]; }
+}
+
+async function updateLiveSpot(sigId) {
+  var sig = S.signals.find(function(s) { return s.id === sigId; });
+  if (!sig) return;
+  if (!S.connected) return;
+  try {
+    var r = await fetch(getServer() + '/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: [String(sig.token || '')] } }),
+    });
+    var d = await r.json();
+    if (!d.status || !d.data || !d.data.fetched || !d.data.fetched[0]) return;
+    var ltp = parseFloat(d.data.fetched[0].ltp || 0);
+    if (!ltp) return;
+
+    // Update sig spotPrice
+    var prevSpot = sig.spotPrice || ltp;
+    sig.spotPrice = ltp;
+
+    // Update live spot display
+    var lsEl   = document.getElementById('ls-' + sigId);
+    var arrEl  = document.getElementById('lsarr-' + sigId);
+    var zoneEl = document.getElementById('lszone-' + sigId);
+    var barEl  = document.getElementById('lsbar-' + sigId);
+    var pmEl   = document.getElementById('pm-' + sigId);
+    if (!lsEl) return;
+
+    lsEl.textContent = '₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2});
+    arrEl.textContent = ltp > prevSpot ? '▲' : ltp < prevSpot ? '▼' : '—';
+    arrEl.style.color = ltp > prevSpot ? 'var(--green)' : ltp < prevSpot ? 'var(--red)' : 'var(--text3)';
+
+    // Parse exit zone numbers
+    var exitParts = (sig.exitZone||'').replace(/[^0-9–\-]/g,'').split(/[–\-]/);
+    var exitLow  = parseFloat(exitParts[0]) || 0;
+    var exitHigh = parseFloat(exitParts[1]) || exitLow;
+
+    // Parse hold zone numbers
+    var holdParts = (sig.holdZone||'').replace(/[^0-9–\-]/g,'').split(/[–\-]/);
+    var holdLow  = parseFloat(holdParts[0]) || 0;
+    var holdHigh = parseFloat(holdParts[1]) || holdLow;
+
+    var holdStrongNum = parseFloat((sig.holdStrong||'0').replace(/[^0-9.]/g,'')) || 0;
+
+    var isBear = sig.type === 'PE';
+    var zone = 'neutral';
+
+    if (isBear) {
+      if (ltp >= exitLow)                          zone = 'exit';
+      else if (ltp >= holdLow && ltp <= holdHigh)  zone = 'hold';
+      else if (ltp <= holdStrongNum)               zone = 'hold-strong';
+      else                                          zone = 'hold';
+    } else {
+      if (ltp <= exitLow)                          zone = 'exit';
+      else if (ltp >= holdLow && ltp <= holdHigh)  zone = 'hold';
+      else if (ltp >= holdStrongNum)               zone = 'hold-strong';
+      else                                          zone = 'hold';
+    }
+
+    // Update zone display
+    var zoneLabels = { 'hold':'💛 HOLD', 'hold-strong':'💪 HOLD STRONG', 'exit':'🛑 EXIT NOW', 'neutral':'—' };
+    zoneEl.textContent = zoneLabels[zone] || '—';
+    zoneEl.className   = 'ls-zone ' + zone;
+    barEl.className    = 'live-spot-bar zone-' + zone;
+
+    // Highlight active level row
+    ['lv-hold-','lv-hs-','lv-exit-'].forEach(function(pfx) {
+      var el = document.getElementById(pfx + sigId);
+      if (el) el.classList.remove('active-zone');
+    });
+    var activeId = zone === 'hold' ? 'lv-hold-' : zone === 'hold-strong' ? 'lv-hs-' : zone === 'exit' ? 'lv-exit-' : null;
+    if (activeId) {
+      var activeEl = document.getElementById(activeId + sigId);
+      if (activeEl) activeEl.classList.add('active-zone');
+    }
+
+    // Alert if exit zone
+    if (zone === 'exit') {
+      toast('🛑 ' + sig.sym + ' EXIT ZONE! Spot ₹' + ltp.toLocaleString('en-IN'), 4000);
+    }
+
+  } catch(e) {}
+}
 
 function renderSignals() {
   var list   = document.getElementById('sigList');
@@ -1001,6 +1126,7 @@ async function scanSymbol(sym, token, lot, isIndex) {
           sym:         sym,
           type:        type,
           lot:         lot,
+          token:       String(token),
           score:       d.score,
           verdict:     d.verdict,
           spotPrice:   spotPrice,
