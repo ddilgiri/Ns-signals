@@ -442,18 +442,16 @@ function getMarketStatus() {
   const h = ist.getHours(), m = ist.getMinutes(), d = ist.getDay();
   const mins = h * 60 + m;
   const isWeekday = d >= 1 && d <= 5;
-  const nseOpen = isWeekday && mins >= 555 && mins < 930;   // 9:15 – 15:30
-  const mcxOpen = isWeekday && mins >= 540 && mins < 1410;  // 9:00 – 23:30
-  return { nseOpen, mcxOpen, ist };
+  const nseOpen = isWeekday && mins >= 555 && mins < 930;
+  return { nseOpen, ist };
 }
 function updateClock() {
-  const { nseOpen, mcxOpen, ist } = getMarketStatus();
+  const { nseOpen, ist } = getMarketStatus();
   document.getElementById('mTime').textContent = ist.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  document.getElementById('mStatusLbl').textContent = nseOpen ? 'NSE OPEN · MCX OPEN' : mcxOpen ? 'NSE Closed · MCX OPEN' : 'NSE & MCX Closed';
+  document.getElementById('mStatusLbl').textContent = nseOpen ? 'NSE Market OPEN' : 'NSE Market Closed';
   const pill = document.getElementById('mPill');
-  if (nseOpen) { pill.textContent = '● NSE OPEN'; pill.className = 'market-pill open'; }
-  else if (mcxOpen) { pill.textContent = '● MCX OPEN'; pill.className = 'market-pill open'; }
-  else { pill.textContent = '● CLOSED'; pill.className = 'market-pill closed'; }
+  pill.textContent = nseOpen ? '● OPEN' : '● CLOSED';
+  pill.className = 'market-pill ' + (nseOpen ? 'open' : 'closed');
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -511,7 +509,6 @@ async function doLogin() {
       localStorage.setItem('fxo-totp', totpSecret);
       loadIndices();
       loadVix();
-      loadMcx();
     } else {
       addLog('❌ Login failed: ' + d.message, 'err');
       toast('❌ ' + d.message);
@@ -576,33 +573,6 @@ async function loadVix() {
   } catch(e) {}
 }
 
-var MCX_NAMES = {
-  GOLD:'🥇 GOLD', SILVER:'🥈 SILVER', CRUDEOIL:'🛢️ CRUDE',
-  NATURALGAS:'⛽ NATGAS', COPPER:'🔶 COPPER', ALUMINIUM:'⚪ ALUM',
-  ZINC:'🔷 ZINC', LEAD:'🔵 LEAD', NICKEL:'⚫ NICKEL'
-};
-
-async function loadMcx() {
-  try {
-    var r = await fetch(getServer() + '/mcx');
-    var d = await r.json();
-    if (!d.status || !d.data) return;
-    var strip = document.getElementById('moodStrip');
-    strip.querySelectorAll('.mcx-chip').forEach(function(c) { c.remove(); });
-    Object.keys(d.data).forEach(function(sym) {
-      var c = d.data[sym];
-      if (!c || !c.ltp) return;
-      var bull = parseFloat(c.changePct || 0) >= 0;
-      var chgStr = (bull ? '+' : '') + parseFloat(c.changePct || 0).toFixed(2) + '%';
-      var chip = document.createElement('div');
-      chip.className = 'mood-chip mcx-chip ' + (bull ? 'bull' : 'bear');
-      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + (MCX_NAMES[sym]||('🪙 '+sym)) + ' ' + (c.ltp||0).toLocaleString('en-IN',{maximumFractionDigits:0}) + '</span> ' + chgStr;
-      strip.appendChild(chip);
-    });
-    addLog('🪙 MCX loaded', '');
-  } catch(e) { addLog('MCX load err: ' + e.message, 'warn'); }
-}
-
 // ─── FILTER ───────────────────────────────────────────────────────────────────
 function filterSigs(mode, el) {
   document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
@@ -644,17 +614,13 @@ function computeLevels(sig) {
 // ─── BUILD CARD HTML ──────────────────────────────────────────────────────────
 function buildCard(sig) {
   var isBear = sig.type === 'PE';
-  var isCom  = sig.isCommodity;
-  var cls    = isCom ? 'commodity' : isBear ? 'bearish' : 'bullish';
+  var cls    = isBear ? 'bearish' : 'bullish';
   var strong = sig.verdict === 'STRONG' ? ' strong' : '';
   var logo   = sig.sym.substring(0,4).toUpperCase();
-
   var vbadge = sig.verdict === 'STRONG' ? '<span class="badge fire">🔥 STRONG</span>'
              : sig.verdict === 'MODERATE' ? '<span class="badge mod">✓ MODERATE</span>'
              : '<span class="badge weak">' + sig.score + '%</span>';
-  var tbadge = isCom ? '<span class="badge comm">🪙 MCX</span>'
-             : isBear ? '<span class="badge bear">🔴 BEARISH</span>'
-             : '<span class="badge bull">🟢 BULLISH</span>';
+  var tbadge = isBear ? '<span class="badge bear">🔴 BEARISH</span>' : '<span class="badge bull">🟢 BULLISH</span>';
   var confBadge = '<span class="badge conf">' + sig.score + '%</span>';
   var expBadge  = sig.isExpiry ? '<span class="badge expiry">⚠️ EXPIRY</span>' : '';
 
@@ -692,7 +658,7 @@ function buildCard(sig) {
     + '<div class="card-mid">'
     + '<div class="badge-row">' + tbadge + confBadge + vbadge + expBadge + '</div>'
     + '<div class="stk-name">' + sig.sym + '</div>'
-    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · ' + (isCom?'MCX':'NSE') + ' · Monthly</div>'
+    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · NSE · Monthly</div>'
     + '</div>'
     + '<div class="card-right">'
     + '<div class="prem-val">₹' + (sig.premium||0).toFixed(2) + '</div>'
@@ -933,75 +899,45 @@ async function toggleScan() {
     return;
   }
   if (!S.connected) { toast('⚠️ Login first in Setup tab'); return; }
-  var marketSt = getMarketStatus();
-  if (!marketSt.nseOpen && !marketSt.mcxOpen) { toast('⏰ Both NSE & MCX are closed'); addLog('Scan blocked — markets closed', 'warn'); return; }
+  if (!getMarketStatus().nseOpen) { toast('⏰ NSE Market is closed'); addLog('Scan blocked — NSE closed', 'warn'); return; }
   S.scanning = true;
   btn.textContent = '⏹ STOP';
   btn.className = 'scan-btn stop';
-  var scanWhat = marketSt.nseOpen ? 'NSE stocks + indices' : 'MCX commodities only';
-  addLog('Scanner started — ' + scanWhat, 'ok');
+  addLog('Scanner started — NSE F&O stocks + indices', 'ok');
   runScan();
   S.scanInt = setInterval(runScan, 45000);
 }
 
 async function runScan() {
   if (!S.scanning) return;
-  var mkt = getMarketStatus();
-  if (!mkt.nseOpen && !mkt.mcxOpen) {
+  if (!getMarketStatus().nseOpen) {
     clearInterval(S.scanInt);
     S.scanning = false;
     document.getElementById('scanBtn').textContent = '▶ SCAN';
     document.getElementById('scanBtn').className = 'scan-btn go';
-    addLog('Markets closed — scanner stopped', 'warn');
+    addLog('NSE closed — scanner stopped', 'warn');
     return;
   }
   addLog('Scanning cycle...', '');
 
-  // Scan NSE indices + stocks only during NSE hours
-  if (mkt.nseOpen) {
-    for (var i = 0; i < IDX_LIST.length; i++) {
-      var idx = IDX_LIST[i];
-      await scanSymbol(idx.sym, idx.token, idx.lot, true);
-    }
-    var batch = NSE_STOCKS.slice(scanOffset, scanOffset + SCAN_BATCH);
-    if (batch.length === 0) { scanOffset = 0; batch = NSE_STOCKS.slice(0, SCAN_BATCH); }
-    scanOffset = (scanOffset + SCAN_BATCH) % NSE_STOCKS.length;
-    S.scannedCount += batch.length;
-    for (var j = 0; j < batch.length; j++) {
-      if (!S.scanning) break;
-      await scanSymbol(batch[j].sym, batch[j].token, batch[j].lot, false);
-    }
+  // Indices
+  for (var i = 0; i < IDX_LIST.length; i++) {
+    if (!S.scanning) break;
+    await scanSymbol(IDX_LIST[i].sym, IDX_LIST[i].token, IDX_LIST[i].lot, true);
   }
 
-  // Scan MCX commodities during MCX hours
-  if (mkt.mcxOpen) {
-    await scanMcx();
+  // Stocks batch
+  var batch = NSE_STOCKS.slice(scanOffset, scanOffset + SCAN_BATCH);
+  if (!batch.length) { scanOffset = 0; batch = NSE_STOCKS.slice(0, SCAN_BATCH); }
+  scanOffset = (scanOffset + SCAN_BATCH) % NSE_STOCKS.length;
+  S.scannedCount += batch.length;
+  for (var j = 0; j < batch.length; j++) {
+    if (!S.scanning) break;
+    await scanSymbol(batch[j].sym, batch[j].token, batch[j].lot, false);
   }
 
   renderSignals();
   updateAnalytics();
-}
-
-// MCX — mood strip only, no signal cards
-async function scanMcx() {
-  try {
-    var r = await fetch(getServer() + '/mcx');
-    var d = await r.json();
-    if (!d.status || !d.data) return;
-    var strip = document.getElementById('moodStrip');
-    strip.querySelectorAll('.mcx-chip').forEach(function(c) { c.remove(); });
-    Object.keys(d.data).forEach(function(sym) {
-      var c = d.data[sym];
-      if (!c || !c.ltp) return;
-      var bull = parseFloat(c.changePct || 0) >= 0;
-      var chgStr = (bull ? '+' : '') + parseFloat(c.changePct || 0).toFixed(2) + '%';
-      var chip = document.createElement('div');
-      chip.className = 'mood-chip mcx-chip ' + (bull ? 'bull' : 'bear');
-      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + (MCX_NAMES[sym]||('🪙 '+sym)) + ' ' + (c.ltp||0).toLocaleString('en-IN',{maximumFractionDigits:0}) + '</span> ' + chgStr;
-      strip.appendChild(chip);
-    });
-    addLog('🪙 MCX updated', '');
-  } catch(e) { addLog('MCX err: ' + e.message, 'warn'); }
 }
 
 async function scanSymbol(sym, token, lot, isIndex) {
