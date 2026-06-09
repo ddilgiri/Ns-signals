@@ -290,8 +290,8 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
     <div class="filter-row">
       <div class="fpill active" onclick="filterSigs('all',this)">ALL</div>
       <div class="fpill" onclick="filterSigs('stocks',this)">📈 STOCKS</div>
-      <div class="fpill" onclick="filterSigs('commodity',this)">🪙 COMMODITY</div>
       <div class="fpill" onclick="filterSigs('strong',this)">🔥 STRONG</div>
+      <div class="fpill" onclick="filterSigs('moderate',this)">✓ MODERATE</div>
     </div>
     <div class="scroll-area" id="sigList">
       <div class="empty-state">
@@ -576,22 +576,31 @@ async function loadVix() {
   } catch(e) {}
 }
 
+var MCX_NAMES = {
+  GOLD:'🥇 GOLD', SILVER:'🥈 SILVER', CRUDEOIL:'🛢️ CRUDE',
+  NATURALGAS:'⛽ NATGAS', COPPER:'🔶 COPPER', ALUMINIUM:'⚪ ALUM',
+  ZINC:'🔷 ZINC', LEAD:'🔵 LEAD', NICKEL:'⚫ NICKEL'
+};
+
 async function loadMcx() {
   try {
-    const r = await fetch(getServer() + '/mcx');
-    const d = await r.json();
+    var r = await fetch(getServer() + '/mcx');
+    var d = await r.json();
     if (!d.status || !d.data) return;
-    const strip = document.getElementById('moodStrip');
-    const keys = Object.keys(d.data);
-    keys.forEach(function(sym) {
-      const c = d.data[sym];
-      const bull = c.changePct >= 0;
-      const chip = document.createElement('div');
-      chip.className = 'mood-chip ' + (bull ? 'bull' : 'bear');
-      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + sym + ' ' + (c.ltp || 0).toLocaleString('en-IN', {maximumFractionDigits:0}) + '</span> MCX';
+    var strip = document.getElementById('moodStrip');
+    strip.querySelectorAll('.mcx-chip').forEach(function(c) { c.remove(); });
+    Object.keys(d.data).forEach(function(sym) {
+      var c = d.data[sym];
+      if (!c || !c.ltp) return;
+      var bull = parseFloat(c.changePct || 0) >= 0;
+      var chgStr = (bull ? '+' : '') + parseFloat(c.changePct || 0).toFixed(2) + '%';
+      var chip = document.createElement('div');
+      chip.className = 'mood-chip mcx-chip ' + (bull ? 'bull' : 'bear');
+      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + (MCX_NAMES[sym]||('🪙 '+sym)) + ' ' + (c.ltp||0).toLocaleString('en-IN',{maximumFractionDigits:0}) + '</span> ' + chgStr;
       strip.appendChild(chip);
     });
-  } catch(e) {}
+    addLog('🪙 MCX loaded', '');
+  } catch(e) { addLog('MCX load err: ' + e.message, 'warn'); }
 }
 
 // ─── FILTER ───────────────────────────────────────────────────────────────────
@@ -733,9 +742,9 @@ function renderSignals() {
     return;
   }
   var filtered = sigs;
-  if (S.filterMode === 'stocks')    filtered = sigs.filter(function(s) { return !s.isCommodity; });
-  if (S.filterMode === 'commodity') filtered = sigs.filter(function(s) { return s.isCommodity; });
-  if (S.filterMode === 'strong')    filtered = sigs.filter(function(s) { return s.verdict === 'STRONG'; });
+  if (S.filterMode === 'stocks')   filtered = sigs.filter(function(s) { return !s.isCommodity; });
+  if (S.filterMode === 'strong')   filtered = sigs.filter(function(s) { return s.verdict === 'STRONG'; });
+  if (S.filterMode === 'moderate') filtered = sigs.filter(function(s) { return s.verdict === 'MODERATE'; });
   if (!filtered.length) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No signals in this filter</div><div class="empty-sub">Switch to ALL to see everything</div></div>';
     return;
@@ -973,47 +982,26 @@ async function runScan() {
   updateAnalytics();
 }
 
-// MCX commodity scan
+// MCX — mood strip only, no signal cards
 async function scanMcx() {
   try {
     var r = await fetch(getServer() + '/mcx');
     var d = await r.json();
     if (!d.status || !d.data) return;
-    var keys = Object.keys(d.data);
-    keys.forEach(function(sym) {
+    var strip = document.getElementById('moodStrip');
+    strip.querySelectorAll('.mcx-chip').forEach(function(c) { c.remove(); });
+    Object.keys(d.data).forEach(function(sym) {
       var c = d.data[sym];
-      if (!c.ltp) return;
-      var isDup = S.signals.some(function(s) { return s.sym === sym && s.isCommodity && (Date.now() - (s.ts||0)) < 300000; });
-      if (isDup) return;
-      var bull = c.changePct >= 0;
-      // Simple commodity signal — based on price direction + momentum
-      if (Math.abs(c.changePct) < 0.3) return; // skip flat commodities
-      var sig = {
-        id:           sym + '_COM_' + Date.now(),
-        sym:          sym,
-        type:         bull ? 'CE' : 'PE',
-        lot:          1,
-        score:        60,
-        verdict:      Math.abs(c.changePct) > 1 ? 'STRONG' : 'MODERATE',
-        spotPrice:    c.ltp,
-        premium:      0,
-        strike:       Math.round(c.ltp / 100) * 100,
-        isExpiry:     false,
-        isCommodity:  true,
-        bias:         bull ? 'BULLISH' : 'BEARISH',
-        volRatio:     1,
-        atr:          c.ltp * 0.01,
-        ts:           Date.now(),
-        ceWalls:      [],
-        peFloors:     [],
-        ceSignal:     bull ? 'LONG_BUILDUP' : 'SHORT_BUILDUP',
-      };
-      computeLevels(sig);
-      S.signals.unshift(sig);
-      if (S.signals.length > 50) S.signals.pop();
-      addLog('🪙 MCX ' + sym + ': ' + (bull ? '+' : '') + c.changePct + '%', 'ok');
+      if (!c || !c.ltp) return;
+      var bull = parseFloat(c.changePct || 0) >= 0;
+      var chgStr = (bull ? '+' : '') + parseFloat(c.changePct || 0).toFixed(2) + '%';
+      var chip = document.createElement('div');
+      chip.className = 'mood-chip mcx-chip ' + (bull ? 'bull' : 'bear');
+      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + (MCX_NAMES[sym]||('🪙 '+sym)) + ' ' + (c.ltp||0).toLocaleString('en-IN',{maximumFractionDigits:0}) + '</span> ' + chgStr;
+      strip.appendChild(chip);
     });
-  } catch(e) { addLog('MCX scan err: ' + e.message, 'warn'); }
+    addLog('🪙 MCX updated', '');
+  } catch(e) { addLog('MCX err: ' + e.message, 'warn'); }
 }
 
 async function scanSymbol(sym, token, lot, isIndex) {
