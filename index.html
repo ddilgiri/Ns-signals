@@ -762,36 +762,34 @@ function buildCard(sig) {
     var wOI = w.oi >= 100000 ? (w.oi/100000).toFixed(1)+'L'
             : w.oi >= 1000   ? Math.round(w.oi/1000)+'K'
             : String(w.oi||'');
-    var wStr = w.strength === 'STRONG' ? '🔴' : w.strength === 'MEDIUM' ? '🟡' : '🟠';
-    caps += '<div class="cap cap-r">🧱 ' + w.strike + ' ' + wStr + ' ' + wOI + '</div>';
+    var wStr = w.strength === 'STRONG' ? '🔴STRONG' : w.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
+    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + wStr + '</div>';
   }
   if (sig.peFloors && sig.peFloors.length) {
     var f = sig.peFloors[0];
     var fOI = f.oi >= 100000 ? (f.oi/100000).toFixed(1)+'L'
             : f.oi >= 1000   ? Math.round(f.oi/1000)+'K'
             : String(f.oi||'');
-    var fStr = f.strength === 'STRONG' ? '🟢' : f.strength === 'MEDIUM' ? '🟡' : '🟠';
-    caps += '<div class="cap cap-s">🏠 ' + f.strike + ' ' + fStr + ' ' + fOI + '</div>';
+    var fStr = f.strength === 'STRONG' ? '🟢STRONG' : f.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
+    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + fStr + '</div>';
   }
-  // ceSignal/peSignal are OBJECTS {signal, action, note} — extract correctly
+  // ceSignal/peSignal — show action note clearly
   var ceSig = sig.ceSignal;
   var peSig = sig.peSignal;
   if (ceSig && typeof ceSig === 'object' && ceSig.signal) {
-    var ceTxt = String(ceSig.signal).replace(/_/g,' ');
-    caps += '<div class="cap cap-p">📉 ' + ceTxt + '</div>';
+    caps += '<div class="cap cap-p">📉 ' + String(ceSig.signal).replace(/_/g,' ') + (ceSig.note ? ' — ' + ceSig.note.substring(0,30) : '') + '</div>';
   }
   if (peSig && typeof peSig === 'object' && peSig.signal) {
-    var peTxt = String(peSig.signal).replace(/_/g,' ');
-    caps += '<div class="cap cap-p">📈 ' + peTxt + '</div>';
+    caps += '<div class="cap cap-p">📈 ' + String(peSig.signal).replace(/_/g,' ') + (peSig.note ? ' — ' + peSig.note.substring(0,30) : '') + '</div>';
   }
   if (ceSig && typeof ceSig === 'string') caps += '<div class="cap cap-p">📉 ' + ceSig.replace(/_/g,' ') + '</div>';
   if (peSig && typeof peSig === 'string') caps += '<div class="cap cap-p">📈 ' + peSig.replace(/_/g,' ') + '</div>';
-  // Volume — handle object or number
   var vr = parseFloat(sig.volRatio) || 0;
   if (vr >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + vr.toFixed(1) + 'x</div>';
-  if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">📈 Index aligned</div>';
+  if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">✅ Index aligned</div>';
   else if (sig.bias && sig.bias !== 'NEUTRAL' && typeof sig.bias === 'string') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
-  if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
+  if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+  if (sig.sureshTrapped) caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
   if (!caps) caps = '<div class="cap cap-p">OI signal detected</div>';
 
   var spotStr = (sig.spotPrice || sig.ltp || 0).toLocaleString('en-IN', {maximumFractionDigits:2});
@@ -1117,6 +1115,18 @@ async function refreshSignalOI() {
       updateCardCapsules(sig);
       // Update hold/exit zone labels
       updateCardLevels(sig);
+      // Update linked paper trade zones too
+      S.paperTrades.forEach(function(t) {
+        if (t.sigId !== sig.id) return;
+        var holdEl  = document.getElementById('tlv-hold-' + t.id);
+        var hsEl    = document.getElementById('tlv-hs-'   + t.id);
+        var exitEl  = document.getElementById('tlv-exit-' + t.id);
+        if (holdEl)  holdEl.querySelector('.lv-spot').textContent  = (sig.holdZone||'--')   + ' = HOLD';
+        if (hsEl)    hsEl.querySelector('.lv-spot').textContent    = (sig.holdStrong||'--') + ' = HOLD STRONG';
+        if (exitEl)  exitEl.querySelector('.lv-spot').textContent  = (sig.exitZone||'--')   + ' = EXIT';
+        if (holdEl)  holdEl.querySelector('.lv-reason').textContent = sig.holdReason || '';
+        if (exitEl)  exitEl.querySelector('.lv-reason').textContent = sig.exitReason || '';
+      });
     } catch(e) {}
   }
   addLog('OI refreshed — Ramesh/Suresh updated', '');
@@ -1335,23 +1345,78 @@ function renderTrades() {
       var pnl     = t.pnl || 0;
       var lots    = t.lots || 1;
       var avg     = t.avgPremium || t.entryPremium || 0;
+      var cur     = t.currentPremium || avg;
       var capUsed = avg * (t.lot||1) * lots * 1.2;
       var capStr  = capUsed >= 100000 ? '₹'+(capUsed/100000).toFixed(1)+'L' : capUsed >= 1000 ? '₹'+Math.round(capUsed/1000)+'K' : '₹'+Math.round(capUsed);
+      var isBear  = t.type === 'PE';
+      var pnlClr  = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+      // Ramesh/Suresh zones from linked signal
+      var sig     = S.signals.find(function(s) { return s.id === t.sigId; });
+      var holdZone     = sig ? (sig.holdZone     || '--') : (t.holdZone     || '--');
+      var holdStrong   = sig ? (sig.holdStrong   || '--') : (t.holdStrong   || '--');
+      var exitZone     = sig ? (sig.exitZone     || '--') : (t.exitZone     || '--');
+      var holdReason   = sig ? (sig.holdReason   || '')  : '';
+      var holdStrongR  = sig ? (sig.holdStrongReason||'') : '';
+      var exitReason   = sig ? (sig.exitReason   || '')  : '';
+      var target1      = sig ? (sig.target1 ? '₹'+sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--') : '--';
+      var target2      = sig ? (sig.target2 ? '₹'+sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--') : '--';
+      // Ramesh/Suresh capsules
+      var tcaps = '';
+      if (sig && sig.ceWalls && sig.ceWalls.length) {
+        var w = sig.ceWalls[0];
+        var wOI = w.oi >= 100000 ? (w.oi/100000).toFixed(1)+'L' : w.oi >= 1000 ? Math.round(w.oi/1000)+'K' : '';
+        tcaps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + (w.strength||'') + '</div>';
+      }
+      if (sig && sig.peFloors && sig.peFloors.length) {
+        var f = sig.peFloors[0];
+        var fOI = f.oi >= 100000 ? (f.oi/100000).toFixed(1)+'L' : f.oi >= 1000 ? Math.round(f.oi/1000)+'K' : '';
+        tcaps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + (f.strength||'') + '</div>';
+      }
+      if (sig && sig.rameshTrapped) tcaps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
+
       return '<div class="trade-card ' + (pnl>=0?'profit':'loss') + '" id="tcard-' + t.id + '">'
-        + '<div class="trade-top"><div>'
-        + '<div class="t-name">' + t.sym.toUpperCase() + ' <span style="font-size:10px;color:var(--text3);font-weight:400">' + t.strike + ' ' + t.type + '</span></div>'
+
+        // Header
+        + '<div class="trade-top">'
+        + '<div>'
+        + '<div class="t-name">' + t.sym.toUpperCase()
+        + ' <span style="font-size:10px;color:var(--text3);font-weight:500">' + t.strike + ' ' + t.type + '</span></div>'
         + '<div class="t-sub">' + lots + ' lot' + (lots>1?'s':'') + ' · Avg ₹' + avg.toFixed(2) + ' · ' + t.date + '</div>'
         + '</div>'
+        + '<div>'
         + '<div class="t-pnl ' + (pnl>=0?'pos':'neg') + '" id="tpnl-' + t.id + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
+        + '<div style="font-size:9px;color:var(--text3);text-align:right">Capital ' + capStr + '</div>'
         + '</div>'
-        + '<div class="trade-dets">'
-        + '<div class="td-item">Avg <span>₹' + avg.toFixed(2) + '</span></div>'
-        + '<div class="td-item">Now <span id="tnow-' + t.id + '">₹' + (t.currentPremium||avg).toFixed(2) + '</span></div>'
-        + '<div class="td-item">Capital <span>' + capStr + '</span></div>'
         + '</div>'
-        + '<div style="display:flex;gap:8px;margin-top:9px">'
+
+        // Live premium bar
+        + '<div class="trade-dets" style="margin-top:8px">'
+        + '<div class="td-item">Avg Entry <span>₹' + avg.toFixed(2) + '</span></div>'
+        + '<div class="td-item">Live Now <span id="tnow-' + t.id + '" style="color:' + (cur>avg?'var(--green)':'var(--red)') + '">₹' + cur.toFixed(2) + '</span></div>'
+        + '<div class="td-item">Lots <span>' + lots + '</span></div>'
+        + '</div>'
+
+        // Ramesh/Suresh zones — SAME as signal card
+        + '<div class="levels" style="margin-top:8px">'
+        + '<div class="lv-row hold" id="tlv-hold-' + t.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + holdZone + ' = HOLD</div><div class="lv-reason">' + holdReason + '</div></div></div>'
+        + '<div class="lv-row hold-strong" id="tlv-hs-' + t.id + '"><div class="lv-icon">💪</div><div><div class="lv-spot">' + holdStrong + ' = HOLD STRONG</div><div class="lv-reason">' + holdStrongR + '</div></div></div>'
+        + '<div class="lv-row exit" id="tlv-exit-' + t.id + '"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + exitZone + ' = EXIT</div><div class="lv-reason">' + exitReason + '</div></div></div>'
+        + '</div>'
+
+        // Targets
+        + '<div class="target-row" style="margin-top:8px">'
+        + '<div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">' + target1 + '</div></div>'
+        + '<div class="target-chip"><div class="t-lbl">Target 2</div><div class="t-val">' + target2 + '</div></div>'
+        + '</div>'
+
+        // WHY capsules
+        + (tcaps ? '<div class="capsules" style="margin-top:8px">' + tcaps + '</div>' : '')
+
+        // Buttons
+        + '<div style="display:flex;gap:8px;margin-top:10px">'
         + '<div class="paper-btn" style="flex:1;background:rgba(59,130,246,.1)" onclick="addPaperTrade(event,\'' + t.sigId + '\')">➕ Add Lot</div>'
-        + '<div class="paper-btn" style="flex:1;background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3)" onclick="exitPaperTrade(\'' + t.id + '\')">✅ Close</div>'
+        + '<div class="paper-btn" style="flex:1;background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3)" onclick="exitPaperTrade(\'' + t.id + '\')">✅ Close Trade</div>'
         + '</div>'
         + '</div>';
     }).join('');
