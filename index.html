@@ -934,8 +934,21 @@ async function updateLiveSpot(sigId) {
     // Update LIVE premium on card right side
     if (pmEl)  pmEl.textContent  = '₹' + (sig.premium||0).toFixed(2);
     var cpmEl  = document.getElementById('cpm-' + sigId);
-    if (cpmEl) cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
-    // Entry premium in bar stays FIXED — no update needed
+    if (cpmEl) {
+      // Fetch live option premium
+      try {
+        var optR = await fetch(getServer() + '/option-ltp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: sig.sym, strike: sig.strike, optionType: sig.type }),
+        });
+        var optD = await optR.json();
+        if (optD.status && optD.ltp && parseFloat(optD.ltp) > 0) {
+          sig.premium = parseFloat(optD.ltp);
+        }
+      } catch(e) {}
+      cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
+    }
     // Update capital
     var clCap = document.getElementById('cap-' + sigId);
     if (clCap) clCap.textContent = calcCapital(sig.premium||0, sig.lot||1);
@@ -1305,10 +1318,9 @@ async function scanSymbol(sym, token, lot, isIndex) {
         var isDup = S.signals.some(function(s) { return s.sym === sym && s.type === type && (Date.now() - (s.ts||0)) < 300000; });
         if (isDup) continue;
 
-        // signal-analysis does NOT return chain/atmStrike
-        // Call /oi-analysis separately to get ATM premium
+        // Get premium — let server find real ATM strike from options chain
         var premium = 0;
-        var atmStrike = Math.round(spotPrice / 50) * 50;
+        var atmStrike = 0; // Will be set by server
         try {
           var oiR = await fetch(getServer() + '/oi-analysis', {
             method: 'POST',
@@ -1316,21 +1328,24 @@ async function scanSymbol(sym, token, lot, isIndex) {
             body: JSON.stringify({ symbol: sym, spotPrice: spotPrice }),
           });
           var oiD = await oiR.json();
-          if (oiD.status && oiD.chain) {
-            atmStrike = oiD.atmStrike || atmStrike;
-            var atm = oiD.chain.find(function(c) { return c.isATM; });
-            if (atm) {
-              premium = type === 'CE' ? (atm.CE_ltp || 0) : (atm.PE_ltp || 0);
-              // If ATM premium is 0, try nearest strikes
-              if (!premium) {
-                var nearby = oiD.chain.filter(function(c) { return Math.abs(c.strike - atmStrike) <= 100; });
-                for (var ni = 0; ni < nearby.length; ni++) {
-                  var p = type === 'CE' ? (nearby[ni].CE_ltp||0) : (nearby[ni].PE_ltp||0);
-                  if (p > 0) { premium = p; atmStrike = nearby[ni].strike; break; }
+          if (oiD.status) {
+            // Use SERVER's ATM strike — it knows real strike gaps
+            atmStrike = oiD.atmStrike || 0;
+            if (oiD.chain && oiD.chain.length) {
+              // Sort chain by distance from spot — pick nearest with valid premium
+              var sorted = oiD.chain.slice().sort(function(a,b) {
+                return Math.abs(a.strike - spotPrice) - Math.abs(b.strike - spotPrice);
+              });
+              for (var ni = 0; ni < sorted.length; ni++) {
+                var p = type === 'CE' ? (sorted[ni].CE_ltp||0) : (sorted[ni].PE_ltp||0);
+                if (p > 0) {
+                  premium   = p;
+                  atmStrike = sorted[ni].strike;
+                  break;
                 }
               }
             }
-            // Merge OI walls/floors if not already in signal response
+            // Merge OI data
             if (!d.ceWalls  || !d.ceWalls.length)  d.ceWalls  = oiD.ceWalls  || [];
             if (!d.peFloors || !d.peFloors.length)  d.peFloors = oiD.peFloors || [];
             if (!d.ceSignal) d.ceSignal = oiD.ceSignal || null;
@@ -1338,6 +1353,27 @@ async function scanSymbol(sym, token, lot, isIndex) {
             if (!d.rameshTrapped) d.rameshTrapped = oiD.rameshTrapped || false;
           }
         } catch(e2) { addLog('OI fetch ' + sym + ': ' + e2.message, 'warn'); }
+
+        // Fallback — /option-ltp if still no premium
+        if (!premium && atmStrike) {
+          try {
+            var ltpR = await fetch(getServer() + '/option-ltp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbol: sym, strike: atmStrike, optionType: type }),
+            });
+            var ltpD = await ltpR.json();
+            if (ltpD.status && ltpD.ltp) {
+              premium = parseFloat(ltpD.ltp);
+            }
+          } catch(e3) {}
+        }
+
+        // If still no ATM strike — skip this signal
+        if (!atmStrike) {
+          addLog('Skip ' + sym + ' — no valid strike found', 'warn');
+          continue;
+        }
 
         // Check capital limit
         if (premium > 0) {
