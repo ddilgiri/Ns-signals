@@ -103,7 +103,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .sig-card.strong.bullish{box-shadow:0 3px 18px rgba(34,197,94,.12)}
 
 .card-col{display:flex;align-items:center;padding:12px 13px;gap:10px}
-.stk-logo{width:40px;height:40px;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;flex-shrink:0;border:1px solid var(--border);font-family:'Roboto Mono',monospace;letter-spacing:0;overflow:hidden;word-break:break-all;text-align:center;line-height:1.2}
+.stk-logo{width:40px;height:40px;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;flex-shrink:0;border:1px solid var(--border);font-family:'Roboto Mono',monospace;overflow:hidden;padding:3px}
 .bearish .stk-logo{color:var(--red);border-color:rgba(239,68,68,.3)}
 .bullish .stk-logo{color:var(--green);border-color:rgba(34,197,94,.3)}
 .commodity .stk-logo{color:var(--amber);border-color:rgba(245,158,11,.3)}
@@ -415,6 +415,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
         <div class="card-header"><span class="card-title">Scan Settings</span></div>
         <div class="card-body">
           <div class="field"><label class="field-lbl">Min Confidence %</label><input class="field-inp" id="cfgMinConf" type="number" value="60" min="40" max="90"></div>
+          <div class="field"><label class="field-lbl">Max Capital ₹</label><input class="field-inp" id="cfgMaxCap" type="number" value="30000" min="5000" step="5000" placeholder="e.g. 30000"></div>
           <div class="field"><label class="field-lbl">Signal Type</label>
             <select class="field-inp" id="cfgType">
               <option value="BOTH">Both CE &amp; PE</option>
@@ -558,8 +559,10 @@ async function doLogin() {
       toast('✅ Connected to Angel One!');
       localStorage.setItem('fxo-client', clientCode);
       localStorage.setItem('fxo-api', apiKey);
-      localStorage.setItem('fxo-pass', btoa(password)); // base64 encode for basic obfuscation
+      localStorage.setItem('fxo-pass', btoa(password));
       localStorage.setItem('fxo-totp', totpSecret);
+      var mcEl = document.getElementById('cfgMaxCap');
+      if (mcEl) localStorage.setItem('fxo-maxcap', mcEl.value);
       loadIndices();
       loadVix();
     } else {
@@ -696,9 +699,21 @@ function buildCard(sig) {
   var isBear = sig.type === 'PE';
   var cls    = isBear ? 'bearish' : 'bullish';
   var strong = sig.verdict === 'STRONG' ? ' strong' : '';
-  // Smart logo — first 4 chars but meaningful
-  var symClean = sig.sym.replace(/[^A-Z0-9]/g,'');
-  var logo = symClean.length > 4 ? symClean.substring(0,4) : symClean;
+  // Smart logo — use Dhan stock image, fallback to text
+  var symUp    = (sig.sym || '').toUpperCase();
+  var symClean = symUp.replace(/[^A-Z0-9\-]/g,'');
+  // Map index names to their Dhan image equivalents
+  var imgSym = symClean;
+  if (symClean === 'NIFTY')      imgSym = 'NIFTY50';
+  if (symClean === 'BANKNIFTY')  imgSym = 'BANKNIFTY';
+  if (symClean === 'FINNIFTY')   imgSym = 'FINNIFTY';
+  if (symClean === 'MIDCPNIFTY') imgSym = 'MIDCPNIFTY';
+  var logo = '<img src="https://images.dhan.co/symbol/' + imgSym + '.png" '
+           + 'style="width:32px;height:32px;border-radius:6px;object-fit:contain;" '
+           + 'onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'" '
+           + 'alt="' + imgSym + '">'
+           + '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:var(--text2);">'
+           + symClean.substring(0,4) + '</span>';
   var vbadge = sig.verdict === 'STRONG' ? '<span class="badge fire">🔥 STRONG</span>'
              : sig.verdict === 'MODERATE' ? '<span class="badge mod">✓ MODERATE</span>'
              : '<span class="badge weak">' + sig.score + '%</span>';
@@ -758,7 +773,7 @@ function buildCard(sig) {
     + '<div class="stk-logo">' + logo + '</div>'
     + '<div class="card-mid">'
     + '<div class="badge-row">' + tbadge + confBadge + vbadge + expBadge + '</div>'
-    + '<div class="stk-name">' + sig.sym + '</div>'
+    + '<div class="stk-name">' + symUp + '</div>'
     + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · Lot ' + (sig.lot||1) + '</div>'
     + '</div>'
     + '<div class="card-right">'
@@ -1255,6 +1270,7 @@ async function scanSymbol(sym, token, lot, isIndex) {
     if (!spotPrice) return;
 
     var minConf  = parseInt(document.getElementById('cfgMinConf').value || '60');
+    var maxCap   = parseInt(document.getElementById('cfgMaxCap') ? document.getElementById('cfgMaxCap').value : '30000') || 30000;
     var sigType  = document.getElementById('cfgType').value || 'BOTH';
     var types    = sigType === 'CE' ? ['CE'] : sigType === 'PE' ? ['PE'] : ['CE','PE'];
 
@@ -1312,6 +1328,15 @@ async function scanSymbol(sym, token, lot, isIndex) {
           }
         } catch(e2) { addLog('OI fetch ' + sym + ': ' + e2.message, 'warn'); }
 
+        // Check capital limit
+        if (premium > 0) {
+          var reqCap = premium * lot * 1.2;
+          if (reqCap > maxCap) {
+            addLog('Skip ' + sym + ' — capital ₹' + Math.round(reqCap/1000) + 'K > limit ₹' + Math.round(maxCap/1000) + 'K', '');
+            continue;
+          }
+        }
+
         var sig = Object.assign({}, d, {
           id:          sym + '_' + type + '_' + Date.now(),
           sym:         sym,
@@ -1349,10 +1374,12 @@ window.addEventListener('DOMContentLoaded', function() {
   var api    = localStorage.getItem('fxo-api');
   var pass   = localStorage.getItem('fxo-pass');
   var totp   = localStorage.getItem('fxo-totp');
+  var maxC   = localStorage.getItem('fxo-maxcap');
   if (client) document.getElementById('cfgClient').value = client;
   if (api)    document.getElementById('cfgApi').value    = api;
   if (pass)   { try { document.getElementById('cfgPass').value = atob(pass); } catch(e) {} }
   if (totp)   document.getElementById('cfgTotp').value   = totp;
+  if (maxC)   document.getElementById('cfgMaxCap').value  = maxC;
   // Load data
   loadPaperTrades();
   renderSignals();
