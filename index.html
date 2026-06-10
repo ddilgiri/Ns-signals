@@ -556,7 +556,7 @@ async function doLogin() {
       btn.innerHTML = '✅ Connected';
       btn.style.background = 'var(--green)';
       addLog('✅ Login OK — ' + d.client, 'ok');
-      toast('✅ Connected to Angel One!');
+      toast('✅ Connected!');
       localStorage.setItem('fxo-client', clientCode);
       localStorage.setItem('fxo-api', apiKey);
       localStorage.setItem('fxo-pass', btoa(password));
@@ -565,6 +565,11 @@ async function doLogin() {
       if (mcEl) localStorage.setItem('fxo-maxcap', mcEl.value);
       loadIndices();
       loadVix();
+      // Auto start scan if market open
+      if (getMarketStatus().nseOpen && !S.scanning) {
+        addLog('Market open — auto starting scan...', 'ok');
+        setTimeout(function() { toggleScan(); }, 2000);
+      }
     } else {
       addLog('❌ Login failed: ' + d.message, 'err');
       toast('❌ ' + d.message);
@@ -1385,7 +1390,12 @@ window.addEventListener('DOMContentLoaded', function() {
   renderSignals();
   renderTrades();
   updateAnalytics();
-  addLog('DILIP FXO v2.0 ready — Login in Setup to start scanning', 'ok');
+  addLog('DILIP FXO v2.0 ready', 'ok');
+  // Auto connect if credentials exist
+  if (client && api && pass) {
+    addLog('Saved credentials found — auto connecting...', '');
+    setTimeout(function() { doLogin(); }, 1000);
+  }
 });
 </script>
 </body>
