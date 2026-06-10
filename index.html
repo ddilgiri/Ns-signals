@@ -901,11 +901,22 @@ async function batchUpdatePrices() {
 // Batch fetch option premiums for all active signals
 async function batchUpdatePremiums() {
   if (!S.signals.length) return;
-  // Build list of unique sym+strike+type combos
+  // Build list of unique sym+strike+type — signals + open paper trades
   var toFetch = [];
+  var seen = {};
   S.signals.forEach(function(sig) {
-    if (sig.sym && sig.strike && sig.type) {
+    var key = sig.sym + '_' + sig.strike + '_' + sig.type;
+    if (sig.sym && sig.strike && sig.type && !seen[key]) {
+      seen[key] = true;
       toFetch.push(sig);
+    }
+  });
+  // Add paper trades not already in signals
+  S.paperTrades.forEach(function(t) {
+    var key = t.sym + '_' + t.strike + '_' + t.type;
+    if (!seen[key]) {
+      seen[key] = true;
+      toFetch.push({ id: null, sym: t.sym, strike: t.strike, type: t.type, lot: t.lot, premium: t.currentPremium });
     }
   });
   if (!toFetch.length) return;
@@ -929,17 +940,36 @@ async function batchUpdatePremiums() {
       var d = await r.json();
       if (d.status && d.ltp && parseFloat(d.ltp) > 0) {
         sig.premium = parseFloat(d.ltp);
-        // cpm = live premium on card top-right (always visible)
         var cpmEl = document.getElementById('cpm-' + sig.id);
-        if (cpmEl) cpmEl.textContent = '₹' + sig.premium.toFixed(2);
-        // cap = min capital in expanded view
         var capEl = document.getElementById('cap-' + sig.id);
+        if (cpmEl) cpmEl.textContent = '₹' + sig.premium.toFixed(2);
         if (capEl) capEl.textContent = calcCapital(sig.premium, sig.lot||1);
-        // Update min capital tag in collapsed view
         var minTag = document.querySelector('#card-' + sig.id + ' .pnl-tag.none');
         if (minTag && minTag.textContent.indexOf('min') !== -1) {
           minTag.textContent = calcCapital(sig.premium, sig.lot||1) + ' min';
         }
+        // Update paper trade P&L if this signal is tracked
+        S.paperTrades.forEach(function(t) {
+          if (t.sigId === sig.id) {
+            t.currentPremium = sig.premium;
+            t.pnl = (sig.premium - t.entryPremium) * t.lot;
+            // Update trade card elements
+            var nowEl  = document.getElementById('tnow-'    + t.id);
+            var pnlEl  = document.getElementById('tpnl-'    + t.id);
+            var pnlAmt = document.getElementById('tpnlamt-' + t.id);
+            var card   = document.getElementById('tcard-'   + t.id);
+            if (nowEl)  nowEl.textContent  = '₹' + sig.premium.toFixed(2);
+            if (pnlEl)  {
+              pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
+              pnlEl.className   = 't-pnl ' + (t.pnl>=0?'pos':'neg');
+            }
+            if (pnlAmt) {
+              pnlAmt.textContent  = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
+              pnlAmt.style.color  = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
+            }
+            if (card) card.className = 'trade-card ' + (t.pnl>=0?'profit':'loss');
+          }
+        });
       }
     } catch(e) {}
   }
@@ -1170,10 +1200,19 @@ function renderTrades() {
     openDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No open paper trades</div><div class="empty-sub">Tap "Add to Paper Trade" on signal cards</div></div>';
   } else {
     openDiv.innerHTML = S.paperTrades.map(function(t) {
-      return '<div class="trade-card ' + (t.pnl>=0?'profit':'loss') + '">'
-        + '<div class="trade-top"><div><div class="t-name">' + t.sym + '</div><div class="t-sub">' + t.strike + ' ' + t.type + ' · Paper · ' + t.date + '</div></div>'
-        + '<div class="t-pnl ' + (t.pnl>=0?'pos':'neg') + '">' + (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN') + '</div></div>'
-        + '<div class="trade-dets"><div class="td-item">Entry <span>₹' + (t.entryPremium||0).toFixed(2) + '</span></div><div class="td-item">Now <span>₹' + (t.currentPremium||t.entryPremium||0).toFixed(2) + '</span></div></div>'
+      var pnl = t.pnl || 0;
+      return '<div class="trade-card ' + (pnl>=0?'profit':'loss') + '" id="tcard-' + t.id + '">'
+        + '<div class="trade-top"><div>'
+        + '<div class="t-name">' + t.sym.toUpperCase() + '</div>'
+        + '<div class="t-sub">' + t.strike + ' ' + t.type + ' · Paper · ' + t.date + '</div>'
+        + '</div>'
+        + '<div class="t-pnl ' + (pnl>=0?'pos':'neg') + '" id="tpnl-' + t.id + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
+        + '</div>'
+        + '<div class="trade-dets">'
+        + '<div class="td-item">Entry <span>₹' + (t.entryPremium||0).toFixed(2) + '</span></div>'
+        + '<div class="td-item">Now <span id="tnow-' + t.id + '">₹' + (t.currentPremium||t.entryPremium||0).toFixed(2) + '</span></div>'
+        + '<div class="td-item">P&amp;L <span id="tpnlamt-' + t.id + '" style="color:' + (pnl>=0?'var(--green)':'var(--red)') + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</span></div>'
+        + '</div>'
         + '<div style="margin-top:9px"><div class="paper-btn" onclick="exitPaperTrade(\'' + t.id + '\')">Close Trade</div></div>'
         + '</div>';
     }).join('');
@@ -1183,11 +1222,19 @@ function renderTrades() {
     closedDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">No closed trades</div><div class="empty-sub">Closed history appears here</div></div>';
   } else {
     closedDiv.innerHTML = S.closedPaperTrades.map(function(t) {
-      return '<div class="trade-card ' + (t.pnl>=0?'profit':'loss') + '">'
-        + '<div class="trade-top"><div><div class="t-name">' + t.sym + '</div><div class="t-sub">' + t.strike + ' ' + t.type + ' · ' + (t.exitDate||t.date) + '</div></div>'
-        + '<div class="t-pnl ' + (t.pnl>=0?'pos':'neg') + '">' + (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN') + '</div></div>'
-        + '<div class="trade-dets"><div class="td-item">Entry <span>₹' + (t.entryPremium||0).toFixed(2) + '</span></div><div class="td-item">Exit <span>₹' + (t.currentPremium||t.entryPremium||0).toFixed(2) + '</span></div>'
-        + '<div class="td-item">Result <span style="color:' + (t.pnl>=0?'var(--green)':'var(--red)') + '">' + (t.pnl>=0?'WIN ✅':'LOSS ❌') + '</span></div></div>'
+      var pnl = t.pnl || 0;
+      return '<div class="trade-card ' + (pnl>=0?'profit':'loss') + '">'
+        + '<div class="trade-top"><div>'
+        + '<div class="t-name">' + t.sym.toUpperCase() + '</div>'
+        + '<div class="t-sub">' + t.strike + ' ' + t.type + ' · ' + (t.exitDate||t.date) + '</div>'
+        + '</div>'
+        + '<div class="t-pnl ' + (pnl>=0?'pos':'neg') + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
+        + '</div>'
+        + '<div class="trade-dets">'
+        + '<div class="td-item">Entry <span>₹' + (t.entryPremium||0).toFixed(2) + '</span></div>'
+        + '<div class="td-item">Exit <span>₹' + (t.currentPremium||t.entryPremium||0).toFixed(2) + '</span></div>'
+        + '<div class="td-item">Result <span style="color:' + (pnl>=0?'var(--green)':'var(--red)') + '">' + (pnl>=0?'WIN ✅':'LOSS ❌') + '</span></div>'
+        + '</div>'
         + '</div>';
     }).join('');
   }
