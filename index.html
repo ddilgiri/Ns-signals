@@ -952,20 +952,15 @@ async function batchUpdatePremiums() {
         S.paperTrades.forEach(function(t) {
           if (t.sigId === sig.id) {
             t.currentPremium = sig.premium;
-            t.pnl = (sig.premium - t.entryPremium) * t.lot;
-            // Update trade card elements
-            var nowEl  = document.getElementById('tnow-'    + t.id);
-            var pnlEl  = document.getElementById('tpnl-'    + t.id);
-            var pnlAmt = document.getElementById('tpnlamt-' + t.id);
-            var card   = document.getElementById('tcard-'   + t.id);
-            if (nowEl)  nowEl.textContent  = '₹' + sig.premium.toFixed(2);
-            if (pnlEl)  {
+            var lots = t.lots || 1;
+            t.pnl = (sig.premium - (t.avgPremium||t.entryPremium)) * (t.lot||1) * lots;
+            var nowEl = document.getElementById('tnow-'  + t.id);
+            var pnlEl = document.getElementById('tpnl-'  + t.id);
+            var card  = document.getElementById('tcard-' + t.id);
+            if (nowEl) nowEl.textContent = '₹' + sig.premium.toFixed(2);
+            if (pnlEl) {
               pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
               pnlEl.className   = 't-pnl ' + (t.pnl>=0?'pos':'neg');
-            }
-            if (pnlAmt) {
-              pnlAmt.textContent  = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
-              pnlAmt.style.color  = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
             }
             if (card) card.className = 'trade-card ' + (t.pnl>=0?'profit':'loss');
           }
@@ -1140,24 +1135,46 @@ function addPaperTrade(e, sigId) {
   e.stopPropagation();
   var sig = S.signals.find(function(s) { return s.id === sigId; });
   if (!sig) return;
-  if (S.paperTrades.find(function(p) { return p.sigId === sigId; })) { toast('Already tracking this'); return; }
-  var trade = {
-    id: String(Date.now()),
-    sigId: sigId,
-    sym: sig.sym,
-    strike: sig.strike,
-    type: sig.type,
-    entryPremium: sig.premium,
-    currentPremium: sig.premium,
-    pnl: 0,
-    lot: sig.lot || 1,
-    date: new Date().toLocaleDateString('en-IN'),
-    status: 'OPEN',
-  };
-  S.paperTrades.push(trade);
-  savePaperTrades();
-  renderTrades();
-  toast('📋 Added to Paper Trades!');
+
+  var livePrem = sig.premium || 0;
+  if (!livePrem) { toast('⚠️ No live premium yet — wait for update'); return; }
+
+  // Check if trade already exists for this signal
+  var existing = S.paperTrades.find(function(p) { return p.sigId === sigId; });
+
+  if (existing) {
+    // Already tracking — add 1 more lot (averaging)
+    var prevTotalCost = existing.avgPremium * existing.lots;
+    existing.lots       += 1;
+    existing.avgPremium  = (prevTotalCost + livePrem) / existing.lots;
+    existing.entryPremium = existing.avgPremium; // entry = avg
+    existing.pnl = (existing.currentPremium - existing.avgPremium) * existing.lot * existing.lots;
+
+    savePaperTrades();
+    renderTrades();
+    toast('➕ Lot ' + existing.lots + ' added @ ₹' + livePrem.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
+  } else {
+    // First entry
+    var trade = {
+      id:            String(Date.now()),
+      sigId:         sigId,
+      sym:           sig.sym,
+      strike:        sig.strike,
+      type:          sig.type,
+      lot:           sig.lot || 1,       // lot size (e.g. 600 for JSWSTEEL)
+      lots:          1,                  // number of lots taken
+      avgPremium:    livePrem,           // average entry premium
+      entryPremium:  livePrem,           // first entry premium
+      currentPremium: livePrem,
+      pnl:           0,
+      date:          new Date().toLocaleDateString('en-IN'),
+      status:        'OPEN',
+    };
+    S.paperTrades.push(trade);
+    savePaperTrades();
+    renderTrades();
+    toast('📋 1st lot added @ ₹' + livePrem.toFixed(2) + ' — tap again to add more');
+  }
 }
 
 function exitPaperTrade(tradeId) {
@@ -1200,20 +1217,27 @@ function renderTrades() {
     openDiv.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No open paper trades</div><div class="empty-sub">Tap "Add to Paper Trade" on signal cards</div></div>';
   } else {
     openDiv.innerHTML = S.paperTrades.map(function(t) {
-      var pnl = t.pnl || 0;
+      var pnl     = t.pnl || 0;
+      var lots    = t.lots || 1;
+      var avg     = t.avgPremium || t.entryPremium || 0;
+      var capUsed = avg * (t.lot||1) * lots * 1.2;
+      var capStr  = capUsed >= 100000 ? '₹'+(capUsed/100000).toFixed(1)+'L' : capUsed >= 1000 ? '₹'+Math.round(capUsed/1000)+'K' : '₹'+Math.round(capUsed);
       return '<div class="trade-card ' + (pnl>=0?'profit':'loss') + '" id="tcard-' + t.id + '">'
         + '<div class="trade-top"><div>'
-        + '<div class="t-name">' + t.sym.toUpperCase() + '</div>'
-        + '<div class="t-sub">' + t.strike + ' ' + t.type + ' · Paper · ' + t.date + '</div>'
+        + '<div class="t-name">' + t.sym.toUpperCase() + ' <span style="font-size:10px;color:var(--text3);font-weight:400">' + t.strike + ' ' + t.type + '</span></div>'
+        + '<div class="t-sub">' + lots + ' lot' + (lots>1?'s':'') + ' · Avg ₹' + avg.toFixed(2) + ' · ' + t.date + '</div>'
         + '</div>'
         + '<div class="t-pnl ' + (pnl>=0?'pos':'neg') + '" id="tpnl-' + t.id + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
         + '</div>'
         + '<div class="trade-dets">'
-        + '<div class="td-item">Entry <span>₹' + (t.entryPremium||0).toFixed(2) + '</span></div>'
-        + '<div class="td-item">Now <span id="tnow-' + t.id + '">₹' + (t.currentPremium||t.entryPremium||0).toFixed(2) + '</span></div>'
-        + '<div class="td-item">P&amp;L <span id="tpnlamt-' + t.id + '" style="color:' + (pnl>=0?'var(--green)':'var(--red)') + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</span></div>'
+        + '<div class="td-item">Avg <span>₹' + avg.toFixed(2) + '</span></div>'
+        + '<div class="td-item">Now <span id="tnow-' + t.id + '">₹' + (t.currentPremium||avg).toFixed(2) + '</span></div>'
+        + '<div class="td-item">Capital <span>' + capStr + '</span></div>'
         + '</div>'
-        + '<div style="margin-top:9px"><div class="paper-btn" onclick="exitPaperTrade(\'' + t.id + '\')">Close Trade</div></div>'
+        + '<div style="display:flex;gap:8px;margin-top:9px">'
+        + '<div class="paper-btn" style="flex:1;background:rgba(59,130,246,.1)" onclick="addPaperTrade(event,\'' + t.sigId + '\')">➕ Add Lot</div>'
+        + '<div class="paper-btn" style="flex:1;background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3)" onclick="exitPaperTrade(\'' + t.id + '\')">✅ Close</div>'
+        + '</div>'
         + '</div>';
     }).join('');
   }
