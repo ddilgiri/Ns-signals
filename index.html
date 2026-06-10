@@ -175,8 +175,8 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .card-live-bar.zone-exit{background:rgba(239,68,68,.12);animation:pulse-red 1s infinite}
 .clb-item{display:flex;flex-direction:column;align-items:center;flex:1;gap:1px}
 .clb-lbl{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
-.clb-val{font-size:13px;font-weight:900;font-family:'Roboto Mono',monospace;color:var(--text)}
-.clb-arr{font-size:11px;font-weight:700;margin-top:1px}
+.clb-val{font-size:13px;font-weight:900;font-family:'Roboto Mono',monospace;color:var(--text);display:flex;align-items:center;gap:3px}
+.clb-arr{font-size:10px;font-weight:700}
 .clb-divider{width:1px;height:28px;background:var(--border);flex-shrink:0;margin:0 8px}
 .clb-zone{font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0}
 .clb-zone.hold{background:rgba(245,158,11,.15);color:var(--amber)}
@@ -680,7 +680,9 @@ function buildCard(sig) {
   var isBear = sig.type === 'PE';
   var cls    = isBear ? 'bearish' : 'bullish';
   var strong = sig.verdict === 'STRONG' ? ' strong' : '';
-  var logo = sig.sym.replace(/[^A-Z0-9]/g,'').substring(0,4).toUpperCase();
+  // Smart logo — first 4 chars but meaningful
+  var symClean = sig.sym.replace(/[^A-Z0-9]/g,'');
+  var logo = symClean.length > 4 ? symClean.substring(0,4) : symClean;
   var vbadge = sig.verdict === 'STRONG' ? '<span class="badge fire">🔥 STRONG</span>'
              : sig.verdict === 'MODERATE' ? '<span class="badge mod">✓ MODERATE</span>'
              : '<span class="badge weak">' + sig.score + '%</span>';
@@ -751,8 +753,7 @@ function buildCard(sig) {
     + '<div class="card-live-bar" id="clbar-' + sig.id + '">'
     + '<div class="clb-item">'
     + '<span class="clb-lbl">SPOT</span>'
-    + '<span class="clb-val" id="clspot-' + sig.id + '">₹' + spotStr + '</span>'
-    + '<span class="clb-arr" id="clarr-' + sig.id + '">—</span>'
+    + '<span class="clb-val"><span id="clspot-' + sig.id + '">₹' + spotStr + '</span><span class="clb-arr" id="clarr-' + sig.id + '">▲</span></span>'
     + '</div>'
     + '<div class="clb-divider"></div>'
     + '<div class="clb-item">'
@@ -1254,27 +1255,47 @@ async function scanSymbol(sym, token, lot, isIndex) {
         var d = await r.json();
         if (!d.status) { addLog('No signal ' + sym + ' ' + type + ': ' + (d.message||''), ''); continue; }
         addLog('Raw signal ' + sym + ' ' + type + ': score=' + d.score + ' verdict=' + d.verdict, '');
-        if (d.score < minConf || d.verdict === 'AVOID' || d.verdict === 'BLOCKED') continue;
+        // Only skip AVOID and BLOCKED — allow WEAK/MODERATE/STRONG if above minConf
+        if (d.verdict === 'AVOID' || d.verdict === 'BLOCKED') continue;
+        if (d.score < minConf) continue;
 
         // Dedup (same sym+type within 5 mins)
         var isDup = S.signals.some(function(s) { return s.sym === sym && s.type === type && (Date.now() - (s.ts||0)) < 300000; });
         if (isDup) continue;
 
-        // signal-analysis already includes all OI data internally
-        // ceWalls, peFloors, ceSignal, peSignal, rameshTrapped all present in d
-        // Just get ATM premium from chain if available
+        // signal-analysis does NOT return chain/atmStrike
+        // Call /oi-analysis separately to get ATM premium
         var premium = 0;
-        var atmStrike = d.atmStrike || Math.round(spotPrice / 50) * 50;
-        // Use OI chain from signal-analysis response if available
-        if (d.chain && d.chain.length) {
-          var atm = d.chain.find(function(c) { return c.isATM; });
-          if (atm) {
-            premium   = type === 'CE' ? (atm.CE_ltp || 0) : (atm.PE_ltp || 0);
-            atmStrike = atm.strike || atmStrike;
+        var atmStrike = Math.round(spotPrice / 50) * 50;
+        try {
+          var oiR = await fetch(getServer() + '/oi-analysis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: sym, spotPrice: spotPrice }),
+          });
+          var oiD = await oiR.json();
+          if (oiD.status && oiD.chain) {
+            atmStrike = oiD.atmStrike || atmStrike;
+            var atm = oiD.chain.find(function(c) { return c.isATM; });
+            if (atm) {
+              premium = type === 'CE' ? (atm.CE_ltp || 0) : (atm.PE_ltp || 0);
+              // If ATM premium is 0, try nearest strikes
+              if (!premium) {
+                var nearby = oiD.chain.filter(function(c) { return Math.abs(c.strike - atmStrike) <= 100; });
+                for (var ni = 0; ni < nearby.length; ni++) {
+                  var p = type === 'CE' ? (nearby[ni].CE_ltp||0) : (nearby[ni].PE_ltp||0);
+                  if (p > 0) { premium = p; atmStrike = nearby[ni].strike; break; }
+                }
+              }
+            }
+            // Merge OI walls/floors if not already in signal response
+            if (!d.ceWalls  || !d.ceWalls.length)  d.ceWalls  = oiD.ceWalls  || [];
+            if (!d.peFloors || !d.peFloors.length)  d.peFloors = oiD.peFloors || [];
+            if (!d.ceSignal) d.ceSignal = oiD.ceSignal || null;
+            if (!d.peSignal) d.peSignal = oiD.peSignal || null;
+            if (!d.rameshTrapped) d.rameshTrapped = oiD.rameshTrapped || false;
           }
-        }
-        // Fallback — fetch premium separately only if not in response
-        if (!premium && d.oiResistStrike) atmStrike = type === 'CE' ? (d.oiResistStrike || atmStrike) : (d.oiSupportStrike || atmStrike);
+        } catch(e2) { addLog('OI fetch ' + sym + ': ' + e2.message, 'warn'); }
 
         var sig = Object.assign({}, d, {
           id:          sym + '_' + type + '_' + Date.now(),
