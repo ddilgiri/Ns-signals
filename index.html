@@ -581,7 +581,7 @@ async function loadIndices() {
     const r = await fetch(getServer() + '/quote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: tokens } }),
+      body: JSON.stringify({ mode: 'FULL', exchangeTokens: { NSE: tokens } }),
     });
     const d = await r.json();
     if (!d.status || !d.data || !d.data.fetched) return;
@@ -591,17 +591,24 @@ async function loadIndices() {
       const info = INDEX_TOKENS.find(function(i) { return String(i.token) === String(q.symbolToken); });
       if (!info) return;
       const ltp   = parseFloat(q.ltp || 0);
-      const close = parseFloat(q.close || 0);
-      const chg   = ltp - close;
-      const chgP  = close > 0 ? (chg / close * 100).toFixed(2) : '0.00';
-      const bull  = chg >= 0;
+      // Try all possible Angel One change fields
+      const close = parseFloat(q.close || q.previousClose || 0);
+      const netChg = parseFloat(q.netChange || q.change || 0);
+      let chgP = parseFloat(q.changepercent || q.percentchange || q.pChange || 0);
+      // Fallback — calculate from close
+      if (chgP === 0 && close > 0) chgP = ((ltp - close) / close * 100);
+      // Fallback — calculate from netChange
+      if (chgP === 0 && netChg !== 0 && ltp > 0) chgP = (netChg / (ltp - netChg) * 100);
+      const bull  = chgP >= 0;
       const chip  = document.createElement('div');
       chip.className = 'mood-chip ' + (bull ? 'bull' : 'bear');
-      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + info.label + ' ' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2}) + '</span> ' + (bull ? '+' : '') + chgP + '%';
+      chip.innerHTML = (bull ? '▲ ' : '▼ ') + '<span class="mv">' + info.label + ' ' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2}) + '</span> ' + (bull ? '+' : '') + chgP.toFixed(2) + '%';
       strip.appendChild(chip);
     });
-  } catch(e) { addLog('Index load error: ' + e.message, 'warn'); }
+  } catch(e) { addLog('Index error: ' + e.message, 'warn'); }
 }
+// Refresh indices every 30 seconds during market hours
+setInterval(function() { if (S.connected && getMarketStatus().nseOpen) loadIndices(); }, 30000);
 
 async function loadVix() {
   try {
@@ -933,15 +940,23 @@ function renderSignals() {
   var html = '';
   if (strongSigs.length) {
     html += '<div class="sec-lbl">🔥 Strong Signals</div>';
-    strongSigs.forEach(function(s) { html += buildCard(s); });
+    strongSigs.forEach(function(s) {
+      try { html += buildCard(s); } catch(e) { addLog('Card build err ' + s.sym + ': ' + e.message, 'err'); }
+    });
   }
   if (normalSigs.length) {
     html += '<div class="sec-lbl" style="margin-top:2px">All Signals</div>';
-    normalSigs.forEach(function(s) { html += buildCard(s); });
+    normalSigs.forEach(function(s) {
+      try { html += buildCard(s); } catch(e) { addLog('Card build err ' + s.sym + ': ' + e.message, 'err'); }
+    });
+  }
+  if (!html) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Signal render error</div><div class="empty-sub">Check Setup → Activity Log for details</div></div>';
+    return;
   }
   list.innerHTML = html;
-  // Start live spot for all cards immediately
-  S.signals.forEach(function(s) { startLiveSpot(s.id); });
+  // Start live spot for all visible signals
+  filtered.forEach(function(s) { startLiveSpot(s.id); });
 }
 
 // ─── PAPER TRADES ─────────────────────────────────────────────────────────────
@@ -1153,6 +1168,22 @@ async function runScan() {
 
   renderSignals();
   updateAnalytics();
+  // Auto switch filter to ALL if signals exist but current filter shows none
+  if (S.signals.length > 0 && S.filterMode !== 'all') {
+    var filtered = S.signals.filter(function(s) {
+      if (S.filterMode === 'stocks')   return !s.isCommodity;
+      if (S.filterMode === 'strong')   return s.verdict === 'STRONG';
+      if (S.filterMode === 'moderate') return s.verdict === 'MODERATE';
+      return true;
+    });
+    if (!filtered.length) {
+      S.filterMode = 'all';
+      document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
+      var allPill = document.querySelector('.fpill');
+      if (allPill) allPill.classList.add('active');
+      renderSignals();
+    }
+  }
 }
 
 async function scanSymbol(sym, token, lot, isIndex) {
@@ -1181,7 +1212,8 @@ async function scanSymbol(sym, token, lot, isIndex) {
           body: JSON.stringify({ symbolToken: String(token), sym: sym, exchange: 'NSE', isIndex: isIndex, spotPrice: spotPrice, type: type }),
         });
         var d = await r.json();
-        if (!d.status) continue;
+        if (!d.status) { addLog('No signal ' + sym + ' ' + type + ': ' + (d.message||''), ''); continue; }
+        addLog('Raw signal ' + sym + ' ' + type + ': score=' + d.score + ' verdict=' + d.verdict, '');
         if (d.score < minConf || d.verdict === 'AVOID' || d.verdict === 'BLOCKED') continue;
 
         // Dedup (same sym+type within 5 mins)
