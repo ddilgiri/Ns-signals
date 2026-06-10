@@ -842,6 +842,7 @@ function calcCapital(premium, lot) {
 
 // ─── LIVE PRICE CACHE ─────────────────────────────────────────────────────────
 var LIVE_PRICES  = {};  // { sym: ltp }
+var LIVE_PREV    = {};  // { sym: prev_close }
 var LIVE_PREMIUMS = {}; // { sym_type_strike: ltp }
 var liveUpdateInt = null;
 
@@ -866,14 +867,19 @@ async function batchUpdatePrices() {
         var r = await fetch(getServer() + '/quote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: batch } }),
+          body: JSON.stringify({ mode: 'FULL', exchangeTokens: { NSE: batch } }),
         });
         var d = await r.json();
         if (d.status && d.data && d.data.fetched) {
           d.data.fetched.forEach(function(q) {
-            var sym = tokenMap[String(q.symbolToken)];
-            var ltp = parseFloat(q.ltp || q.close || 0);
-            if (sym && ltp > 0) LIVE_PRICES[sym] = ltp;
+            var sym  = tokenMap[String(q.symbolToken)];
+            var ltp  = parseFloat(q.ltp  || q.close || 0);
+            var prev = parseFloat(q.close || q.previousClose || ltp);
+            if (sym && ltp > 0) {
+              // Store prev close only on first fetch
+              if (!LIVE_PREV[sym]) LIVE_PREV[sym] = prev;
+              LIVE_PRICES[sym] = ltp;
+            }
           });
         }
       } catch(e) {}
@@ -882,7 +888,55 @@ async function batchUpdatePrices() {
     updateAllCards();
     // Update indices mood strip
     updateMoodStrip();
+    // Batch fetch option premiums for all signals
+    batchUpdatePremiums();
   } catch(e) {}
+}
+
+// Batch fetch option premiums for all active signals
+async function batchUpdatePremiums() {
+  if (!S.signals.length) return;
+  // Build list of unique sym+strike+type combos
+  var toFetch = [];
+  S.signals.forEach(function(sig) {
+    if (sig.sym && sig.strike && sig.type) {
+      toFetch.push(sig);
+    }
+  });
+  if (!toFetch.length) return;
+
+  // Fetch each option premium via /option-ltp
+  // Process max 10 at once to avoid rate limiting
+  var batch = toFetch.slice(0, 10);
+  for (var i = 0; i < batch.length; i++) {
+    var sig = batch[i];
+    try {
+      var r = await fetch(getServer() + '/option-ltp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sig.sym, strike: sig.strike, optionType: sig.type }),
+      });
+      var d = await r.json();
+      if (d.status && d.ltp && parseFloat(d.ltp) > 0) {
+        sig.premium = parseFloat(d.ltp);
+        // Update card premium displays
+        var cpmEl = document.getElementById('cpm-' + sig.id);
+        var capEl = document.getElementById('cap-' + sig.id);
+        if (cpmEl) cpmEl.textContent = '₹' + sig.premium.toFixed(2);
+        if (capEl) capEl.textContent = calcCapital(sig.premium, sig.lot||1);
+        // Update min capital in collapsed
+        var pnlTags = document.querySelectorAll('#card-' + sig.id + ' .pnl-tag');
+        if (pnlTags.length) {
+          // find the min capital tag
+          pnlTags.forEach(function(el) {
+            if (el.textContent.indexOf('min') !== -1) {
+              el.textContent = calcCapital(sig.premium, sig.lot||1) + ' min';
+            }
+          });
+        }
+      }
+    } catch(e) {}
+  }
 }
 
 // Update all visible signal cards with cached prices
@@ -905,18 +959,24 @@ function updateAllCards() {
   });
 }
 
-// Update mood strip with cached prices
+// Update mood strip with cached prices + bull/bear colour
 function updateMoodStrip() {
   var strip = document.getElementById('moodStrip');
   if (!strip) return;
   strip.innerHTML = '';
   IDX_LIST.forEach(function(idx) {
-    var ltp = LIVE_PRICES[idx.sym];
+    var ltp   = LIVE_PRICES[idx.sym];
+    var prev  = LIVE_PREV[idx.sym] || ltp;
     if (!ltp) return;
-    // We don't have prev close easily — show ltp only
-    var chip = document.createElement('div');
-    chip.className = 'mood-chip neutral';
-    chip.innerHTML = '<span class="mv">' + idx.sym + ' ₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2}) + '</span>';
+    var chg   = prev ? ltp - prev : 0;
+    var chgP  = prev ? (chg / prev * 100) : 0;
+    var bull  = chgP >= 0;
+    var chip  = document.createElement('div');
+    chip.className = 'mood-chip ' + (bull ? 'bull' : 'bear');
+    chip.innerHTML = (bull ? '▲ ' : '▼ ')
+      + '<span class="mv">' + idx.sym + ' '
+      + ltp.toLocaleString('en-IN', {maximumFractionDigits:2})
+      + '</span> ' + (bull ? '+' : '') + chgP.toFixed(2) + '%';
     strip.appendChild(chip);
   });
 }
