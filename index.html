@@ -895,6 +895,12 @@ async function batchUpdatePrices() {
     updateMoodStrip();
     // Batch fetch option premiums for all signals
     batchUpdatePremiums();
+    // Refresh OI (Ramesh/Suresh) every 45s = every 9th cycle
+    oiRefreshCount++;
+    if (oiRefreshCount >= 9) {
+      oiRefreshCount = 0;
+      refreshSignalOI();
+    }
   } catch(e) {}
 }
 
@@ -922,50 +928,59 @@ async function batchUpdatePremiums() {
   if (!toFetch.length) return;
 
   // Fetch each option premium via /option-ltp
-  // Process max 10 at once to avoid rate limiting
-  var batch = toFetch.slice(0, 10);
+  // Process max 20 at once
+  var batch = toFetch.slice(0, 20);
   for (var i = 0; i < batch.length; i++) {
     var sig = batch[i];
+    if (!sig.sym || !sig.strike || !sig.type) continue;
     try {
       var r = await fetch(getServer() + '/option-ltp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol:     sig.sym,
-          strike:     sig.strike,
-          type:       sig.type,
-          expiry:     'MONTHLY'
+          symbol: sig.sym,
+          strike: sig.strike,
+          type:   sig.type,
+          expiry: 'MONTHLY'
         }),
       });
       var d = await r.json();
-      if (d.status && d.ltp && parseFloat(d.ltp) > 0) {
-        sig.premium = parseFloat(d.ltp);
+      if (!d.status || !d.ltp || parseFloat(d.ltp) <= 0) continue;
+      var newPrem = parseFloat(d.ltp);
+
+      // Update signal object
+      if (sig.id) {
+        sig.premium = newPrem;
+        // Update cpm — live prem on card top right
         var cpmEl = document.getElementById('cpm-' + sig.id);
-        var capEl = document.getElementById('cap-' + sig.id);
-        if (cpmEl) cpmEl.textContent = '₹' + sig.premium.toFixed(2);
-        if (capEl) capEl.textContent = calcCapital(sig.premium, sig.lot||1);
+        if (cpmEl) cpmEl.textContent = '₹' + newPrem.toFixed(2);
+        // Update min capital
+        var capEl  = document.getElementById('cap-' + sig.id);
+        if (capEl) capEl.textContent = calcCapital(newPrem, sig.lot||1);
         var minTag = document.querySelector('#card-' + sig.id + ' .pnl-tag.none');
         if (minTag && minTag.textContent.indexOf('min') !== -1) {
-          minTag.textContent = calcCapital(sig.premium, sig.lot||1) + ' min';
+          minTag.textContent = calcCapital(newPrem, sig.lot||1) + ' min';
         }
-        // Update paper trade P&L if this signal is tracked
-        S.paperTrades.forEach(function(t) {
-          if (t.sigId === sig.id) {
-            t.currentPremium = sig.premium;
-            var lots = t.lots || 1;
-            t.pnl = (sig.premium - (t.avgPremium||t.entryPremium)) * (t.lot||1) * lots;
-            var nowEl = document.getElementById('tnow-'  + t.id);
-            var pnlEl = document.getElementById('tpnl-'  + t.id);
-            var card  = document.getElementById('tcard-' + t.id);
-            if (nowEl) nowEl.textContent = '₹' + sig.premium.toFixed(2);
-            if (pnlEl) {
-              pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
-              pnlEl.className   = 't-pnl ' + (t.pnl>=0?'pos':'neg');
-            }
-            if (card) card.className = 'trade-card ' + (t.pnl>=0?'profit':'loss');
-          }
-        });
       }
+
+      // Update ALL paper trades matching this sym+strike+type
+      S.paperTrades.forEach(function(t) {
+        var matches = (sig.id && t.sigId === sig.id)
+                   || (t.sym === sig.sym && t.strike === sig.strike && t.type === sig.type);
+        if (!matches) return;
+        t.currentPremium = newPrem;
+        var lots = t.lots || 1;
+        t.pnl = (newPrem - (t.avgPremium||t.entryPremium)) * (t.lot||1) * lots;
+        var nowEl = document.getElementById('tnow-'  + t.id);
+        var pnlEl = document.getElementById('tpnl-'  + t.id);
+        var card  = document.getElementById('tcard-' + t.id);
+        if (nowEl) nowEl.textContent = '₹' + newPrem.toFixed(2);
+        if (pnlEl) {
+          pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
+          pnlEl.className   = 't-pnl ' + (t.pnl>=0?'pos':'neg');
+        }
+        if (card) card.className = 'trade-card ' + (t.pnl>=0?'profit':'loss');
+      });
     } catch(e) {}
   }
 }
@@ -1059,6 +1074,89 @@ function updateZone(sig) {
   if (zone === 'exit') {
     toast('🛑 ' + sig.sym + ' EXIT ZONE! Spot ₹' + ltp.toLocaleString('en-IN'), 4000);
   }
+}
+
+// ─── OI AUTO REFRESH ─────────────────────────────────────────────────────────
+var oiRefreshCount = 0;
+
+async function refreshSignalOI() {
+  if (!S.connected || !S.signals.length) return;
+  // Refresh OI for all active signals — update Ramesh/Suresh data
+  for (var i = 0; i < S.signals.length; i++) {
+    var sig = S.signals[i];
+    try {
+      var r = await fetch(getServer() + '/oi-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sig.sym, spotPrice: sig.spotPrice || 0 }),
+      });
+      var d = await r.json();
+      if (!d.status) continue;
+      // Update Ramesh/Suresh fields
+      if (d.ceWalls  && d.ceWalls.length)  sig.ceWalls  = d.ceWalls;
+      if (d.peFloors && d.peFloors.length) sig.peFloors = d.peFloors;
+      if (d.ceSignal) sig.ceSignal = d.ceSignal;
+      if (d.peSignal) sig.peSignal = d.peSignal;
+      sig.rameshTrapped = d.rameshTrapped || false;
+      // Recompute levels with fresh OI
+      computeLevels(sig);
+      // Update WHY capsules on card if visible
+      updateCardCapsules(sig);
+      // Update hold/exit zone labels
+      updateCardLevels(sig);
+    } catch(e) {}
+  }
+  addLog('OI refreshed — Ramesh/Suresh updated', '');
+}
+
+// Update WHY capsules on a card without full re-render
+function updateCardCapsules(sig) {
+  var card = document.getElementById('card-' + sig.id);
+  if (!card || !card.classList.contains('open')) return; // only if expanded
+  var capDiv = card.querySelector('.capsules');
+  if (!capDiv) return;
+  var caps = '';
+  if (sig.ceWalls && sig.ceWalls.length) {
+    var w = sig.ceWalls[0];
+    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' +' + Math.abs(parseFloat(w.oiChange||0)).toFixed(0) + '%</div>';
+  }
+  if (sig.peFloors && sig.peFloors.length) {
+    var f = sig.peFloors[0];
+    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' +' + Math.abs(parseFloat(f.oiChange||0)).toFixed(0) + '%</div>';
+  }
+  var ceSig = sig.ceSignal;
+  var peSig = sig.peSignal;
+  if (ceSig && typeof ceSig === 'object' && ceSig.signal) caps += '<div class="cap cap-p">📉 ' + String(ceSig.signal).replace(/_/g,' ') + '</div>';
+  if (peSig && typeof peSig === 'object' && peSig.signal) caps += '<div class="cap cap-p">📈 ' + String(peSig.signal).replace(/_/g,' ') + '</div>';
+  var vr = parseFloat(sig.volRatio) || 0;
+  if (vr >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + vr.toFixed(1) + 'x</div>';
+  if (sig.bias === (sig.type==='PE'?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">📈 Index aligned</div>';
+  else if (sig.bias && sig.bias !== 'NEUTRAL') caps += '<div class="cap cap-warn">⚠️ ' + sig.bias + '</div>';
+  if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
+  if (caps) capDiv.innerHTML = caps;
+}
+
+// Update hold/exit level text on expanded card
+function updateCardLevels(sig) {
+  var card = document.getElementById('card-' + sig.id);
+  if (!card || !card.classList.contains('open')) return;
+  var holdEl = card.querySelector('#lv-hold-'  + sig.id + ' .lv-spot');
+  var hsEl   = card.querySelector('#lv-hs-'    + sig.id + ' .lv-spot');
+  var exitEl = card.querySelector('#lv-exit-'  + sig.id + ' .lv-spot');
+  var holdREl = card.querySelector('#lv-hold-' + sig.id + ' .lv-reason');
+  var hsREl   = card.querySelector('#lv-hs-'   + sig.id + ' .lv-reason');
+  var exitREl = card.querySelector('#lv-exit-' + sig.id + ' .lv-reason');
+  if (holdEl)  holdEl.textContent  = (sig.holdZone||'--')   + ' = HOLD';
+  if (hsEl)    hsEl.textContent    = (sig.holdStrong||'--') + ' = HOLD STRONG';
+  if (exitEl)  exitEl.textContent  = (sig.exitZone||'--')   + ' = EXIT';
+  if (holdREl) holdREl.textContent = sig.holdReason  || '';
+  if (hsREl)   hsREl.textContent   = sig.holdStrongReason || '';
+  if (exitREl) exitREl.textContent = sig.exitReason  || '';
+  // Update targets
+  var t1El = card.querySelector('.target-chip:first-child .t-val');
+  var t2El = card.querySelector('.target-chip:last-child .t-val');
+  if (t1El && sig.target1) t1El.textContent = '₹' + sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2});
+  if (t2El && sig.target2) t2El.textContent = '₹' + sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2});
 }
 
 // Start/stop batch price updates
@@ -1503,9 +1601,14 @@ async function scanSymbol(sym, token, lot, isIndex) {
         if (d.verdict === 'AVOID' || d.verdict === 'BLOCKED') continue;
         if (d.score < minConf) continue;
 
-        // Dedup (same sym+type within 5 mins)
-        var isDup = S.signals.some(function(s) { return s.sym === sym && s.type === type && (Date.now() - (s.ts||0)) < 300000; });
-        if (isDup) continue;
+        // Dedup — same sym+type+strike within 30 mins
+        var isDup = S.signals.some(function(s) {
+          return s.sym === sym
+            && s.type === type
+            && s.strike === atmStrike
+            && (Date.now() - (s.ts||0)) < 1800000; // 30 mins
+        });
+        if (isDup) { addLog('Skip dup: ' + sym + ' ' + type + ' ' + atmStrike, ''); continue; }
 
         // Get premium — let server find real ATM strike from options chain
         var premium = 0;
