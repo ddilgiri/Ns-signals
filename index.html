@@ -313,11 +313,11 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 
 <!-- TOP TABS -->
 <div class="toptabs">
-  <button class="nav-item active" onclick="showPage('signals',this)">
+  <button class="nav-item" onclick="showPage('signals',this)">
     <div class="nav-icon">📡</div><span>Signals</span>
     <span class="nav-badge" id="sigBadge">0</span>
   </button>
-  <button class="nav-item" onclick="showPage('trades',this)">
+  <button class="nav-item active" onclick="showPage('trades',this)">
     <div class="nav-icon">📋</div><span>Trades</span>
   </button>
   <button class="nav-item" onclick="showPage('analyze',this)">
@@ -331,7 +331,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 <div class="pages">
 
   <!-- SIGNALS -->
-  <div class="page active" id="pg-signals">
+  <div class="page" id="pg-signals">
     <div class="mood-strip" id="moodStrip">
       <div class="mood-chip neutral">⏳ <span class="mv">Login to load indices</span></div>
     </div>
@@ -364,6 +364,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
       <div class="fpill"        id="pill-bull"     onclick="filterSigs('bull',this)">🟢 BULL</div>
       <div class="fpill"        id="pill-strong"   onclick="filterSigs('strong',this)">🔥 STRONG</div>
       <div class="fpill"        id="pill-moderate" onclick="filterSigs('moderate',this)">✓ MODERATE</div>
+      <div class="fpill" onclick="clearSignals()" style="margin-left:auto;color:var(--red);border-color:rgba(239,68,68,.3)">🗑️ Clear</div>
     </div>
     <div class="scroll-area" id="sigList">
       <div class="empty-state">
@@ -375,7 +376,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
   </div>
 
   <!-- TRADES -->
-  <div class="page" id="pg-trades">
+  <div class="page active" id="pg-trades">
     <div class="sub-tabs">
       <div class="sub-tab active" onclick="switchSubTab('open-trades','closed-trades',this)">Open (<span id="openCount">0</span>)</div>
       <div class="sub-tab" onclick="switchSubTab('closed-trades','open-trades',this)">Closed (<span id="closedCount">0</span>)</div>
@@ -664,6 +665,18 @@ async function loadVix() {
 }
 
 // ─── FILTER ───────────────────────────────────────────────────────────────────
+function clearSignals() {
+  if (!S.signals.length) { toast('No signals to clear'); return; }
+  // Stop all spot timers
+  Object.keys(spotTimers).forEach(function(k) { clearInterval(spotTimers[k]); });
+  spotTimers = {};
+  S.signals = [];
+  S.scannedCount = 0;
+  renderSignals();
+  toast('🗑️ Signals cleared');
+  addLog('Signals cleared manually', 'warn');
+}
+
 function filterSigs(mode, el) {
   document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
   // Tap same → back to ALL
@@ -985,12 +998,17 @@ async function batchUpdatePremiums() {
         var nowEl = document.getElementById('tnow-'  + t.id);
         var pnlEl = document.getElementById('tpnl-'  + t.id);
         var card  = document.getElementById('tcard-' + t.id);
-        if (nowEl) nowEl.textContent = '₹' + newPrem.toFixed(2);
+        if (nowEl) {
+          nowEl.textContent = '₹' + newPrem.toFixed(2);
+          nowEl.style.color = newPrem > avg ? 'var(--green)' : 'var(--red)';
+        }
         if (pnlEl) {
           pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
-          pnlEl.className   = 't-pnl ' + (t.pnl>=0?'pos':'neg');
+          pnlEl.style.color = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
         }
-        if (card) card.className = 'trade-card ' + (t.pnl>=0?'profit':'loss');
+        if (card) card.className = 'trade-card sig-card ' + (t.type==='PE'?'bearish':'bullish');
+        // Update zone on live bar using linked signal spot
+        if (sig) updateZone(sig);
       });
     } catch(e) {}
   }
@@ -1349,19 +1367,18 @@ function renderTrades() {
       var capUsed = avg * (t.lot||1) * lots * 1.2;
       var capStr  = capUsed >= 100000 ? '₹'+(capUsed/100000).toFixed(1)+'L' : capUsed >= 1000 ? '₹'+Math.round(capUsed/1000)+'K' : '₹'+Math.round(capUsed);
       var isBear  = t.type === 'PE';
-      var pnlClr  = pnl >= 0 ? 'var(--green)' : 'var(--red)';
 
-      // Ramesh/Suresh zones from linked signal
-      var sig     = S.signals.find(function(s) { return s.id === t.sigId; });
-      var holdZone     = sig ? (sig.holdZone     || '--') : (t.holdZone     || '--');
-      var holdStrong   = sig ? (sig.holdStrong   || '--') : (t.holdStrong   || '--');
-      var exitZone     = sig ? (sig.exitZone     || '--') : (t.exitZone     || '--');
-      var holdReason   = sig ? (sig.holdReason   || '')  : '';
-      var holdStrongR  = sig ? (sig.holdStrongReason||'') : '';
-      var exitReason   = sig ? (sig.exitReason   || '')  : '';
-      var target1      = sig ? (sig.target1 ? '₹'+sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--') : '--';
-      var target2      = sig ? (sig.target2 ? '₹'+sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--') : '--';
-      // Ramesh/Suresh capsules
+      // Linked signal data
+      var sig       = S.signals.find(function(s) { return s.id === t.sigId; });
+      var holdZone  = sig ? (sig.holdZone||'--')   : (t.holdZone||'--');
+      var holdStrong= sig ? (sig.holdStrong||'--') : '--';
+      var exitZone  = sig ? (sig.exitZone||'--')   : '--';
+      var holdR     = sig ? (sig.holdReason||'')   : '';
+      var holdSR    = sig ? (sig.holdStrongReason||'') : '';
+      var exitR     = sig ? (sig.exitReason||'')   : '';
+      var t1str     = sig && sig.target1 ? '₹'+sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
+      var t2str     = sig && sig.target2 ? '₹'+sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
+
       var tcaps = '';
       if (sig && sig.ceWalls && sig.ceWalls.length) {
         var w = sig.ceWalls[0];
@@ -1375,50 +1392,74 @@ function renderTrades() {
       }
       if (sig && sig.rameshTrapped) tcaps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
 
-      return '<div class="trade-card ' + (pnl>=0?'profit':'loss') + '" id="tcard-' + t.id + '">'
+      var cls = isBear ? 'bearish' : 'bullish';
 
-        // Header
-        + '<div class="trade-top">'
-        + '<div>'
-        + '<div class="t-name">' + t.sym.toUpperCase()
-        + ' <span style="font-size:10px;color:var(--text3);font-weight:500">' + t.strike + ' ' + t.type + '</span></div>'
-        + '<div class="t-sub">' + lots + ' lot' + (lots>1?'s':'') + ' · Avg ₹' + avg.toFixed(2) + ' · ' + t.date + '</div>'
+      return '<div class="trade-card sig-card ' + cls + '" onclick="toggleCard(this)" id="tcard-' + t.id + '">'
+
+        // ── COLLAPSED ──────────────────────────────────────────────
+        + '<div class="card-col">'
+        + '<div class="stk-logo">'
+        + '<img src="https://images.dhan.co/symbol/' + t.sym.toUpperCase() + '.png" '
+        + 'style="width:32px;height:32px;border-radius:6px;object-fit:contain;" '
+        + 'onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'" alt="' + t.sym + '">'
+        + '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:var(--text2);">' + t.sym.substring(0,4) + '</span>'
         + '</div>'
-        + '<div>'
-        + '<div class="t-pnl ' + (pnl>=0?'pos':'neg') + '" id="tpnl-' + t.id + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
-        + '<div style="font-size:9px;color:var(--text3);text-align:right">Capital ' + capStr + '</div>'
+        + '<div class="card-mid">'
+        + '<div class="badge-row">'
+        + (isBear ? '<span class="badge bear">🔴 BEARISH</span>' : '<span class="badge bull">🟢 BULLISH</span>')
+        + '<span class="badge conf">' + lots + ' lot' + (lots>1?'s':'') + '</span>'
         + '</div>'
+        + '<div class="stk-name">' + t.sym.toUpperCase() + '</div>'
+        + '<div class="stk-sub">' + t.strike + ' ' + t.type + ' · Avg ₹' + avg.toFixed(2) + '</div>'
+        + '</div>'
+        + '<div class="card-right">'
+        + '<div class="prem-val" id="tpnl-' + t.id + '" style="color:' + (pnl>=0?'var(--green)':'var(--red)') + '">' + (pnl>=0?'+':'') + '₹' + Math.abs(pnl).toLocaleString('en-IN') + '</div>'
+        + '<div class="prem-chg">P&amp;L</div>'
+        + '<div class="pnl-tag none">' + capStr + '</div>'
+        + '</div></div>'
+
+        // ── LIVE BAR ───────────────────────────────────────────────
+        + '<div class="card-live-bar" id="tbar-' + t.id + '">'
+        + '<div class="clb-item"><span class="clb-lbl">AVG ENTRY</span><span class="clb-val">₹' + avg.toFixed(2) + '</span></div>'
+        + '<div class="clb-divider"></div>'
+        + '<div class="clb-item"><span class="clb-lbl">LIVE PREM</span><span class="clb-val" id="tnow-' + t.id + '">₹' + cur.toFixed(2) + '</span></div>'
+        + '<div class="clb-divider"></div>'
+        + '<div class="clb-zone" id="tzone-' + t.id + '">—</div>'
         + '</div>'
 
-        // Live premium bar
-        + '<div class="trade-dets" style="margin-top:8px">'
-        + '<div class="td-item">Avg Entry <span>₹' + avg.toFixed(2) + '</span></div>'
-        + '<div class="td-item">Live Now <span id="tnow-' + t.id + '" style="color:' + (cur>avg?'var(--green)':'var(--red)') + '">₹' + cur.toFixed(2) + '</span></div>'
-        + '<div class="td-item">Lots <span>' + lots + '</span></div>'
+        // ── EXPANDED ───────────────────────────────────────────────
+        + '<div class="card-divider"></div>'
+        + '<div class="card-exp">'
+
+        // Trade summary box
+        + '<div class="buy-box">'
+        + '<div><div class="buy-lbl">Strike</div><div class="buy-strike">' + t.strike + ' ' + t.type + '</div></div>'
+        + '<div style="text-align:center"><div class="buy-lbl">Lots</div><div style="font-size:14px;font-weight:800;color:var(--text)">' + lots + '</div></div>'
+        + '<div style="text-align:right"><div class="pm-lbl">Capital Used</div><div class="pm-val" style="font-size:15px;color:var(--blue)">' + capStr + '</div></div>'
         + '</div>'
 
-        // Ramesh/Suresh zones — SAME as signal card
-        + '<div class="levels" style="margin-top:8px">'
-        + '<div class="lv-row hold" id="tlv-hold-' + t.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + holdZone + ' = HOLD</div><div class="lv-reason">' + holdReason + '</div></div></div>'
-        + '<div class="lv-row hold-strong" id="tlv-hs-' + t.id + '"><div class="lv-icon">💪</div><div><div class="lv-spot">' + holdStrong + ' = HOLD STRONG</div><div class="lv-reason">' + holdStrongR + '</div></div></div>'
-        + '<div class="lv-row exit" id="tlv-exit-' + t.id + '"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + exitZone + ' = EXIT</div><div class="lv-reason">' + exitReason + '</div></div></div>'
+        // Ramesh/Suresh zones
+        + '<div class="levels">'
+        + '<div class="lv-row hold" id="tlv-hold-' + t.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + holdZone + ' = HOLD</div><div class="lv-reason">' + holdR + '</div></div></div>'
+        + '<div class="lv-row hold-strong" id="tlv-hs-' + t.id + '"><div class="lv-icon">💪</div><div><div class="lv-spot">' + holdStrong + ' = HOLD STRONG</div><div class="lv-reason">' + holdSR + '</div></div></div>'
+        + '<div class="lv-row exit" id="tlv-exit-' + t.id + '"><div class="lv-icon">🛑</div><div><div class="lv-spot">' + exitZone + ' = EXIT</div><div class="lv-reason">' + exitR + '</div></div></div>'
         + '</div>'
 
         // Targets
-        + '<div class="target-row" style="margin-top:8px">'
-        + '<div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">' + target1 + '</div></div>'
-        + '<div class="target-chip"><div class="t-lbl">Target 2</div><div class="t-val">' + target2 + '</div></div>'
+        + '<div class="target-row">'
+        + '<div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">' + t1str + '</div></div>'
+        + '<div class="target-chip"><div class="t-lbl">Target 2</div><div class="t-val">' + t2str + '</div></div>'
         + '</div>'
 
         // WHY capsules
-        + (tcaps ? '<div class="capsules" style="margin-top:8px">' + tcaps + '</div>' : '')
+        + (tcaps ? '<div class="capsules">' + tcaps + '</div>' : '')
 
         // Buttons
         + '<div style="display:flex;gap:8px;margin-top:10px">'
         + '<div class="paper-btn" style="flex:1;background:rgba(59,130,246,.1)" onclick="addPaperTrade(event,\'' + t.sigId + '\')">➕ Add Lot</div>'
         + '<div class="paper-btn" style="flex:1;background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3)" onclick="exitPaperTrade(\'' + t.id + '\')">✅ Close Trade</div>'
         + '</div>'
-        + '</div>';
+        + '</div></div>';
     }).join('');
   }
 
