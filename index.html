@@ -183,6 +183,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .clb-zone.hold-strong{background:rgba(34,197,94,.15);color:var(--green)}
 .clb-zone.exit{background:rgba(239,68,68,.2);color:var(--red);font-size:11px}
 .clb-zone.neutral{background:var(--card2);color:var(--text3)}
+.cap-amt{color:var(--blue)!important}
 .lv-row.active-zone{box-shadow:0 0 0 2px currentColor;opacity:1}
 .lv-row:not(.active-zone){opacity:.7}
 .paper-btn{width:100%;padding:10px;border-radius:9px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;text-align:center;transition:all .2s}
@@ -249,6 +250,31 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 
 #toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 16px;font-size:12px;font-weight:700;color:var(--text);box-shadow:0 4px 20px var(--shadow);z-index:999;display:none;max-width:90%;text-align:center}
 #toast.show{display:block}
+/* ===== LIGHT THEME SPECIFIC FIXES ===== */
+[data-theme="light"] .sig-card.bearish { background: #fff5f5; }
+[data-theme="light"] .sig-card.bullish { background: #f0fff8; }
+[data-theme="light"] .sig-card.bearish.strong { box-shadow: 0 3px 20px rgba(220,38,38,.12); }
+[data-theme="light"] .sig-card.bullish.strong { box-shadow: 0 3px 20px rgba(22,163,74,.12); }
+[data-theme="light"] .card-live-bar { background: #f0f4fc; }
+[data-theme="light"] .card-live-bar.zone-hold { background: rgba(217,119,6,.08); }
+[data-theme="light"] .card-live-bar.zone-hold-strong { background: rgba(22,163,74,.08); }
+[data-theme="light"] .card-live-bar.zone-exit { background: rgba(220,38,38,.1); }
+[data-theme="light"] .stk-logo { background: #e8eef8; }
+[data-theme="light"] .lv-row.hold { background: rgba(217,119,6,.06); }
+[data-theme="light"] .lv-row.hold-strong { background: rgba(22,163,74,.06); }
+[data-theme="light"] .lv-row.exit { background: rgba(220,38,38,.06); }
+[data-theme="light"] .buy-box { filter: brightness(0.97); }
+[data-theme="light"] .target-chip { background: rgba(37,99,235,.06); border-color: rgba(37,99,235,.2); }
+[data-theme="light"] .paper-btn { background: rgba(37,99,235,.07); border-color: rgba(37,99,235,.2); }
+[data-theme="light"] .paper-btn:active { background: rgba(37,99,235,.15); }
+[data-theme="light"] .mood-chip.bull { background: rgba(22,163,74,.08); }
+[data-theme="light"] .mood-chip.bear { background: rgba(220,38,38,.08); }
+[data-theme="light"] .vix-bar { background: #f4f7fc; }
+[data-theme="light"] .filter-row { background: #e8eef8; }
+[data-theme="light"] .summary-bar { background: #ffffff; }
+[data-theme="light"] .log-area { background: #f0f4fc; color: #3a4a6b; }
+[data-theme="light"] .cap { filter: brightness(0.95); }
+
 .hidden{display:none!important}
 </style>
 </head>
@@ -717,6 +743,11 @@ function buildCard(sig) {
     + '<span class="clb-val" id="clprem-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</span>'
     + '</div>'
     + '<div class="clb-divider"></div>'
+    + '<div class="clb-item">'
+    + '<span class="clb-lbl">MIN CAPITAL</span>'
+    + '<span class="clb-val cap-amt" id="clcap-' + sig.id + '">₹' + calcCapital(sig.premium||0, sig.lot||1) + '</span>'
+    + '</div>'
+    + '<div class="clb-divider"></div>'
     + '<div class="clb-zone" id="clzone-' + sig.id + '">—</div>'
     + '</div>'
 
@@ -726,7 +757,8 @@ function buildCard(sig) {
     + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot">Spot ₹' + spotStr + '</span></div>'
     + '<div class="buy-box">'
     + '<div><div class="buy-lbl">Strike</div><div class="buy-strike">' + sig.strike + ' ' + sig.type + '</div></div>'
-    + '<div style="text-align:right"><div class="pm-lbl">Live Premium</div><div class="pm-val" id="pm-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</div></div>'
+    + '<div style="text-align:center"><div class="buy-lbl">Lot Size</div><div style="font-size:14px;font-weight:800;color:var(--text)">' + (sig.lot||1) + '</div></div>'
+    + '<div style="text-align:right"><div class="pm-lbl">Min Capital</div><div class="pm-val" style="font-size:15px;color:var(--blue)">' + calcCapital(sig.premium||0, sig.lot||1) + '</div></div>'
     + '</div>'
     + '<div class="levels">'
     + '<div class="lv-row hold" id="lv-hold-' + sig.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + (sig.holdZone||'--') + ' = HOLD</div><div class="lv-reason">' + (sig.holdReason||'') + '</div></div></div>'
@@ -741,6 +773,14 @@ function buildCard(sig) {
     + '<div class="capsules">' + caps + '</div>'
     + '<div class="paper-btn" onclick="addPaperTrade(event,\'' + sig.id + '\')">📋 Add to Paper Trade</div>'
     + '</div></div>';
+}
+
+// Capital calculation
+function calcCapital(premium, lot) {
+  var cap = premium * lot * 1.2;
+  if (cap >= 100000) return '₹' + (cap/100000).toFixed(1) + 'L';
+  if (cap >= 1000)   return '₹' + Math.round(cap/1000) + 'K';
+  return '₹' + Math.round(cap);
 }
 
 var spotTimers = {};
@@ -839,6 +879,9 @@ async function updateLiveSpot(sigId) {
     if (pmEl)  pmEl.textContent  = '₹' + (sig.premium||0).toFixed(2);
     if (cpmEl) cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
     if (clPrem) clPrem.textContent = '₹' + (sig.premium||0).toFixed(2);
+    // Update capital
+    var clCap = document.getElementById('clcap-' + sigId);
+    if (clCap) clCap.textContent = calcCapital(sig.premium||0, sig.lot||1);
 
     // Highlight active level row
     ['lv-hold-','lv-hs-','lv-exit-'].forEach(function(pfx) {
