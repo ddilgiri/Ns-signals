@@ -608,7 +608,9 @@ async function loadIndices() {
   } catch(e) { addLog('Index error: ' + e.message, 'warn'); }
 }
 // Refresh indices every 30 seconds during market hours
-setInterval(function() { if (S.connected && getMarketStatus().nseOpen) loadIndices(); }, 30000);
+setInterval(function() {
+  try { if (S.connected && getMarketStatus().nseOpen) loadIndices(); } catch(e) {}
+}, 30000);
 
 async function loadVix() {
   try {
@@ -707,13 +709,14 @@ function buildCard(sig) {
   var caps = '';
   if (sig.ceWalls && sig.ceWalls.length) {
     var w = sig.ceWalls[0];
-    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' ' + (w.oiChange ? '+' + w.oiChange.toFixed(0) + '%' : '') + '</div>';
+    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' ' + (w.oiChange ? '+' + parseFloat(w.oiChange).toFixed(0) + '%' : '') + '</div>';
   }
   if (sig.peFloors && sig.peFloors.length) {
     var f = sig.peFloors[0];
-    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' ' + (f.oiChange ? '+' + f.oiChange.toFixed(0) + '%' : '') + '</div>';
+    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' ' + (f.oiChange ? '+' + parseFloat(f.oiChange).toFixed(0) + '%' : '') + '</div>';
   }
-  if (sig.ceSignal) caps += '<div class="cap cap-p">📉 ' + sig.ceSignal.replace(/_/g,' ') + '</div>';
+  if (sig.ceSignal) caps += '<div class="cap cap-p">📉 ' + String(sig.ceSignal).replace(/_/g,' ') + '</div>';
+  if (sig.peSignal) caps += '<div class="cap cap-p">📈 ' + String(sig.peSignal).replace(/_/g,' ') + '</div>';
   if (sig.volRatio >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + sig.volRatio + 'x</div>';
   if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">📈 Index aligned</div>';
   else if (sig.bias && sig.bias !== 'NEUTRAL') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
