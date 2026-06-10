@@ -79,6 +79,9 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .summary-bar{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);background:var(--card);transition:background .3s;flex-shrink:0}
 .sum-item{text-align:center;padding:8px 4px;border-right:1px solid var(--border)}
 .sum-item:last-child{border-right:none}
+.sum-item.tappable{cursor:pointer;transition:background .15s}
+.sum-item.tappable:active{background:var(--card2)}
+.sum-item.tappable.active-filter{background:var(--card2);border-bottom:2px solid var(--blue)}
 .sum-num{font-size:19px;font-weight:900;font-family:'Roboto Mono',monospace}
 .sum-num.r{color:var(--red)}.sum-num.g{color:var(--green)}.sum-num.a{color:var(--amber)}.sum-num.b{color:var(--blue)}
 .sum-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
@@ -100,7 +103,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .sig-card.strong.bullish{box-shadow:0 3px 18px rgba(34,197,94,.12)}
 
 .card-col{display:flex;align-items:center;padding:12px 13px;gap:10px}
-.stk-logo{width:38px;height:38px;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;flex-shrink:0;border:1px solid var(--border);font-family:'Roboto Mono',monospace}
+.stk-logo{width:40px;height:40px;border-radius:10px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;flex-shrink:0;border:1px solid var(--border);font-family:'Roboto Mono',monospace;letter-spacing:0;overflow:hidden;word-break:break-all;text-align:center;line-height:1.2}
 .bearish .stk-logo{color:var(--red);border-color:rgba(239,68,68,.3)}
 .bullish .stk-logo{color:var(--green);border-color:rgba(34,197,94,.3)}
 .commodity .stk-logo{color:var(--amber);border-color:rgba(245,158,11,.3)}
@@ -326,16 +329,22 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
       <span class="vix-note" id="vixNote">Loading...</span>
     </div>
     <div class="summary-bar">
-      <div class="sum-item"><div class="sum-num r" id="sBear">0</div><div class="sum-lbl">🔴 Bear</div></div>
-      <div class="sum-item"><div class="sum-num g" id="sBull">0</div><div class="sum-lbl">🟢 Bull</div></div>
-      <div class="sum-item"><div class="sum-num a" id="sStrong">0</div><div class="sum-lbl">🔥 Strong</div></div>
-      <div class="sum-item"><div class="sum-num b" id="sScanned">0</div><div class="sum-lbl">⚡ Scanned</div></div>
-    </div>
-    <div class="filter-row">
-      <div class="fpill active" onclick="filterSigs('all',this)">ALL</div>
-      <div class="fpill" onclick="filterSigs('stocks',this)">📈 STOCKS</div>
-      <div class="fpill" onclick="filterSigs('strong',this)">🔥 STRONG</div>
-      <div class="fpill" onclick="filterSigs('moderate',this)">✓ MODERATE</div>
+      <div class="sum-item tappable" onclick="filterSigs('bear',this)" id="sumBear">
+        <div class="sum-num r" id="sBear">0</div>
+        <div class="sum-lbl">🔴 BEAR</div>
+      </div>
+      <div class="sum-item tappable" onclick="filterSigs('bull',this)" id="sumBull">
+        <div class="sum-num g" id="sBull">0</div>
+        <div class="sum-lbl">🟢 BULL</div>
+      </div>
+      <div class="sum-item tappable" onclick="filterSigs('strong',this)" id="sumStrong">
+        <div class="sum-num a" id="sStrong">0</div>
+        <div class="sum-lbl">🔥 STRONG</div>
+      </div>
+      <div class="sum-item tappable" onclick="filterSigs('all',this)" id="sumAll">
+        <div class="sum-num b" id="sScanned">0</div>
+        <div class="sum-lbl">⚡ ALL</div>
+      </div>
     </div>
     <div class="scroll-area" id="sigList">
       <div class="empty-state">
@@ -628,9 +637,16 @@ async function loadVix() {
 
 // ─── FILTER ───────────────────────────────────────────────────────────────────
 function filterSigs(mode, el) {
-  document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
-  el.classList.add('active');
-  S.filterMode = mode;
+  // Clear all active filters
+  document.querySelectorAll('.sum-item.tappable').forEach(function(p) { p.classList.remove('active-filter'); });
+  // If same filter tapped again — go back to ALL
+  if (S.filterMode === mode && mode !== 'all') {
+    S.filterMode = 'all';
+    document.getElementById('sumAll').classList.add('active-filter');
+  } else {
+    S.filterMode = mode;
+    if (el) el.classList.add('active-filter');
+  }
   renderSignals();
 }
 
@@ -733,50 +749,46 @@ function buildCard(sig) {
   if (!caps) caps = '<div class="cap cap-p">OI signal detected</div>';
 
   var spotStr = (sig.spotPrice || sig.ltp || 0).toLocaleString('en-IN', {maximumFractionDigits:2});
+  var premStr = (sig.premium||0).toFixed(2);
 
   return '<div class="sig-card ' + cls + strong + '" onclick="toggleCard(this)" id="card-' + sig.id + '">'
 
-    // ── COLLAPSED VIEW ──────────────────────────────────────
+    // ── COLLAPSED — stock info + entry premium on right ──────────
     + '<div class="card-col">'
     + '<div class="stk-logo">' + logo + '</div>'
     + '<div class="card-mid">'
     + '<div class="badge-row">' + tbadge + confBadge + vbadge + expBadge + '</div>'
     + '<div class="stk-name">' + sig.sym + '</div>'
-    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · NSE</div>'
+    + '<div class="stk-sub">' + sig.strike + ' ' + sig.type + ' · Lot ' + (sig.lot||1) + '</div>'
     + '</div>'
     + '<div class="card-right">'
-    + '<div class="prem-val" id="cpm-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</div>'
-    + '<div class="prem-chg">premium</div>'
+    + '<div class="prem-val" id="cpm-' + sig.id + '">₹' + premStr + '</div>'
+    + '<div class="prem-chg">live prem</div>'
+    + '<div class="pnl-tag none">' + calcCapital(sig.premium||0, sig.lot||1) + ' min</div>'
     + '</div></div>'
 
-    // ── LIVE BAR (always visible) ────────────────────────────
+    // ── LIVE BAR — spot + zone only ───────────────────────────────
     + '<div class="card-live-bar" id="clbar-' + sig.id + '">'
     + '<div class="clb-item">'
-    + '<span class="clb-lbl">SPOT</span>'
-    + '<span class="clb-val"><span id="clspot-' + sig.id + '">₹' + spotStr + '</span><span class="clb-arr" id="clarr-' + sig.id + '">▲</span></span>'
+    + '<span class="clb-lbl">LIVE SPOT</span>'
+    + '<span class="clb-val"><span id="clspot-' + sig.id + '">₹' + spotStr + '</span><span class="clb-arr" id="clarr-' + sig.id + '"> ▲</span></span>'
     + '</div>'
     + '<div class="clb-divider"></div>'
     + '<div class="clb-item">'
-    + '<span class="clb-lbl">PREMIUM</span>'
-    + '<span class="clb-val" id="clprem-' + sig.id + '">₹' + (sig.premium||0).toFixed(2) + '</span>'
-    + '</div>'
-    + '<div class="clb-divider"></div>'
-    + '<div class="clb-item">'
-    + '<span class="clb-lbl">MIN CAPITAL</span>'
-    + '<span class="clb-val cap-amt" id="clcap-' + sig.id + '">₹' + calcCapital(sig.premium||0, sig.lot||1) + '</span>'
+    + '<span class="clb-lbl">ENTRY PREM</span>'
+    + '<span class="clb-val">₹' + premStr + '</span>'
     + '</div>'
     + '<div class="clb-divider"></div>'
     + '<div class="clb-zone" id="clzone-' + sig.id + '">—</div>'
     + '</div>'
 
-    // ── EXPANDED VIEW ────────────────────────────────────────
+    // ── EXPANDED ──────────────────────────────────────────────────
     + '<div class="card-divider"></div>'
     + '<div class="card-exp">'
-    + '<div class="exp-hdr"><span class="exp-lbl">📌 Buy This</span><span class="exp-spot">Spot ₹' + spotStr + '</span></div>'
     + '<div class="buy-box">'
     + '<div><div class="buy-lbl">Strike</div><div class="buy-strike">' + sig.strike + ' ' + sig.type + '</div></div>'
     + '<div style="text-align:center"><div class="buy-lbl">Lot Size</div><div style="font-size:14px;font-weight:800;color:var(--text)">' + (sig.lot||1) + '</div></div>'
-    + '<div style="text-align:right"><div class="pm-lbl">Min Capital</div><div class="pm-val" style="font-size:15px;color:var(--blue)">' + calcCapital(sig.premium||0, sig.lot||1) + '</div></div>'
+    + '<div style="text-align:right"><div class="pm-lbl">Min Capital</div><div class="pm-val" style="font-size:15px;color:var(--blue)" id="cap-' + sig.id + '">' + calcCapital(sig.premium||0, sig.lot||1) + '</div></div>'
     + '</div>'
     + '<div class="levels">'
     + '<div class="lv-row hold" id="lv-hold-' + sig.id + '"><div class="lv-icon">💛</div><div><div class="lv-spot">' + (sig.holdZone||'--') + ' = HOLD</div><div class="lv-reason">' + (sig.holdReason||'') + '</div></div></div>'
@@ -893,12 +905,13 @@ async function updateLiveSpot(sigId) {
     clZone.className   = 'clb-zone ' + zone;
     if (clBar) clBar.className = 'card-live-bar zone-' + zone;
 
-    // Update premiums
+    // Update LIVE premium on card right side
     if (pmEl)  pmEl.textContent  = '₹' + (sig.premium||0).toFixed(2);
+    var cpmEl  = document.getElementById('cpm-' + sigId);
     if (cpmEl) cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
-    if (clPrem) clPrem.textContent = '₹' + (sig.premium||0).toFixed(2);
+    // Entry premium in bar stays FIXED — no update needed
     // Update capital
-    var clCap = document.getElementById('clcap-' + sigId);
+    var clCap = document.getElementById('cap-' + sigId);
     if (clCap) clCap.textContent = calcCapital(sig.premium||0, sig.lot||1);
 
     // Highlight active level row
@@ -939,9 +952,11 @@ function renderSignals() {
     return;
   }
   var filtered = sigs;
-  if (S.filterMode === 'stocks')   filtered = sigs.filter(function(s) { return !s.isCommodity; });
+  if (S.filterMode === 'bear')     filtered = sigs.filter(function(s) { return s.type === 'PE'; });
+  if (S.filterMode === 'bull')     filtered = sigs.filter(function(s) { return s.type === 'CE'; });
   if (S.filterMode === 'strong')   filtered = sigs.filter(function(s) { return s.verdict === 'STRONG'; });
   if (S.filterMode === 'moderate') filtered = sigs.filter(function(s) { return s.verdict === 'MODERATE'; });
+  if (S.filterMode === 'stocks')   filtered = sigs.filter(function(s) { return !s.isCommodity; });
   if (!filtered.length) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No signals in this filter</div><div class="empty-sub">Switch to ALL to see everything</div></div>';
     return;
@@ -1219,9 +1234,9 @@ async function runScan() {
     });
     if (!filtered.length) {
       S.filterMode = 'all';
-      document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
-      var allPill = document.querySelector('.fpill');
-      if (allPill) allPill.classList.add('active');
+      document.querySelectorAll('.sum-item.tappable').forEach(function(p) { p.classList.remove('active-filter'); });
+      var allEl = document.getElementById('sumAll');
+      if (allEl) allEl.classList.add('active-filter');
       renderSignals();
     }
   }
