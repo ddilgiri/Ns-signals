@@ -162,13 +162,19 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 
 .why-lbl{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px}
 .capsules{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
-.cap{border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;border:1px solid;display:flex;align-items:center;gap:3px}
-.cap-r{background:var(--red-bg);border-color:rgba(239,68,68,.3);color:#fca5a5}
-.cap-s{background:var(--green-bg);border-color:rgba(34,197,94,.3);color:#86efac}
-.cap-p{background:var(--amber-bg);border-color:rgba(245,158,11,.3);color:#fcd34d}
-.cap-v{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.3);color:#93c5fd}
-.cap-ok{background:var(--green-bg);border-color:rgba(34,197,94,.3);color:var(--green)}
-.cap-warn{background:var(--amber-bg);border-color:rgba(245,158,11,.3);color:var(--amber)}
+.cap{border-radius:20px;padding:5px 11px;font-size:10px;font-weight:800;border:1px solid;display:flex;align-items:center;gap:3px}
+.cap-r{background:rgba(239,68,68,0.18);border-color:rgba(239,68,68,0.5);color:#ff6b6b}
+.cap-s{background:rgba(34,197,94,0.18);border-color:rgba(34,197,94,0.5);color:#4ade80}
+.cap-p{background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.5);color:#fbbf24}
+.cap-v{background:rgba(59,130,246,0.18);border-color:rgba(59,130,246,0.5);color:#60a5fa}
+.cap-ok{background:rgba(34,197,94,0.18);border-color:rgba(34,197,94,0.5);color:#4ade80}
+.cap-warn{background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.5);color:#fbbf24}
+[data-theme="light"] .cap-r{background:rgba(239,68,68,0.12);color:#dc2626}
+[data-theme="light"] .cap-s{background:rgba(34,197,94,0.12);color:#16a34a}
+[data-theme="light"] .cap-p{background:rgba(245,158,11,0.12);color:#d97706}
+[data-theme="light"] .cap-v{background:rgba(59,130,246,0.12);color:#2563eb}
+[data-theme="light"] .cap-ok{background:rgba(34,197,94,0.12);color:#16a34a}
+[data-theme="light"] .cap-warn{background:rgba(245,158,11,0.12);color:#d97706}
 
 /* CARD LIVE BAR — always visible */
 .card-live-bar{display:flex;align-items:center;padding:7px 13px;gap:0;background:var(--card2);border-top:1px solid var(--border);transition:background .3s}
@@ -826,7 +832,6 @@ function buildCard(sig) {
     + '<div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">' + t1str + '</div></div>'
     + '<div class="target-chip"><div class="t-lbl">Target 2</div><div class="t-val">' + t2str + '</div></div>'
     + '</div>'
-    + '<div class="why-lbl">📊 Why</div>'
     + '<div class="capsules">' + caps + '</div>'
     + '<div class="paper-btn" onclick="addPaperTrade(event,\'' + sig.id + '\')">📋 Add to Paper Trade</div>'
     + '</div></div>';
@@ -914,25 +919,26 @@ async function batchUpdatePremiums() {
       var r = await fetch(getServer() + '/option-ltp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: sig.sym, strike: sig.strike, optionType: sig.type }),
+        body: JSON.stringify({
+          symbol:     sig.sym,
+          strike:     sig.strike,
+          type:       sig.type,
+          expiry:     'MONTHLY'
+        }),
       });
       var d = await r.json();
       if (d.status && d.ltp && parseFloat(d.ltp) > 0) {
         sig.premium = parseFloat(d.ltp);
-        // Update card premium displays
+        // cpm = live premium on card top-right (always visible)
         var cpmEl = document.getElementById('cpm-' + sig.id);
-        var capEl = document.getElementById('cap-' + sig.id);
         if (cpmEl) cpmEl.textContent = '₹' + sig.premium.toFixed(2);
+        // cap = min capital in expanded view
+        var capEl = document.getElementById('cap-' + sig.id);
         if (capEl) capEl.textContent = calcCapital(sig.premium, sig.lot||1);
-        // Update min capital in collapsed
-        var pnlTags = document.querySelectorAll('#card-' + sig.id + ' .pnl-tag');
-        if (pnlTags.length) {
-          // find the min capital tag
-          pnlTags.forEach(function(el) {
-            if (el.textContent.indexOf('min') !== -1) {
-              el.textContent = calcCapital(sig.premium, sig.lot||1) + ' min';
-            }
-          });
+        // Update min capital tag in collapsed view
+        var minTag = document.querySelector('#card-' + sig.id + ' .pnl-tag.none');
+        if (minTag && minTag.textContent.indexOf('min') !== -1) {
+          minTag.textContent = calcCapital(sig.premium, sig.lot||1) + ' min';
         }
       }
     } catch(e) {}
@@ -1472,7 +1478,7 @@ async function scanSymbol(sym, token, lot, isIndex) {
             var ltpR = await fetch(getServer() + '/option-ltp', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ symbol: sym, strike: atmStrike, optionType: type }),
+              body: JSON.stringify({ symbol: sym, strike: atmStrike, type: type, expiry: 'MONTHLY' }),
             });
             var ltpD = await ltpR.json();
             if (ltpD.status && ltpD.ltp) {
