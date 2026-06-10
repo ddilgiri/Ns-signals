@@ -89,7 +89,6 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .filter-row{display:flex;gap:7px;padding:9px 13px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;transition:background .3s}
 .fpill{padding:5px 13px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--text3);border:1px solid var(--border);transition:all .2s;white-space:nowrap;flex-shrink:0}
 .fpill.active{background:rgba(59,130,246,.12);color:var(--blue);border-color:rgba(59,130,246,.4)}
-
 .scroll-area{padding:11px 13px 80px;display:flex;flex-direction:column;gap:10px}
 .sec-lbl{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;display:flex;align-items:center;gap:6px}
 .sec-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -329,22 +328,29 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
       <span class="vix-note" id="vixNote">Loading...</span>
     </div>
     <div class="summary-bar">
-      <div class="sum-item tappable" onclick="filterSigs('bear',this)" id="sumBear">
+      <div class="sum-item" id="sumBear">
         <div class="sum-num r" id="sBear">0</div>
         <div class="sum-lbl">🔴 BEAR</div>
       </div>
-      <div class="sum-item tappable" onclick="filterSigs('bull',this)" id="sumBull">
+      <div class="sum-item" id="sumBull">
         <div class="sum-num g" id="sBull">0</div>
         <div class="sum-lbl">🟢 BULL</div>
       </div>
-      <div class="sum-item tappable" onclick="filterSigs('strong',this)" id="sumStrong">
+      <div class="sum-item" id="sumStrong">
         <div class="sum-num a" id="sStrong">0</div>
         <div class="sum-lbl">🔥 STRONG</div>
       </div>
-      <div class="sum-item tappable" onclick="filterSigs('all',this)" id="sumAll">
+      <div class="sum-item" id="sumAll">
         <div class="sum-num b" id="sScanned">0</div>
-        <div class="sum-lbl">⚡ ALL</div>
+        <div class="sum-lbl">⚡ SCANNED</div>
       </div>
+    </div>
+    <div class="filter-row">
+      <div class="fpill active" id="pill-all"      onclick="filterSigs('all',this)">ALL</div>
+      <div class="fpill"        id="pill-bear"     onclick="filterSigs('bear',this)">🔴 BEAR</div>
+      <div class="fpill"        id="pill-bull"     onclick="filterSigs('bull',this)">🟢 BULL</div>
+      <div class="fpill"        id="pill-strong"   onclick="filterSigs('strong',this)">🔥 STRONG</div>
+      <div class="fpill"        id="pill-moderate" onclick="filterSigs('moderate',this)">✓ MODERATE</div>
     </div>
     <div class="scroll-area" id="sigList">
       <div class="empty-state">
@@ -645,15 +651,15 @@ async function loadVix() {
 
 // ─── FILTER ───────────────────────────────────────────────────────────────────
 function filterSigs(mode, el) {
-  // Clear all active filters
-  document.querySelectorAll('.sum-item.tappable').forEach(function(p) { p.classList.remove('active-filter'); });
-  // If same filter tapped again — go back to ALL
+  document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
+  // Tap same → back to ALL
   if (S.filterMode === mode && mode !== 'all') {
     S.filterMode = 'all';
-    document.getElementById('sumAll').classList.add('active-filter');
+    var allPill = document.getElementById('pill-all');
+    if (allPill) allPill.classList.add('active');
   } else {
     S.filterMode = mode;
-    if (el) el.classList.add('active-filter');
+    if (el) el.classList.add('active');
   }
   renderSignals();
 }
@@ -1254,9 +1260,9 @@ async function runScan() {
     });
     if (!filtered.length) {
       S.filterMode = 'all';
-      document.querySelectorAll('.sum-item.tappable').forEach(function(p) { p.classList.remove('active-filter'); });
-      var allEl = document.getElementById('sumAll');
-      if (allEl) allEl.classList.add('active-filter');
+      document.querySelectorAll('.fpill').forEach(function(p) { p.classList.remove('active'); });
+      var allPill = document.getElementById('pill-all');
+      if (allPill) allPill.classList.add('active');
       renderSignals();
     }
   }
