@@ -76,7 +76,7 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .vix-val{font-family:'Roboto Mono',monospace;font-weight:800;min-width:42px}
 .vix-note{color:var(--text3);flex:1}
 
-.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);background:var(--card);transition:background .3s}
+.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);background:var(--card);transition:background .3s;flex-shrink:0}
 .sum-item{text-align:center;padding:8px 4px;border-right:1px solid var(--border)}
 .sum-item:last-child{border-right:none}
 .sum-num{font-size:19px;font-weight:900;font-family:'Roboto Mono',monospace}
@@ -184,8 +184,8 @@ body{font-family:'Roboto',sans-serif;color:var(--text);display:flex;flex-directi
 .clb-zone.exit{background:rgba(239,68,68,.2);color:var(--red);font-size:11px}
 .clb-zone.neutral{background:var(--card2);color:var(--text3)}
 .cap-amt{color:var(--blue)!important}
-.lv-row.active-zone{box-shadow:0 0 0 2px currentColor;opacity:1}
-.lv-row:not(.active-zone){opacity:.7}
+.lv-row.active-zone{opacity:1;filter:brightness(1.15)}
+.lv-row:not(.active-zone){opacity:.6}
 .paper-btn{width:100%;padding:10px;border-radius:9px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);color:var(--blue);font-size:12px;font-weight:800;cursor:pointer;text-align:center;transition:all .2s}
 .paper-btn:active{opacity:.7}
 .paper-btn:active{opacity:.7}
@@ -638,47 +638,39 @@ function filterSigs(mode, el) {
 function computeLevels(sig) {
   var spot   = sig.spotPrice || sig.ltp || 0;
   var isBear = sig.type === 'PE';
-  var atr    = sig.atr || (spot * 0.006);
+  // Use server ATR if available, else 0.5% of spot (realistic for intraday)
+  var atr    = (sig.atr && sig.atr > 0 && sig.atr < spot * 0.05) ? sig.atr : (spot * 0.005);
   if (!spot) return sig;
 
-  // Use REAL Ramesh/Suresh strikes if available
-  var rameshWall  = (sig.ceWalls  && sig.ceWalls.length)  ? sig.ceWalls[0].strike  : (spot + 2 * atr);
-  var sureshFloor = (sig.peFloors && sig.peFloors.length) ? sig.peFloors[0].strike : (spot - 2 * atr);
-  var rameshPct   = (sig.ceWalls  && sig.ceWalls.length)  ? (sig.ceWalls[0].oiChange||0).toFixed(0)  : 0;
-  var sureshPct   = (sig.peFloors && sig.peFloors.length) ? (sig.peFloors[0].oiChange||0).toFixed(0) : 0;
+  var rameshWall  = (sig.ceWalls  && sig.ceWalls.length)  ? parseFloat(sig.ceWalls[0].strike)  : Math.round(spot + 2 * atr);
+  var sureshFloor = (sig.peFloors && sig.peFloors.length) ? parseFloat(sig.peFloors[0].strike) : Math.round(spot - 2 * atr);
+  var rameshPct   = (sig.ceWalls  && sig.ceWalls.length)  ? Math.abs(parseFloat(sig.ceWalls[0].oiChange||0)).toFixed(0)  : '0';
+  var sureshPct   = (sig.peFloors && sig.peFloors.length) ? Math.abs(parseFloat(sig.peFloors[0].oiChange||0)).toFixed(0) : '0';
+
+  // Clamp — wall/floor must be close to spot (within 10%)
+  if (rameshWall  < spot) rameshWall  = Math.round(spot + atr * 2);
+  if (sureshFloor > spot) sureshFloor = Math.round(spot - atr * 2);
 
   if (isBear) {
-    // PE trade — spot should fall
-    // Hold: between spot and Ramesh wall (small bounce is ok)
-    var holdLow  = Math.round(spot);
-    var holdHigh = Math.round(spot + atr * 0.5);
-    sig.holdZone         = holdLow + ' – ' + holdHigh;
+    // Spot should fall — hold near spot, exit above Ramesh wall
+    sig.holdZone         = Math.round(spot) + ' – ' + Math.round(spot + atr);
     sig.holdReason       = 'Ramesh wall ' + rameshWall + ' holding (+' + rameshPct + '% OI)';
-    // Hold Strong: near Suresh floor — breakdown confirmed
-    sig.holdStrong       = '' + Math.round(sureshFloor + atr * 0.3);
+    sig.holdStrong       = '' + Math.round(spot - atr);
     sig.holdStrongReason = 'Suresh floor ' + sureshFloor + ' taking over — target near';
-    // Exit: Ramesh wall level — if spot reaches here, signal failed
-    sig.exitZone         = Math.round(rameshWall) + ' – ' + Math.round(rameshWall + atr * 0.3);
+    sig.exitZone         = Math.round(rameshWall) + ' – ' + Math.round(rameshWall + atr * 0.5);
     sig.exitReason       = 'Ramesh wall ' + rameshWall + ' broken — signal failed';
-    // Targets: Suresh floor and below
     sig.target1          = parseFloat(sureshFloor.toFixed(2));
-    sig.target2          = parseFloat((sureshFloor - atr).toFixed(2));
+    sig.target2          = parseFloat((sureshFloor - atr * 2).toFixed(2));
   } else {
-    // CE trade — spot should rise
-    // Hold: between Suresh floor and spot (small dip is ok)
-    var holdLow2  = Math.round(spot - atr * 0.5);
-    var holdHigh2 = Math.round(spot);
-    sig.holdZone         = holdLow2 + ' – ' + holdHigh2;
+    // Spot should rise — hold near spot, exit below Suresh floor
+    sig.holdZone         = Math.round(spot - atr) + ' – ' + Math.round(spot);
     sig.holdReason       = 'Suresh floor ' + sureshFloor + ' intact (+' + sureshPct + '% OI)';
-    // Hold Strong: near Ramesh wall — breakout near
-    sig.holdStrong       = '' + Math.round(rameshWall - atr * 0.3);
-    sig.holdStrongReason = 'Ramesh wall ' + rameshWall + ' breaking — short cover rally near';
-    // Exit: Suresh floor — if spot falls here, signal failed
-    sig.exitZone         = Math.round(sureshFloor - atr * 0.3) + ' – ' + Math.round(sureshFloor);
+    sig.holdStrong       = '' + Math.round(spot + atr);
+    sig.holdStrongReason = 'Ramesh wall ' + rameshWall + ' breaking — rally near';
+    sig.exitZone         = Math.round(sureshFloor - atr * 0.5) + ' – ' + Math.round(sureshFloor);
     sig.exitReason       = 'Suresh floor ' + sureshFloor + ' broken — signal failed';
-    // Targets: Ramesh wall and above
     sig.target1          = parseFloat(rameshWall.toFixed(2));
-    sig.target2          = parseFloat((rameshWall + atr).toFixed(2));
+    sig.target2          = parseFloat((rameshWall + atr * 2).toFixed(2));
   }
   return sig;
 }
@@ -688,7 +680,7 @@ function buildCard(sig) {
   var isBear = sig.type === 'PE';
   var cls    = isBear ? 'bearish' : 'bullish';
   var strong = sig.verdict === 'STRONG' ? ' strong' : '';
-  var logo   = sig.sym.substring(0,4).toUpperCase();
+  var logo = sig.sym.replace(/[^A-Z0-9]/g,'').substring(0,4).toUpperCase();
   var vbadge = sig.verdict === 'STRONG' ? '<span class="badge fire">🔥 STRONG</span>'
              : sig.verdict === 'MODERATE' ? '<span class="badge mod">✓ MODERATE</span>'
              : '<span class="badge weak">' + sig.score + '%</span>';
@@ -709,17 +701,32 @@ function buildCard(sig) {
   var caps = '';
   if (sig.ceWalls && sig.ceWalls.length) {
     var w = sig.ceWalls[0];
-    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' ' + (w.oiChange ? '+' + parseFloat(w.oiChange).toFixed(0) + '%' : '') + '</div>';
+    var wOi = w.oiChange ? '+' + Math.abs(parseFloat(w.oiChange)).toFixed(0) + '%' : '';
+    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' ' + wOi + '</div>';
   }
   if (sig.peFloors && sig.peFloors.length) {
     var f = sig.peFloors[0];
-    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' ' + (f.oiChange ? '+' + parseFloat(f.oiChange).toFixed(0) + '%' : '') + '</div>';
+    var fOi = f.oiChange ? '+' + Math.abs(parseFloat(f.oiChange)).toFixed(0) + '%' : '';
+    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' ' + fOi + '</div>';
   }
-  if (sig.ceSignal) caps += '<div class="cap cap-p">📉 ' + String(sig.ceSignal).replace(/_/g,' ') + '</div>';
-  if (sig.peSignal) caps += '<div class="cap cap-p">📈 ' + String(sig.peSignal).replace(/_/g,' ') + '</div>';
-  if (sig.volRatio >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + sig.volRatio + 'x</div>';
+  // ceSignal/peSignal are OBJECTS {signal, action, note} — extract correctly
+  var ceSig = sig.ceSignal;
+  var peSig = sig.peSignal;
+  if (ceSig && typeof ceSig === 'object' && ceSig.signal) {
+    var ceTxt = String(ceSig.signal).replace(/_/g,' ');
+    caps += '<div class="cap cap-p">📉 ' + ceTxt + '</div>';
+  }
+  if (peSig && typeof peSig === 'object' && peSig.signal) {
+    var peTxt = String(peSig.signal).replace(/_/g,' ');
+    caps += '<div class="cap cap-p">📈 ' + peTxt + '</div>';
+  }
+  if (ceSig && typeof ceSig === 'string') caps += '<div class="cap cap-p">📉 ' + ceSig.replace(/_/g,' ') + '</div>';
+  if (peSig && typeof peSig === 'string') caps += '<div class="cap cap-p">📈 ' + peSig.replace(/_/g,' ') + '</div>';
+  // Volume — handle object or number
+  var vr = parseFloat(sig.volRatio) || 0;
+  if (vr >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + vr.toFixed(1) + 'x</div>';
   if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">📈 Index aligned</div>';
-  else if (sig.bias && sig.bias !== 'NEUTRAL') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
+  else if (sig.bias && sig.bias !== 'NEUTRAL' && typeof sig.bias === 'string') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
   if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
   if (!caps) caps = '<div class="cap cap-p">OI signal detected</div>';
 
@@ -1088,33 +1095,63 @@ function updateAnalytics() {
 }
 
 // ─── SCAN ─────────────────────────────────────────────────────────────────────
+// ─── STOCK LIST — Lot sizes from Dhan June 2026 ───────────────────────────────
 var NSE_STOCKS = [
-  {sym:'RELIANCE',token:'2885',lot:250},{sym:'TCS',token:'11536',lot:175},
-  {sym:'INFY',token:'1594',lot:300},{sym:'HDFCBANK',token:'1333',lot:550},
-  {sym:'ICICIBANK',token:'4963',lot:700},{sym:'SBIN',token:'3045',lot:1500},
-  {sym:'AXISBANK',token:'5900',lot:625},{sym:'KOTAKBANK',token:'1922',lot:400},
-  {sym:'WIPRO',token:'3787',lot:1500},{sym:'TECHM',token:'13538',lot:600},
-  {sym:'HCLTECH',token:'7229',lot:350},{sym:'SUNPHARMA',token:'3351',lot:350},
-  {sym:'TATAMOTORS',token:'3432',lot:1425},{sym:'TATASTEEL',token:'3518',lot:5500},
-  {sym:'ADANIENT',token:'25',lot:625},{sym:'ADANIPORTS',token:'15083',lot:1250},
-  {sym:'BAJFINANCE',token:'317',lot:125},{sym:'BAJAJFINSV',token:'16675',lot:500},
-  {sym:'HINDUNILVR',token:'1394',lot:300},{sym:'NESTLEIND',token:'17963',lot:40},
-  {sym:'MARUTI',token:'10999',lot:50},{sym:'TITAN',token:'3506',lot:175},
-  {sym:'ULTRACEMCO',token:'11532',lot:100},{sym:'GRASIM',token:'1232',lot:475},
-  {sym:'CGPOWER',token:'10093',lot:2975},{sym:'NATIONALUM',token:'2672',lot:2925},
-  {sym:'AMBUJACEM',token:'1270',lot:2000},{sym:'RBLBANK',token:'4708',lot:5000},
-  {sym:'BEL',token:'383',lot:4500},{sym:'TATAPOWER',token:'3426',lot:3375},
-  {sym:'MANAPPURAM',token:'19061',lot:4000},{sym:'VBL',token:'37014',lot:1000},
-  {sym:'EXIDEIND',token:'1212',lot:2700},{sym:'WIPRO',token:'3787',lot:1500},
-  {sym:'LT',token:'11483',lot:175},{sym:'NTPC',token:'11630',lot:2250},
-  {sym:'POWERGRID',token:'14977',lot:2700},{sym:'ONGC',token:'2475',lot:1925},
-  {sym:'COALINDIA',token:'20374',lot:4200},{sym:'JSWSTEEL',token:'11723',lot:600},
+  {sym:'RELIANCE',   token:'2885',   lot:250},
+  {sym:'TCS',        token:'11536',  lot:175},
+  {sym:'INFY',       token:'1594',   lot:300},
+  {sym:'HDFCBANK',   token:'1333',   lot:550},
+  {sym:'ICICIBANK',  token:'4963',   lot:700},
+  {sym:'SBIN',       token:'3045',   lot:1500},
+  {sym:'AXISBANK',   token:'5900',   lot:625},
+  {sym:'KOTAKBANK',  token:'1922',   lot:400},
+  {sym:'WIPRO',      token:'3787',   lot:1500},
+  {sym:'TECHM',      token:'13538',  lot:600},
+  {sym:'HCLTECH',    token:'7229',   lot:350},
+  {sym:'SUNPHARMA',  token:'3351',   lot:350},
+  {sym:'TATAMOTORS', token:'3432',   lot:1425},
+  {sym:'TATASTEEL',  token:'3518',   lot:5500},
+  {sym:'ADANIENT',   token:'25',     lot:309},
+  {sym:'ADANIPORTS', token:'15083',  lot:475},
+  {sym:'BAJFINANCE', token:'317',    lot:750},
+  {sym:'BAJAJFINSV', token:'16675',  lot:250},
+  {sym:'HINDUNILVR', token:'1394',   lot:300},
+  {sym:'NESTLEIND',  token:'17963',  lot:40},
+  {sym:'MARUTI',     token:'10999',  lot:50},
+  {sym:'TITAN',      token:'3506',   lot:175},
+  {sym:'ULTRACEMCO', token:'11532',  lot:100},
+  {sym:'GRASIM',     token:'1232',   lot:475},
+  {sym:'LT',         token:'11483',  lot:175},
+  {sym:'NTPC',       token:'11630',  lot:2250},
+  {sym:'POWERGRID',  token:'14977',  lot:2700},
+  {sym:'ONGC',       token:'2475',   lot:1925},
+  {sym:'COALINDIA',  token:'20374',  lot:4200},
+  {sym:'JSWSTEEL',   token:'11723',  lot:600},
+  {sym:'BEL',        token:'383',    lot:1425},
+  {sym:'TATAPOWER',  token:'3426',   lot:3375},
+  {sym:'AMBUJACEM',  token:'1270',   lot:1050},
+  {sym:'CGPOWER',    token:'10093',  lot:2975},
+  {sym:'NATIONALUM', token:'2672',   lot:2925},
+  {sym:'RBLBANK',    token:'4708',   lot:5000},
+  {sym:'MANAPPURAM', token:'19061',  lot:4000},
+  {sym:'VBL',        token:'37014',  lot:1000},
+  {sym:'EXIDEIND',   token:'1212',   lot:2700},
+  {sym:'ASHOKLEY',   token:'212',    lot:5000},
+  {sym:'ASIANPAINT', token:'236',    lot:250},
+  {sym:'BAJAJ-AUTO', token:'16669',  lot:75},
+  {sym:'BANKBARODA', token:'4668',   lot:2925},
+  {sym:'BANDHANBNK', token:'2263',   lot:3600},
+  {sym:'AUROPHARMA', token:'275',    lot:550},
+  {sym:'APOLLOHOSP', token:'157',    lot:125},
+  {sym:'ADANIGREEN', token:'236418', lot:600},
+  {sym:'ADANIPOWER', token:'467',    lot:3550},
 ];
 
 var IDX_LIST = [
-  {sym:'NIFTY',token:'99926000',lot:75,isIndex:true},
-  {sym:'BANKNIFTY',token:'99926009',lot:30,isIndex:true},
-  {sym:'FINNIFTY',token:'99926037',lot:65,isIndex:true},
+  {sym:'NIFTY',      token:'99926000', lot:65,  isIndex:true},
+  {sym:'BANKNIFTY',  token:'99926009', lot:30,  isIndex:true},
+  {sym:'FINNIFTY',   token:'99926037', lot:60,  isIndex:true},
+  {sym:'MIDCPNIFTY', token:'99926074', lot:120, isIndex:true},
 ];
 
 var scanOffset = 0;
@@ -1223,28 +1260,21 @@ async function scanSymbol(sym, token, lot, isIndex) {
         var isDup = S.signals.some(function(s) { return s.sym === sym && s.type === type && (Date.now() - (s.ts||0)) < 300000; });
         if (isDup) continue;
 
-        // Get ATM premium via OI analysis
+        // signal-analysis already includes all OI data internally
+        // ceWalls, peFloors, ceSignal, peSignal, rameshTrapped all present in d
+        // Just get ATM premium from chain if available
         var premium = 0;
         var atmStrike = d.atmStrike || Math.round(spotPrice / 50) * 50;
-        try {
-          var oiR = await fetch(getServer() + '/oi-analysis', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol: sym, spotPrice: spotPrice }),
-          });
-          var oiD = await oiR.json();
-          if (oiD.status) {
-            atmStrike = oiD.atmStrike || atmStrike;
-            var atm = (oiD.chain || []).find(function(c) { return c.isATM; });
-            if (atm) premium = type === 'CE' ? (atm.CE_ltp || 0) : (atm.PE_ltp || 0);
-            // Merge OI fields
-            if (oiD.ceWalls)  d.ceWalls  = oiD.ceWalls;
-            if (oiD.peFloors) d.peFloors = oiD.peFloors;
-            if (oiD.ceSignal) d.ceSignal = oiD.ceSignal;
-            if (oiD.peSignal) d.peSignal = oiD.peSignal;
-            if (oiD.rameshTrapped) d.rameshTrapped = oiD.rameshTrapped;
+        // Use OI chain from signal-analysis response if available
+        if (d.chain && d.chain.length) {
+          var atm = d.chain.find(function(c) { return c.isATM; });
+          if (atm) {
+            premium   = type === 'CE' ? (atm.CE_ltp || 0) : (atm.PE_ltp || 0);
+            atmStrike = atm.strike || atmStrike;
           }
-        } catch(e2) {}
+        }
+        // Fallback — fetch premium separately only if not in response
+        if (!premium && d.oiResistStrike) atmStrike = type === 'CE' ? (d.oiResistStrike || atmStrike) : (d.oiSupportStrike || atmStrike);
 
         var sig = Object.assign({}, d, {
           id:          sym + '_' + type + '_' + Date.now(),
@@ -1254,7 +1284,7 @@ async function scanSymbol(sym, token, lot, isIndex) {
           token:       String(token),
           score:       d.score,
           verdict:     d.verdict,
-          spotPrice:   spotPrice,
+          spotPrice:   spotPrice,   // LIVE quote price — not candle ltp
           premium:     premium,
           strike:      atmStrike,
           isExpiry:    !!d.isExpiryDay,
