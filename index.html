@@ -571,6 +571,7 @@ async function doLogin() {
       if (mcEl) localStorage.setItem('fxo-maxcap', mcEl.value);
       loadIndices();
       loadVix();
+      startPriceUpdates(); // V1-style batch updates every 5s
       // Auto start scan if market open
       if (getMarketStatus().nseOpen && !S.scanning) {
         addLog('Market open — auto starting scan...', 'ok');
@@ -839,138 +840,154 @@ function calcCapital(premium, lot) {
   return '₹' + Math.round(cap);
 }
 
-var spotTimers = {};
+// ─── LIVE PRICE CACHE ─────────────────────────────────────────────────────────
+var LIVE_PRICES  = {};  // { sym: ltp }
+var LIVE_PREMIUMS = {}; // { sym_type_strike: ltp }
+var liveUpdateInt = null;
 
-function toggleCard(el) {
-  el.classList.toggle('open');
-  var sigId = el.id.replace('card-', '');
-  if (el.classList.contains('open')) {
-    startLiveSpot(sigId);
+// Build token→sym reverse map from NSE_STOCKS + IDX_LIST
+function buildTokenMap() {
+  var map = {};
+  NSE_STOCKS.forEach(function(s) { map[String(s.token)] = s.sym; });
+  IDX_LIST.forEach(function(s)   { map[String(s.token)] = s.sym; });
+  return map;
+}
+
+// Batch fetch all stock prices at once — like V1
+async function batchUpdatePrices() {
+  if (!S.connected) return;
+  try {
+    var tokenMap = buildTokenMap();
+    var allTokens = Object.keys(tokenMap);
+    var batchSize = 50;
+    for (var i = 0; i < allTokens.length; i += batchSize) {
+      var batch = allTokens.slice(i, i + batchSize);
+      try {
+        var r = await fetch(getServer() + '/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: batch } }),
+        });
+        var d = await r.json();
+        if (d.status && d.data && d.data.fetched) {
+          d.data.fetched.forEach(function(q) {
+            var sym = tokenMap[String(q.symbolToken)];
+            var ltp = parseFloat(q.ltp || q.close || 0);
+            if (sym && ltp > 0) LIVE_PRICES[sym] = ltp;
+          });
+        }
+      } catch(e) {}
+    }
+    // Update all signal cards with fresh prices
+    updateAllCards();
+    // Update indices mood strip
+    updateMoodStrip();
+  } catch(e) {}
+}
+
+// Update all visible signal cards with cached prices
+function updateAllCards() {
+  S.signals.forEach(function(sig) {
+    var ltp = LIVE_PRICES[sig.sym];
+    if (!ltp || ltp === sig.spotPrice) return;
+    var prevSpot = sig.spotPrice || ltp;
+    sig.spotPrice = ltp;
+    // Update spot display
+    var clspot = document.getElementById('clspot-' + sig.id);
+    var clarr   = document.getElementById('clarr-'  + sig.id);
+    if (clspot) clspot.textContent = '₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2});
+    if (clarr)  {
+      clarr.textContent  = ltp > prevSpot ? ' ▲' : ltp < prevSpot ? ' ▼' : ' —';
+      clarr.style.color  = ltp > prevSpot ? 'var(--green)' : ltp < prevSpot ? 'var(--red)' : 'var(--text3)';
+    }
+    // Update zone
+    updateZone(sig);
+  });
+}
+
+// Update mood strip with cached prices
+function updateMoodStrip() {
+  var strip = document.getElementById('moodStrip');
+  if (!strip) return;
+  strip.innerHTML = '';
+  IDX_LIST.forEach(function(idx) {
+    var ltp = LIVE_PRICES[idx.sym];
+    if (!ltp) return;
+    // We don't have prev close easily — show ltp only
+    var chip = document.createElement('div');
+    chip.className = 'mood-chip neutral';
+    chip.innerHTML = '<span class="mv">' + idx.sym + ' ₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2}) + '</span>';
+    strip.appendChild(chip);
+  });
+}
+
+// Determine and update zone for a signal
+function updateZone(sig) {
+  var ltp    = sig.spotPrice || 0;
+  var isBear = sig.type === 'PE';
+  if (!ltp) return;
+
+  var exitParts  = (sig.exitZone||'').replace(/[^0-9.\u2013\-]/g,'').split(/[\u2013\-]/);
+  var exitLow    = parseFloat(exitParts[0]) || 0;
+  var holdParts  = (sig.holdZone||'').replace(/[^0-9.\u2013\-]/g,'').split(/[\u2013\-]/);
+  var holdLow    = parseFloat(holdParts[0]) || 0;
+  var holdHigh   = parseFloat(holdParts[1]) || holdLow;
+  var holdStrong = parseFloat((sig.holdStrong||'0').replace(/[^0-9.]/g,'')) || 0;
+
+  var zone = 'neutral';
+  if (isBear) {
+    if (exitLow && ltp >= exitLow)                        zone = 'exit';
+    else if (holdLow && ltp >= holdLow && ltp <= holdHigh) zone = 'hold';
+    else if (holdStrong && ltp <= holdStrong)              zone = 'hold-strong';
+    else                                                    zone = 'hold';
   } else {
-    stopLiveSpot(sigId);
+    if (exitLow && ltp <= exitLow)                        zone = 'exit';
+    else if (holdLow && ltp >= holdLow && ltp <= holdHigh) zone = 'hold';
+    else if (holdStrong && ltp >= holdStrong)              zone = 'hold-strong';
+    else                                                    zone = 'hold';
+  }
+
+  var clBar  = document.getElementById('clbar-'  + sig.id);
+  var clZone = document.getElementById('clzone-' + sig.id);
+  var zoneLabels = { 'hold':'💛 HOLD', 'hold-strong':'💪 HOLD STRONG', 'exit':'🛑 EXIT NOW', 'neutral':'—' };
+  if (clZone) { clZone.textContent = zoneLabels[zone]||'—'; clZone.className = 'clb-zone ' + zone; }
+  if (clBar)  clBar.className = 'card-live-bar zone-' + zone;
+
+  // Highlight active level row
+  ['lv-hold-','lv-hs-','lv-exit-'].forEach(function(pfx) {
+    var el = document.getElementById(pfx + sig.id);
+    if (el) el.classList.remove('active-zone');
+  });
+  var activeId = zone==='hold'?'lv-hold-':zone==='hold-strong'?'lv-hs-':zone==='exit'?'lv-exit-':null;
+  if (activeId) {
+    var el = document.getElementById(activeId + sig.id);
+    if (el) el.classList.add('active-zone');
+  }
+
+  // Toast alert for exit zone
+  if (zone === 'exit') {
+    toast('🛑 ' + sig.sym + ' EXIT ZONE! Spot ₹' + ltp.toLocaleString('en-IN'), 4000);
   }
 }
 
-function startLiveSpot(sigId) {
-  stopLiveSpot(sigId);
-  updateLiveSpot(sigId);
-  spotTimers[sigId] = setInterval(function() { updateLiveSpot(sigId); }, 15000);
+// Start/stop batch price updates
+function startPriceUpdates() {
+  if (liveUpdateInt) return;
+  batchUpdatePrices();
+  liveUpdateInt = setInterval(batchUpdatePrices, 5000); // every 5 seconds like V1
+  addLog('Live price updates started — every 5s', 'ok');
+}
+function stopPriceUpdates() {
+  if (liveUpdateInt) { clearInterval(liveUpdateInt); liveUpdateInt = null; }
 }
 
-function stopLiveSpot(sigId) {
-  if (spotTimers[sigId]) { clearInterval(spotTimers[sigId]); delete spotTimers[sigId]; }
+function toggleCard(el) {
+  el.classList.toggle('open');
 }
 
-async function updateLiveSpot(sigId) {
-  var sig = S.signals.find(function(s) { return s.id === sigId; });
-  if (!sig) return;
-  if (!S.connected) return;
-  try {
-    var r = await fetch(getServer() + '/quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: [String(sig.token || '')] } }),
-    });
-    var d = await r.json();
-    if (!d.status || !d.data || !d.data.fetched || !d.data.fetched[0]) return;
-    var ltp = parseFloat(d.data.fetched[0].ltp || 0);
-    if (!ltp) return;
-
-    // Update sig spotPrice
-    var prevSpot = sig.spotPrice || ltp;
-    sig.spotPrice = ltp;
-
-    // Update collapsed live bar
-    var clSpot = document.getElementById('clspot-' + sigId);
-    var clArr  = document.getElementById('clarr-'  + sigId);
-    var clZone = document.getElementById('clzone-'  + sigId);
-    var clBar  = document.getElementById('clbar-'   + sigId);
-    var clPrem = document.getElementById('clprem-'  + sigId);
-    var pmEl   = document.getElementById('pm-'      + sigId);
-    var cpmEl  = document.getElementById('cpm-'     + sigId);
-    if (!clSpot) return;
-
-    // Spot display
-    var ltpStr = '₹' + ltp.toLocaleString('en-IN', {maximumFractionDigits:2});
-    clSpot.textContent = ltpStr;
-    var arrStr = ltp > prevSpot ? '▲' : ltp < prevSpot ? '▼' : '—';
-    var arrClr = ltp > prevSpot ? 'var(--green)' : ltp < prevSpot ? 'var(--red)' : 'var(--text3)';
-    clArr.textContent  = arrStr;
-    clArr.style.color  = arrClr;
-
-    // Parse exit zone numbers
-    var exitParts = (sig.exitZone||'').replace(/[^0-9–\-]/g,'').split(/[–\-]/);
-    var exitLow  = parseFloat(exitParts[0]) || 0;
-    var exitHigh = parseFloat(exitParts[1]) || exitLow;
-
-    // Parse hold zone numbers
-    var holdParts = (sig.holdZone||'').replace(/[^0-9–\-]/g,'').split(/[–\-]/);
-    var holdLow  = parseFloat(holdParts[0]) || 0;
-    var holdHigh = parseFloat(holdParts[1]) || holdLow;
-
-    var holdStrongNum = parseFloat((sig.holdStrong||'0').replace(/[^0-9.]/g,'')) || 0;
-
-    var isBear = sig.type === 'PE';
-    var zone = 'neutral';
-
-    if (isBear) {
-      if (ltp >= exitLow)                          zone = 'exit';
-      else if (ltp >= holdLow && ltp <= holdHigh)  zone = 'hold';
-      else if (ltp <= holdStrongNum)               zone = 'hold-strong';
-      else                                          zone = 'hold';
-    } else {
-      if (ltp <= exitLow)                          zone = 'exit';
-      else if (ltp >= holdLow && ltp <= holdHigh)  zone = 'hold';
-      else if (ltp >= holdStrongNum)               zone = 'hold-strong';
-      else                                          zone = 'hold';
-    }
-
-    // Update zone display
-    var zoneLabels = { 'hold':'💛 HOLD', 'hold-strong':'💪 HOLD STRONG', 'exit':'🛑 EXIT NOW', 'neutral':'—' };
-    clZone.textContent = zoneLabels[zone] || '—';
-    clZone.className   = 'clb-zone ' + zone;
-    if (clBar) clBar.className = 'card-live-bar zone-' + zone;
-
-    // Update LIVE premium on card right side
-    if (pmEl)  pmEl.textContent  = '₹' + (sig.premium||0).toFixed(2);
-    var cpmEl  = document.getElementById('cpm-' + sigId);
-    if (cpmEl) {
-      // Fetch live option premium
-      try {
-        var optR = await fetch(getServer() + '/option-ltp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol: sig.sym, strike: sig.strike, optionType: sig.type }),
-        });
-        var optD = await optR.json();
-        if (optD.status && optD.ltp && parseFloat(optD.ltp) > 0) {
-          sig.premium = parseFloat(optD.ltp);
-        }
-      } catch(e) {}
-      cpmEl.textContent = '₹' + (sig.premium||0).toFixed(2);
-    }
-    // Update capital
-    var clCap = document.getElementById('cap-' + sigId);
-    if (clCap) clCap.textContent = calcCapital(sig.premium||0, sig.lot||1);
-
-    // Highlight active level row
-    ['lv-hold-','lv-hs-','lv-exit-'].forEach(function(pfx) {
-      var el = document.getElementById(pfx + sigId);
-      if (el) el.classList.remove('active-zone');
-    });
-    var activeId = zone === 'hold' ? 'lv-hold-' : zone === 'hold-strong' ? 'lv-hs-' : zone === 'exit' ? 'lv-exit-' : null;
-    if (activeId) {
-      var activeEl = document.getElementById(activeId + sigId);
-      if (activeEl) activeEl.classList.add('active-zone');
-    }
-
-    // Alert if exit zone
-    if (zone === 'exit') {
-      toast('🛑 ' + sig.sym + ' EXIT ZONE! Spot ₹' + ltp.toLocaleString('en-IN'), 4000);
-    }
-
-  } catch(e) {}
-}
+function startLiveSpot(sigId) {} // no-op — batch handles all
+function stopLiveSpot(sigId)  {} // no-op
+function updateLiveSpot(sigId) {} // no-op — batch handles all
 
 function renderSignals() {
   var list   = document.getElementById('sigList');
@@ -1020,8 +1037,6 @@ function renderSignals() {
     return;
   }
   list.innerHTML = html;
-  // Start live spot for all visible signals
-  filtered.forEach(function(s) { startLiveSpot(s.id); });
 }
 
 // ─── PAPER TRADES ─────────────────────────────────────────────────────────────
@@ -1150,11 +1165,11 @@ function updateAnalytics() {
 }
 
 // ─── SCAN ─────────────────────────────────────────────────────────────────────
-// ─── STOCK LIST — Lot sizes from Dhan June 2026 ───────────────────────────────
+// ─── STOCK LIST — Tokens from Angel One instrument master, Lot sizes from Dhan June 2026 ──
 var NSE_STOCKS = [
   {sym:'RELIANCE',   token:'2885',   lot:250},
   {sym:'TCS',        token:'11536',  lot:175},
-  {sym:'INFY',       token:'1594',   lot:300},
+  {sym:'INFY',       token:'1594',   lot:400},
   {sym:'HDFCBANK',   token:'1333',   lot:550},
   {sym:'ICICIBANK',  token:'4963',   lot:700},
   {sym:'SBIN',       token:'3045',   lot:1500},
@@ -1165,7 +1180,7 @@ var NSE_STOCKS = [
   {sym:'HCLTECH',    token:'7229',   lot:350},
   {sym:'SUNPHARMA',  token:'3351',   lot:350},
   {sym:'TATAMOTORS', token:'3432',   lot:1425},
-  {sym:'TATASTEEL',  token:'3518',   lot:5500},
+  {sym:'TATASTEEL',  token:'3499',   lot:5500},
   {sym:'ADANIENT',   token:'25',     lot:309},
   {sym:'ADANIPORTS', token:'15083',  lot:475},
   {sym:'BAJFINANCE', token:'317',    lot:750},
@@ -1175,31 +1190,62 @@ var NSE_STOCKS = [
   {sym:'MARUTI',     token:'10999',  lot:50},
   {sym:'TITAN',      token:'3506',   lot:175},
   {sym:'ULTRACEMCO', token:'11532',  lot:100},
-  {sym:'GRASIM',     token:'1232',   lot:475},
+  {sym:'GRASIM',     token:'1232',   lot:250},
   {sym:'LT',         token:'11483',  lot:175},
   {sym:'NTPC',       token:'11630',  lot:2250},
   {sym:'POWERGRID',  token:'14977',  lot:2700},
   {sym:'ONGC',       token:'2475',   lot:1925},
-  {sym:'COALINDIA',  token:'20374',  lot:4200},
-  {sym:'JSWSTEEL',   token:'11723',  lot:600},
+  {sym:'COALINDIA',  token:'20374',  lot:1350},
+  {sym:'JSWSTEEL',   token:'11723',  lot:675},
   {sym:'BEL',        token:'383',    lot:1425},
   {sym:'TATAPOWER',  token:'3426',   lot:3375},
   {sym:'AMBUJACEM',  token:'1270',   lot:1050},
-  {sym:'CGPOWER',    token:'10093',  lot:2975},
+  {sym:'CGPOWER',    token:'10093',  lot:850},
   {sym:'NATIONALUM', token:'2672',   lot:2925},
   {sym:'RBLBANK',    token:'4708',   lot:5000},
   {sym:'MANAPPURAM', token:'19061',  lot:4000},
   {sym:'VBL',        token:'37014',  lot:1000},
-  {sym:'EXIDEIND',   token:'1212',   lot:2700},
+  {sym:'EXIDEIND',   token:'1212',   lot:1800},
   {sym:'ASHOKLEY',   token:'212',    lot:5000},
   {sym:'ASIANPAINT', token:'236',    lot:250},
   {sym:'BAJAJ-AUTO', token:'16669',  lot:75},
   {sym:'BANKBARODA', token:'4668',   lot:2925},
-  {sym:'BANDHANBNK', token:'2263',   lot:3600},
   {sym:'AUROPHARMA', token:'275',    lot:550},
   {sym:'APOLLOHOSP', token:'157',    lot:125},
-  {sym:'ADANIGREEN', token:'236418', lot:600},
-  {sym:'ADANIPOWER', token:'467',    lot:3550},
+  {sym:'BHARTIARTL', token:'10604',  lot:475},
+  {sym:'HINDALCO',   token:'1363',   lot:700},
+  {sym:'CIPLA',      token:'694',    lot:375},
+  {sym:'DRREDDY',    token:'881',    lot:625},
+  {sym:'BPCL',       token:'526',    lot:1975},
+  {sym:'EICHERMOT',  token:'910',    lot:100},
+  {sym:'ETERNAL',    token:'5097',   lot:2425},
+  {sym:'GAIL',       token:'1209',   lot:3150},
+  {sym:'HAVELLS',    token:'1256',   lot:500},
+  {sym:'HDFCAMC',    token:'4244',   lot:300},
+  {sym:'HDFCLIFE',   token:'467',    lot:1100},
+  {sym:'HEROMOTOCO', token:'1348',   lot:150},
+  {sym:'HINDPETRO',  token:'1406',   lot:2025},
+  {sym:'ITC',        token:'1660',   lot:1600},
+  {sym:'INDUSINDBK', token:'5258',   lot:700},
+  {sym:'IOC',        token:'1624',   lot:4875},
+  {sym:'JIOFIN',     token:'543066', lot:2350},
+  {sym:'JINDALSTEL', token:'1658',   lot:625},
+  {sym:'DLF',        token:'14732',  lot:825},
+  {sym:'DIVISLAB',   token:'10940',  lot:100},
+  {sym:'BAJAJHLDNG', token:'317',    lot:50},
+  {sym:'HAL',        token:'2303',   lot:150},
+  {sym:'ICICIPRULI', token:'18652',  lot:925},
+  {sym:'ICICIGI',    token:'15083',  lot:325},
+  {sym:'INDIGO',     token:'11195',  lot:150},
+  {sym:'TRENT',      token:'1964',   lot:175},
+  {sym:'DABUR',      token:'772',    lot:1250},
+  {sym:'CHOLAFIN',   token:'685',    lot:625},
+  {sym:'CANBK',      token:'10794',  lot:6750},
+  {sym:'BANDHANBNK', token:'2263',   lot:3600},
+  {sym:'FEDERALBNK', token:'1023',   lot:2500},
+  {sym:'BHEL',       token:'438',    lot:2625},
+  {sym:'IRFC',       token:'543257', lot:4250},
+  {sym:'IREDA',      token:'544061', lot:3450},
 ];
 
 var IDX_LIST = [
@@ -1283,15 +1329,21 @@ async function runScan() {
 
 async function scanSymbol(sym, token, lot, isIndex) {
   try {
-    // Spot price
-    var qr = await fetch(getServer() + '/quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: [String(token)] } }),
-    });
-    var qd = await qr.json();
-    var spotPrice = parseFloat((qd.data && qd.data.fetched && qd.data.fetched[0] && qd.data.fetched[0].ltp) || 0);
-    if (!spotPrice) return;
+    // Get spot price — try hardcoded token first, fallback to sym-based lookup
+    var spotPrice = 0;
+    if (token) {
+      var qr = await fetch(getServer() + '/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: [String(token)] } }),
+      });
+      var qd = await qr.json();
+      spotPrice = parseFloat((qd.data && qd.data.fetched && qd.data.fetched[0] && qd.data.fetched[0].ltp) || 0);
+    }
+    if (!spotPrice) {
+      addLog('Skip ' + sym + ' — no spot price', 'warn');
+      return;
+    }
 
     var minConf  = parseInt(document.getElementById('cfgMinConf').value || '60');
     var maxCap   = parseInt(document.getElementById('cfgMaxCap') ? document.getElementById('cfgMaxCap').value : '30000') || 30000;
@@ -1367,6 +1419,16 @@ async function scanSymbol(sym, token, lot, isIndex) {
               premium = parseFloat(ltpD.ltp);
             }
           } catch(e3) {}
+        }
+
+        // STRIKE SANITY CHECK — skip if strike is way off from spot
+        // Valid range: strike must be within 20% of spot price
+        if (atmStrike > 0 && spotPrice > 0) {
+          var strikeDiff = Math.abs(atmStrike - spotPrice) / spotPrice;
+          if (strikeDiff > 0.20) {
+            addLog('Skip ' + sym + ' ' + type + ' — strike ' + atmStrike + ' too far from spot ' + Math.round(spotPrice) + ' (' + (strikeDiff*100).toFixed(0) + '%)', 'warn');
+            continue;
+          }
         }
 
         // If still no ATM strike — skip this signal
