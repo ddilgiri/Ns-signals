@@ -994,24 +994,28 @@ async function batchUpdatePremiums() {
         if (!matches) return;
         t.currentPremium = newPrem;
         var lots = t.lots || 1;
-        t.pnl = (newPrem - (t.avgPremium||t.entryPremium)) * (t.lot||1) * lots;
+        var tAvg = t.avgPremium || t.entryPremium || 0;
+        t.pnl = (newPrem - tAvg) * (t.lot||1) * lots;
         var nowEl = document.getElementById('tnow-'  + t.id);
         var pnlEl = document.getElementById('tpnl-'  + t.id);
         var card  = document.getElementById('tcard-' + t.id);
         if (nowEl) {
           nowEl.textContent = '₹' + newPrem.toFixed(2);
-          nowEl.style.color = newPrem > avg ? 'var(--green)' : 'var(--red)';
+          nowEl.style.color = newPrem > tAvg ? 'var(--green)' : 'var(--red)';
         }
         if (pnlEl) {
           pnlEl.textContent = (t.pnl>=0?'+':'') + '₹' + Math.abs(t.pnl).toLocaleString('en-IN');
           pnlEl.style.color = t.pnl>=0 ? 'var(--green)' : 'var(--red)';
         }
         if (card) card.className = 'trade-card sig-card ' + (t.type==='PE'?'bearish':'bullish');
-        // Update zone on live bar using linked signal spot
-        if (sig) updateZone(sig);
+        // Update zone on live bar — only if linked to a real signal with spotPrice
+        var linkedSig = S.signals.find(function(s) { return s.id === t.sigId; });
+        if (linkedSig) updateZone(linkedSig);
       });
     } catch(e) {}
   }
+  // Persist updated P&L so page refresh doesn't lose live values
+  savePaperTrades();
 }
 
 // Update all visible signal cards with cached prices
@@ -1291,7 +1295,8 @@ function addPaperTrade(e, sigId) {
     existing.lots       += 1;
     existing.avgPremium  = (prevTotalCost + livePrem) / existing.lots;
     existing.entryPremium = existing.avgPremium; // entry = avg
-    existing.pnl = (existing.currentPremium - existing.avgPremium) * existing.lot * existing.lots;
+    existing.currentPremium = livePrem;
+    existing.pnl = (livePrem - existing.avgPremium) * existing.lot * existing.lots;
 
     savePaperTrades();
     renderTrades();
