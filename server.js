@@ -97,8 +97,19 @@ function getHeaders(needsAuth = false) {
 // ─────────────────────────────────────────────────────────────────────
 // HELPER: AUTO-REFRESH TOKEN on 401/403 using stored refresh token
 // ─────────────────────────────────────────────────────────────────────
+let _lastRefreshAttempt = 0;
+let _refreshInProgress  = false;
 async function refreshToken() {
   if (!SESSION.refreshToken || !SESSION.apiKey || !SESSION.clientCode) return false;
+  // Prevent refresh storm — max once per 30 seconds
+  const now = Date.now();
+  if (_refreshInProgress) return false;
+  if (now - _lastRefreshAttempt < 30000) {
+    log('Token refresh skipped — cooldown active', 'INFO');
+    return false;
+  }
+  _refreshInProgress = true;
+  _lastRefreshAttempt = now;
   try {
     log('Refreshing expired Angel One token...', 'INFO');
     const r = await axios.post(
@@ -111,11 +122,14 @@ async function refreshToken() {
       SESSION.refreshToken = r.data.data.refreshToken || SESSION.refreshToken;
       SESSION.expiresAt = Date.now() + (8 * 60 * 60 * 1000);
       log('Token refreshed successfully', 'OK');
+      _refreshInProgress = false;
       return true;
     }
+    _refreshInProgress = false;
     return false;
   } catch (err) {
     log(`Token refresh failed: ${err.message}`, 'WARN');
+    _refreshInProgress = false;
     return false;
   }
 }
@@ -129,7 +143,9 @@ async function angelRequest(method, url, data, options = {}) {
       : await axios.post(url, data, cfg);
   } catch (err) {
     const status = err.response?.status;
-    if ((status === 401 || status === 403) && SESSION.refreshToken) {
+    // 403 = rate limit — do NOT retry (makes cascade worse), just throw
+    // 401 = truly expired token — refresh and retry once
+    if (status === 401 && SESSION.refreshToken) {
       const refreshed = await refreshToken();
       if (refreshed) {
         const cfg = { headers: getHeaders(true), timeout: 20000, ...options };
@@ -137,6 +153,10 @@ async function angelRequest(method, url, data, options = {}) {
           ? await axios.get(url, cfg)
           : await axios.post(url, data, cfg);
       }
+    }
+    if (status === 403) {
+      // Rate limited — wait 2 seconds before throwing
+      await new Promise(r => setTimeout(r, 2000));
     }
     throw err;
   }
