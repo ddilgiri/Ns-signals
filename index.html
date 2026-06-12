@@ -586,11 +586,14 @@ async function doLogin() {
       loadIndices();
       loadVix();
       startPriceUpdates(); // V1-style batch updates every 5s
-      // Auto start scan if market open
-      if (getMarketStatus().nseOpen && !S.scanning) {
-        addLog('Market open — auto starting scan...', 'ok');
-        setTimeout(function() { toggleScan(); }, 2000);
-      }
+      startKeepAlive();    // Ping server every 10min to prevent Render sleep
+      // Resolve any wrong tokens from scrip master, then auto-start scan
+      resolveTokensFromServer().then(function() {
+        if (getMarketStatus().nseOpen && !S.scanning) {
+          addLog('Market open — auto starting scan...', 'ok');
+          setTimeout(function() { toggleScan(); }, 6000); // 6s: let LIVE_PRICES populate first
+        }
+      });
     } else {
       addLog('❌ Login failed: ' + d.message, 'err');
       toast('❌ ' + d.message);
@@ -770,6 +773,12 @@ function buildCard(sig) {
   var t2str = typeof t2 === 'number' ? '₹' + t2.toLocaleString('en-IN', {maximumFractionDigits:2}) : t2;
 
   var caps = '';
+  // ── Direction-filtered capsules ──────────────────────────────────
+  // CE signal = bullish = price going UP
+  // PE signal = bearish = price going DOWN
+  // Only show capsules consistent with signal direction
+
+  // 1. Ramesh wall (CE OI) — always show, it's context
   if (sig.ceWalls && sig.ceWalls.length) {
     var w = sig.ceWalls[0];
     var wOI = w.oi >= 100000 ? (w.oi/100000).toFixed(1)+'L'
@@ -778,6 +787,7 @@ function buildCard(sig) {
     var wStr = w.strength === 'STRONG' ? '🔴STRONG' : w.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
     caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + wStr + '</div>';
   }
+  // 2. Suresh floor (PE OI) — always show, it's context
   if (sig.peFloors && sig.peFloors.length) {
     var f = sig.peFloors[0];
     var fOI = f.oi >= 100000 ? (f.oi/100000).toFixed(1)+'L'
@@ -786,23 +796,74 @@ function buildCard(sig) {
     var fStr = f.strength === 'STRONG' ? '🟢STRONG' : f.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
     caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + fStr + '</div>';
   }
-  // ceSignal/peSignal — show action note clearly
+
+  // 3. OI signals — filter by direction
   var ceSig = sig.ceSignal;
   var peSig = sig.peSignal;
-  if (ceSig && typeof ceSig === 'object' && ceSig.signal) {
-    caps += '<div class="cap cap-p">📉 ' + String(ceSig.signal).replace(/_/g,' ') + (ceSig.note ? ' — ' + ceSig.note.substring(0,30) : '') + '</div>';
+  function oiLabel(s) { return typeof s === 'object' ? String(s.signal||'').replace(/_/g,' ') : String(s||'').replace(/_/g,''); }
+  function oiNote(s)  { return typeof s === 'object' && s.note ? ' — ' + s.note.substring(0,35) : ''; }
+
+  // CE bullish OI events — only show on CE signals
+  var ceBullishEvents = ['CALL_BUILDUP','OI_BUILDUP','SHORT_COVERING','CALL BUILDUP','SHORT COVERING'];
+  // PE bearish OI events — only show on PE signals
+  var peBearishEvents = ['PUT_BUILDUP','SHORT_BUILDUP','PUT BUILDUP','SHORT BUILDUP','LONG_UNWINDING','LONG UNWINDING'];
+  // Suresh running = PE falling = price falls → only on PE signal
+  var sureshRunning = peSig && (oiLabel(peSig).indexOf('PUT COVERING') >= 0 || oiLabel(peSig).indexOf('COVERING') >= 0);
+  // Ramesh running = CE falling = price rises → only on CE signal
+  var rameshRunning = ceSig && (oiLabel(ceSig).indexOf('CALL COVERING') >= 0 || oiLabel(ceSig).indexOf('COVERING') >= 0);
+
+  if (!isBear) {
+    // CE signal — show only bullish OI events
+    if (ceSig) {
+      var lbl = oiLabel(ceSig); var note = oiNote(ceSig);
+      var isBullishEvent = ceBullishEvents.some(function(e){ return lbl.toUpperCase().indexOf(e) >= 0; });
+      if (isBullishEvent || rameshRunning)
+        caps += '<div class="cap cap-p">📈 ' + lbl + note + '</div>';
+    }
+    // Only show PE signal if it supports price rise (Suresh running = support intact)
+    if (peSig && !sureshRunning) {
+      var lbl2 = oiLabel(peSig); var note2 = oiNote(peSig);
+      var isBearEvent = peBearishEvents.some(function(e){ return lbl2.toUpperCase().indexOf(e) >= 0; });
+      if (!isBearEvent)
+        caps += '<div class="cap cap-p">📊 ' + lbl2 + note2 + '</div>';
+    }
+    // Suresh running on CE = contradiction — show warning instead
+    if (sureshRunning)
+      caps += '<div class="cap cap-warn">⚠️ Suresh running — weak floor</div>';
+  } else {
+    // PE signal — show only bearish OI events
+    if (peSig) {
+      var lbl3 = oiLabel(peSig); var note3 = oiNote(peSig);
+      var isBearishEvent = peBearishEvents.some(function(e){ return lbl3.toUpperCase().indexOf(e) >= 0; });
+      if (isBearishEvent || sureshRunning)
+        caps += '<div class="cap cap-p">📉 ' + lbl3 + note3 + '</div>';
+    }
+    // Only show CE signal if supports price fall (Ramesh running = resistance intact)
+    if (ceSig && !rameshRunning) {
+      var lbl4 = oiLabel(ceSig); var note4 = oiNote(ceSig);
+      var isBullEvent = ceBullishEvents.some(function(e){ return lbl4.toUpperCase().indexOf(e) >= 0; });
+      if (!isBullEvent)
+        caps += '<div class="cap cap-p">📊 ' + lbl4 + note4 + '</div>';
+    }
+    // Ramesh running on PE = contradiction — show warning
+    if (rameshRunning)
+      caps += '<div class="cap cap-warn">⚠️ Ramesh running — weak ceiling</div>';
   }
-  if (peSig && typeof peSig === 'object' && peSig.signal) {
-    caps += '<div class="cap cap-p">📈 ' + String(peSig.signal).replace(/_/g,' ') + (peSig.note ? ' — ' + peSig.note.substring(0,30) : '') + '</div>';
-  }
-  if (ceSig && typeof ceSig === 'string') caps += '<div class="cap cap-p">📉 ' + ceSig.replace(/_/g,' ') + '</div>';
-  if (peSig && typeof peSig === 'string') caps += '<div class="cap cap-p">📈 ' + peSig.replace(/_/g,' ') + '</div>';
+
+  // 4. Volume
   var vr = parseFloat(sig.volRatio) || 0;
   if (vr >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + vr.toFixed(1) + 'x</div>';
+
+  // 5. Index alignment
   if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">✅ Index aligned</div>';
   else if (sig.bias && sig.bias !== 'NEUTRAL' && typeof sig.bias === 'string') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
-  if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
-  if (sig.sureshTrapped) caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+
+  // 6. Trapped — only show if consistent with direction
+  // Ramesh Trapped = CE writers panic = price rises → only on CE signal
+  if (sig.rameshTrapped && !isBear) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+  // Suresh Trapped = PE writers panic = price falls → only on PE signal
+  if (sig.sureshTrapped && isBear)  caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+
   if (!caps) caps = '<div class="cap cap-p">OI signal detected</div>';
 
   var spotStr = (sig.spotPrice || sig.ltp || 0).toLocaleString('en-IN', {maximumFractionDigits:2});
@@ -1157,31 +1218,59 @@ async function refreshSignalOI() {
 // Update WHY capsules on a card without full re-render
 function updateCardCapsules(sig) {
   var card = document.getElementById('card-' + sig.id);
-  if (!card || !card.classList.contains('open')) return; // only if expanded
+  if (!card || !card.classList.contains('open')) return;
   var capDiv = card.querySelector('.capsules');
   if (!capDiv) return;
+  var isBear = sig.type === 'PE';
   var caps = '';
+
+  // Ramesh + Suresh walls — always show as context
   if (sig.ceWalls && sig.ceWalls.length) {
     var w = sig.ceWalls[0];
     var wOI = w.oi >= 100000 ? (w.oi/100000).toFixed(1)+'L' : w.oi >= 1000 ? Math.round(w.oi/1000)+'K' : String(w.oi||'');
-    var wStr = w.strength === 'STRONG' ? '🔴' : '🟡';
-    caps += '<div class="cap cap-r">🧱 ' + w.strike + ' ' + wStr + ' ' + wOI + '</div>';
+    var wStr = w.strength === 'STRONG' ? '🔴STRONG' : '🟡MED';
+    caps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + wStr + '</div>';
   }
   if (sig.peFloors && sig.peFloors.length) {
     var f = sig.peFloors[0];
     var fOI = f.oi >= 100000 ? (f.oi/100000).toFixed(1)+'L' : f.oi >= 1000 ? Math.round(f.oi/1000)+'K' : String(f.oi||'');
-    var fStr = f.strength === 'STRONG' ? '🟢' : '🟡';
-    caps += '<div class="cap cap-s">🏠 ' + f.strike + ' ' + fStr + ' ' + fOI + '</div>';
+    var fStr = f.strength === 'STRONG' ? '🟢STRONG' : '🟡MED';
+    caps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + fStr + '</div>';
   }
+
   var ceSig = sig.ceSignal;
   var peSig = sig.peSignal;
-  if (ceSig && typeof ceSig === 'object' && ceSig.signal) caps += '<div class="cap cap-p">📉 ' + String(ceSig.signal).replace(/_/g,' ') + '</div>';
-  if (peSig && typeof peSig === 'object' && peSig.signal) caps += '<div class="cap cap-p">📈 ' + String(peSig.signal).replace(/_/g,' ') + '</div>';
+  function oiLbl(s) { return typeof s==='object' ? String(s.signal||'').replace(/_/g,' ') : String(s||'').replace(/_/g,' '); }
+  var sureshRunning = peSig && oiLbl(peSig).toUpperCase().indexOf('COVERING') >= 0;
+  var rameshRunning = ceSig && oiLbl(ceSig).toUpperCase().indexOf('COVERING') >= 0;
+  var ceBullish = ['CALL BUILDUP','OI BUILDUP','SHORT COVERING'];
+  var peBearish = ['PUT BUILDUP','SHORT BUILDUP','LONG UNWINDING','PUT COVERING'];
+
+  if (!isBear) {
+    // CE — bullish events only
+    if (ceSig) {
+      var l = oiLbl(ceSig);
+      if (ceBullish.some(function(e){return l.toUpperCase().indexOf(e)>=0;}) || rameshRunning)
+        caps += '<div class="cap cap-p">📈 ' + l + '</div>';
+    }
+    if (sureshRunning) caps += '<div class="cap cap-warn">⚠️ Suresh running — weak floor</div>';
+    if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+  } else {
+    // PE — bearish events only
+    if (peSig) {
+      var l2 = oiLbl(peSig);
+      if (peBearish.some(function(e){return l2.toUpperCase().indexOf(e)>=0;}) || sureshRunning)
+        caps += '<div class="cap cap-p">📉 ' + l2 + '</div>';
+    }
+    if (rameshRunning) caps += '<div class="cap cap-warn">⚠️ Ramesh running — weak ceiling</div>';
+    if (sig.sureshTrapped) caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+  }
+
   var vr = parseFloat(sig.volRatio) || 0;
   if (vr >= 1.2) caps += '<div class="cap cap-v">🔥 Vol ' + vr.toFixed(1) + 'x</div>';
-  if (sig.bias === (sig.type==='PE'?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">📈 Index aligned</div>';
-  else if (sig.bias && sig.bias !== 'NEUTRAL') caps += '<div class="cap cap-warn">⚠️ ' + sig.bias + '</div>';
-  if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
+  if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">✅ Index aligned</div>';
+  else if (sig.bias && sig.bias !== 'NEUTRAL') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
+
   if (caps) capDiv.innerHTML = caps;
 }
 
@@ -1206,6 +1295,49 @@ function updateCardLevels(sig) {
   var t2El = card.querySelector('.target-chip:last-child .t-val');
   if (t1El && sig.target1) t1El.textContent = '₹' + sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2});
   if (t2El && sig.target2) t2El.textContent = '₹' + sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2});
+}
+
+// Keep Render server awake — ping /health every 10 minutes
+var _keepAliveInt = null;
+function startKeepAlive() {
+  if (_keepAliveInt) return;
+  _keepAliveInt = setInterval(async function() {
+    try {
+      var r = await fetch(getServer() + '/health', { method: 'GET' });
+      var d = await r.json();
+      // silent ping — only log if failed
+    } catch(e) {
+      addLog('⚠️ Server ping failed — may have slept', 'warn');
+    }
+  }, 10 * 60 * 1000); // every 10 minutes
+}
+
+// Resolve correct NSE tokens from server scrip master
+// Fixes symbols where hardcoded token is stale/wrong
+async function resolveTokensFromServer() {
+  try {
+    var syms = STOCKS.map(function(s) { return s.sym; });
+    var r = await fetch(getServer() + '/resolve-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: syms })
+    });
+    var d = await r.json();
+    if (!d.status || !d.tokens) return;
+    var fixed = 0;
+    STOCKS.forEach(function(s) {
+      var resolved = d.tokens[s.sym];
+      if (resolved && resolved !== String(s.token)) {
+        addLog('Token fix: ' + s.sym + ' ' + s.token + ' → ' + resolved, '');
+        s.token = resolved;
+        fixed++;
+      }
+    });
+    if (fixed > 0) addLog('✅ ' + fixed + ' tokens corrected from scrip master', 'ok');
+    else addLog('✅ All tokens verified OK', 'ok');
+  } catch(e) {
+    addLog('Token resolve skipped: ' + e.message, '');
+  }
 }
 
 // Start/stop batch price updates
@@ -1859,16 +1991,18 @@ async function runScan() {
 
 async function scanSymbol(sym, token, lot, isIndex) {
   try {
-    // Get spot price — try hardcoded token first, fallback to sym-based lookup
-    var spotPrice = 0;
-    if (token) {
+    // Get spot price — use LIVE_PRICES (already fetched by batch updater every 5s)
+    // Fallback: fetch via FULL quote if LIVE_PRICES not yet populated
+    var spotPrice = LIVE_PRICES[sym] || 0;
+    if (!spotPrice && token) {
       var qr = await fetch(getServer() + '/quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'LTP', exchangeTokens: { NSE: [String(token)] } }),
+        body: JSON.stringify({ mode: 'FULL', exchangeTokens: { NSE: [String(token)] } }),
       });
       var qd = await qr.json();
       spotPrice = parseFloat((qd.data && qd.data.fetched && qd.data.fetched[0] && qd.data.fetched[0].ltp) || 0);
+      if (spotPrice > 0) LIVE_PRICES[sym] = spotPrice;
     }
     if (!spotPrice) {
       addLog('Skip ' + sym + ' — no spot price', 'warn');

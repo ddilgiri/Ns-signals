@@ -2611,6 +2611,41 @@ app.get('/mcx', async (req, res) => {
   }
 });
 
+
+// ─────────────────────────────────────────────────────────────────────
+// ROUTE: RESOLVE TOKEN — lookup correct NSE CM token from scrip master
+// Body: { symbols: ['ADANIENSOL', ...] }
+// Returns: { status:true, tokens: { ADANIENSOL: '12345', ... } }
+// ─────────────────────────────────────────────────────────────────────
+app.post('/resolve-tokens', async (req, res) => {
+  try {
+    if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime || 0)) > 4 * 3600 * 1000) {
+      log('Downloading scrip master for token resolution...', 'INFO');
+      const r = await axios.get(
+        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
+        { timeout: 30000 }
+      );
+      SESSION._instruments = r.data;
+      SESSION._instrFetchTime = Date.now();
+    }
+    const symbols = (req.body.symbols || []).map(s => s.toUpperCase());
+    const result  = {};
+    for (const sym of symbols) {
+      const match = SESSION._instruments.find(i =>
+        i.exch_seg === 'NSE' &&
+        (i.symbol === sym + '-EQ' || i.symbol === sym || i.name === sym) &&
+        i.token
+      );
+      if (match) result[sym] = String(match.token);
+    }
+    log('Token resolution done: ' + Object.keys(result).length + ' symbols', 'INFO');
+    res.json({ status: true, tokens: result });
+  } catch (err) {
+    log('resolve-tokens error: ' + err.message, 'WARN');
+    res.status(500).json({ status: false, message: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────────────────────────────
