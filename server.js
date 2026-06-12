@@ -1031,8 +1031,8 @@ app.post('/oi-analysis', async (req, res) => {
             if (!strikeData[meta.strike]) strikeData[meta.strike] = {};
             strikeData[meta.strike][meta.type] = {
               ltp: parseFloat(q.ltp || q.close || 0),
-              oi:  parseInt(q.openInterest || q.oi || 0),
-              oiChange: parseInt(q.netChange || 0),
+              oi:  parseInt(q.opnInterest || q.openInterest || q.oi || 0),
+              oiChange: parseInt(q.netChangeOI || q.netChange || q.oiChange || 0),
               volume: parseInt(q.tradeVolume || q.volume || 0),
             };
           });
