@@ -297,6 +297,15 @@ app.post('/candles', async (req, res) => {
 const BIAS_CACHE = {};      // { [symbolToken]: { data, fetchTime } }
 const BIAS_TTL   = 5 * 60 * 1000; // 5 minutes
 
+// Global Angel One API rate limiter — max 1 call per 300ms across all endpoints
+let _lastAngelCall = 0;
+async function angelRateLimit() {
+  const now = Date.now();
+  const gap = now - _lastAngelCall;
+  if (gap < 300) await new Promise(r => setTimeout(r, 300 - gap));
+  _lastAngelCall = Date.now();
+}
+
 // Simple rate-limit queue: max 1 candle request per 600ms to stay within Angel One limits
 let _lastCandleCall = 0;
 async function throttledCandleRequest(payload, exchange) {
@@ -2094,7 +2103,10 @@ app.post('/option-ltp', async (req, res) => {
       if (!i.instrumenttype?.includes('OPT')) return false;
       const expDate = parseExpiry(i.expiry);
       if (!expDate || expDate < now) return false;
-      if (Math.round(parseFloat(i.strike)) !== Math.round(strikeNum * 100)) return false;
+      // Angel One stores strikes as raw value (e.g. 134000) or sometimes face value (1340)
+      const iStrike = Math.round(parseFloat(i.strike));
+      const matchStrike = iStrike === Math.round(strikeNum * 100) || iStrike === Math.round(strikeNum);
+      if (!matchStrike) return false;
       if (!i.symbol?.toUpperCase().endsWith(optType)) return false;
       if (i.name?.toUpperCase() === sym) return true;
       const s = i.symbol.toUpperCase();
@@ -2127,6 +2139,7 @@ app.post('/option-ltp', async (req, res) => {
 
     log(`Option-LTP token: ${chosen.symbol} (${chosen.token})`, 'INFO');
 
+    await angelRateLimit();
     const qResp = await axios.post(
       `${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,
       { mode: 'LTP', exchangeTokens: { NFO: [String(chosen.token)] } },
@@ -2614,17 +2627,11 @@ app.get('/mcx', async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────
 // ROUTE: RESOLVE TOKEN — lookup correct NSE CM token from scrip master
-// Body: { symbols: ['ADANIENSOL', ...] }
-// Returns: { status:true, tokens: { ADANIENSOL: '12345', ... } }
 // ─────────────────────────────────────────────────────────────────────
 app.post('/resolve-tokens', async (req, res) => {
   try {
     if (!SESSION._instruments || (Date.now() - (SESSION._instrFetchTime || 0)) > 4 * 3600 * 1000) {
-      log('Downloading scrip master for token resolution...', 'INFO');
-      const r = await axios.get(
-        'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json',
-        { timeout: 30000 }
-      );
+      const r = await axios.get('https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json', { timeout: 30000 });
       SESSION._instruments = r.data;
       SESSION._instrFetchTime = Date.now();
     }
@@ -2638,10 +2645,9 @@ app.post('/resolve-tokens', async (req, res) => {
       );
       if (match) result[sym] = String(match.token);
     }
-    log('Token resolution done: ' + Object.keys(result).length + ' symbols', 'INFO');
+    log('Token resolution: ' + Object.keys(result).length + ' resolved', 'INFO');
     res.json({ status: true, tokens: result });
   } catch (err) {
-    log('resolve-tokens error: ' + err.message, 'WARN');
     res.status(500).json({ status: false, message: err.message });
   }
 });

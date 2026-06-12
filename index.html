@@ -858,11 +858,11 @@ function buildCard(sig) {
   if (sig.bias === (isBear?'BEARISH':'BULLISH')) caps += '<div class="cap cap-ok">✅ Index aligned</div>';
   else if (sig.bias && sig.bias !== 'NEUTRAL' && typeof sig.bias === 'string') caps += '<div class="cap cap-warn">⚠️ Index ' + sig.bias + '</div>';
 
-  // 6. Trapped — only show if consistent with direction
-  // Ramesh Trapped = CE writers panic = price rises → only on CE signal
-  if (sig.rameshTrapped && !isBear) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
-  // Suresh Trapped = PE writers panic = price falls → only on PE signal
-  if (sig.sureshTrapped && isBear)  caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+  // 6. Trapped — only show if not already shown via RUNNING (same event, avoid duplicate)
+  // Ramesh Trapped = CE writers panic = price rises → only on CE, only if not already showing SHORT COVERING
+  if (sig.rameshTrapped && !isBear && !rameshRunning) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+  // Suresh Trapped = PE writers panic = price falls → only on PE, only if not already showing PUT COVERING
+  if (sig.sureshTrapped && isBear && !sureshRunning)  caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
 
   if (!caps) caps = '<div class="cap cap-p">OI signal detected</div>';
 
@@ -1172,9 +1172,12 @@ function updateZone(sig) {
 
 // ─── OI AUTO REFRESH ─────────────────────────────────────────────────────────
 var oiRefreshCount = 0;
+var _oiRefreshLock = false; // prevent OI refresh colliding with scan
 
 async function refreshSignalOI() {
-  if (!S.connected || !S.signals.length) return;
+  if (_oiRefreshLock || S.scanning) return; // skip if scan running
+  _oiRefreshLock = true;
+  if (!S.connected || !S.signals.length) { _oiRefreshLock = false; return; }
   // Refresh OI for all active signals — update Ramesh/Suresh data
   for (var i = 0; i < S.signals.length; i++) {
     var sig = S.signals[i];
@@ -1212,6 +1215,7 @@ async function refreshSignalOI() {
       });
     } catch(e) {}
   }
+  _oiRefreshLock = false;
   addLog('OI refreshed — Ramesh/Suresh updated', '');
 }
 
@@ -1254,16 +1258,18 @@ function updateCardCapsules(sig) {
         caps += '<div class="cap cap-p">📈 ' + l + '</div>';
     }
     if (sureshRunning) caps += '<div class="cap cap-warn">⚠️ Suresh running — weak floor</div>';
-    if (sig.rameshTrapped) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+    if (sig.rameshTrapped && !rameshRunning) caps += '<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
   } else {
     // PE — bearish events only
     if (peSig) {
       var l2 = oiLbl(peSig);
-      if (peBearish.some(function(e){return l2.toUpperCase().indexOf(e)>=0;}) || sureshRunning)
-        caps += '<div class="cap cap-p">📉 ' + l2 + '</div>';
+      var isPeBearish = peBearish.some(function(e){return l2.toUpperCase().indexOf(e)>=0;});
+      if (isPeBearish) caps += '<div class="cap cap-p">📉 ' + l2 + '</div>';
+      // Suresh running on PE = support collapsing = confirms bearish = good signal
+      else if (sureshRunning) caps += '<div class="cap cap-p">📉 Support collapsing — confirms bearish</div>';
     }
-    if (rameshRunning) caps += '<div class="cap cap-warn">⚠️ Ramesh running — weak ceiling</div>';
-    if (sig.sureshTrapped) caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+    if (rameshRunning) caps += '<div class="cap cap-warn">⚠️ Ramesh running — ceiling weak</div>';
+    if (sig.sureshTrapped && !sureshRunning) caps += '<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
   }
 
   var vr = parseFloat(sig.volRatio) || 0;
