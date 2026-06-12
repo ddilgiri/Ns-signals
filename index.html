@@ -1281,26 +1281,42 @@ function renderSignals() {
 function addPaperTrade(e, sigId) {
   e.stopPropagation();
   var sig = S.signals.find(function(s) { return s.id === sigId; });
-  if (!sig) return;
-
-  var livePrem = sig.premium || 0;
-  if (!livePrem) { toast('⚠️ No live premium yet — wait for update'); return; }
 
   // Check if trade already exists for this signal
   var existing = S.paperTrades.find(function(p) { return p.sigId === sigId; });
 
+  // If signal cycled out but trade exists, use trade's own live premium
+  if (!sig && existing) {
+    var livePrem2 = existing.currentPremium || 0;
+    if (!livePrem2) { toast('⚠️ No live premium available'); return; }
+    if (!existing.lotPrices) existing.lotPrices = [existing.entryPremium || existing.avgPremium];
+    existing.lotPrices.push(livePrem2);
+    existing.lots = existing.lotPrices.length;
+    existing.avgPremium = existing.lotPrices.reduce(function(a,b){return a+b;},0) / existing.lots;
+    existing.pnl = (livePrem2 - existing.avgPremium) * existing.lot * existing.lots;
+    savePaperTrades();
+    renderTrades();
+    toast('➕ Lot ' + existing.lots + ' @ ₹' + livePrem2.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
+    return;
+  }
+
+  if (!sig) { toast('⚠️ Signal not found'); return; }
+
+  var livePrem = sig.premium || 0;
+  if (!livePrem) { toast('⚠️ No live premium yet — wait for update'); return; }
+
   if (existing) {
-    // Already tracking — add 1 more lot (averaging)
-    var prevTotalCost = existing.avgPremium * existing.lots;
-    existing.lots       += 1;
-    existing.avgPremium  = (prevTotalCost + livePrem) / existing.lots;
-    existing.entryPremium = existing.avgPremium; // entry = avg
+    // Already tracking — add 1 more lot (true avg: sum of all lot prices / count)
+    if (!existing.lotPrices) existing.lotPrices = [existing.entryPremium || existing.avgPremium];
+    existing.lotPrices.push(livePrem);
+    existing.lots = existing.lotPrices.length;
+    existing.avgPremium = existing.lotPrices.reduce(function(a,b){return a+b;},0) / existing.lots;
     existing.currentPremium = livePrem;
     existing.pnl = (livePrem - existing.avgPremium) * existing.lot * existing.lots;
 
     savePaperTrades();
     renderTrades();
-    toast('➕ Lot ' + existing.lots + ' added @ ₹' + livePrem.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
+    toast('➕ Lot ' + existing.lots + ' @ ₹' + livePrem.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
   } else {
     // First entry
     var trade = {
@@ -1311,6 +1327,7 @@ function addPaperTrade(e, sigId) {
       type:          sig.type,
       lot:           sig.lot || 1,       // lot size (e.g. 600 for JSWSTEEL)
       lots:          1,                  // number of lots taken
+      lotPrices:     [livePrem],         // array of each lot's entry price
       avgPremium:    livePrem,           // average entry premium
       entryPremium:  livePrem,           // first entry premium
       currentPremium: livePrem,
