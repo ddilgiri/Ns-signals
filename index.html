@@ -1456,22 +1456,39 @@ function addPaperTrade(e, sigId) {
     renderTrades();
     toast('➕ Lot ' + existing.lots + ' @ ₹' + livePrem.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
   } else {
-    // First entry
+    // First entry — snapshot all OI/signal data so trades tab works even after signal cycles out
     var trade = {
       id:            String(Date.now()),
       sigId:         sigId,
       sym:           sig.sym,
       strike:        sig.strike,
       type:          sig.type,
-      lot:           sig.lot || 1,       // lot size (e.g. 600 for JSWSTEEL)
-      lots:          1,                  // number of lots taken
-      lotPrices:     [livePrem],         // array of each lot's entry price
-      avgPremium:    livePrem,           // average entry premium
-      entryPremium:  livePrem,           // first entry premium
+      lot:           sig.lot || 1,
+      lots:          1,
+      lotPrices:     [livePrem],
+      avgPremium:    livePrem,
+      entryPremium:  livePrem,
       currentPremium: livePrem,
       pnl:           0,
       date:          new Date().toLocaleDateString('en-IN'),
       status:        'OPEN',
+      // Snapshot OI data at entry time
+      ceWalls:       sig.ceWalls    || [],
+      peFloors:      sig.peFloors   || [],
+      ceSignal:      sig.ceSignal   || null,
+      peSignal:      sig.peSignal   || null,
+      rameshTrapped: sig.rameshTrapped || false,
+      sureshTrapped: sig.sureshTrapped || false,
+      volRatio:      sig.volRatio   || 0,
+      bias:          sig.bias       || 'NEUTRAL',
+      holdZone:      sig.holdZone   || '--',
+      holdReason:    sig.holdReason || '',
+      holdStrongZone:   sig.holdStrongZone   || '--',
+      holdStrongReason: sig.holdStrongReason || '',
+      exitZone:      sig.exitZone   || '--',
+      exitReason:    sig.exitReason || '',
+      target1:       sig.target1    || null,
+      target2:       sig.target2    || null,
     };
     S.paperTrades.push(trade);
     savePaperTrades();
@@ -1528,29 +1545,60 @@ function renderTrades() {
       var capStr  = capUsed >= 100000 ? '₹'+(capUsed/100000).toFixed(1)+'L' : capUsed >= 1000 ? '₹'+Math.round(capUsed/1000)+'K' : '₹'+Math.round(capUsed);
       var isBear  = t.type === 'PE';
 
-      // Linked signal data
+      // Use live sig if available, else fall back to trade's own snapshot
       var sig       = S.signals.find(function(s) { return s.id === t.sigId; });
-      var holdZone  = sig ? (sig.holdZone||'--')   : (t.holdZone||'--');
-      var holdStrong= sig ? (sig.holdStrong||'--') : '--';
-      var exitZone  = sig ? (sig.exitZone||'--')   : '--';
-      var holdR     = sig ? (sig.holdReason||'')   : '';
-      var holdSR    = sig ? (sig.holdStrongReason||'') : '';
-      var exitR     = sig ? (sig.exitReason||'')   : '';
-      var t1str     = sig && sig.target1 ? '₹'+sig.target1.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
-      var t2str     = sig && sig.target2 ? '₹'+sig.target2.toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
+      var holdZone  = (sig||t).holdZone        || '--';
+      var holdStrong= (sig ? sig.holdStrongZone   : t.holdStrongZone)   || '--';
+      var exitZone  = (sig||t).exitZone        || '--';
+      var holdR     = (sig||t).holdReason      || '';
+      var holdSR    = (sig ? sig.holdStrongReason : t.holdStrongReason) || '';
+      var exitR     = (sig||t).exitReason      || '';
+      var t1val     = (sig||t).target1;
+      var t2val     = (sig||t).target2;
+      var t1str     = t1val ? '₹'+parseFloat(t1val).toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
+      var t2str     = t2val ? '₹'+parseFloat(t2val).toLocaleString('en-IN',{maximumFractionDigits:2}) : '--';
 
+      // Use live sig data if available, else fall back to trade's own snapshot
+      var td = (sig && sig.ceWalls && sig.ceWalls.length) ? sig : t;
+      var isBearTrade = t.type === 'PE';
       var tcaps = '';
-      if (sig && sig.ceWalls && sig.ceWalls.length) {
-        var w = sig.ceWalls[0];
+
+      // Ramesh wall
+      if (td.ceWalls && td.ceWalls.length) {
+        var w = td.ceWalls[0];
         var wOI = w.oi >= 100000 ? (w.oi/100000).toFixed(1)+'L' : w.oi >= 1000 ? Math.round(w.oi/1000)+'K' : '';
-        tcaps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + (w.strength||'') + '</div>';
+        var wStr = w.strength === 'STRONG' ? '🔴STRONG' : w.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
+        tcaps += '<div class="cap cap-r">🧱 Ramesh ' + w.strike + ' · ' + wOI + ' · ' + wStr + '</div>';
       }
-      if (sig && sig.peFloors && sig.peFloors.length) {
-        var f = sig.peFloors[0];
+      // Suresh floor
+      if (td.peFloors && td.peFloors.length) {
+        var f = td.peFloors[0];
         var fOI = f.oi >= 100000 ? (f.oi/100000).toFixed(1)+'L' : f.oi >= 1000 ? Math.round(f.oi/1000)+'K' : '';
-        tcaps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + (f.strength||'') + '</div>';
+        var fStr = f.strength === 'STRONG' ? '🟢STRONG' : f.strength === 'MEDIUM' ? '🟡MED' : '🟠WEAK';
+        tcaps += '<div class="cap cap-s">🏠 Suresh ' + f.strike + ' · ' + fOI + ' · ' + fStr + '</div>';
       }
-      if (sig && sig.rameshTrapped) tcaps += '<div class="cap cap-s">⚡ Ramesh Trapped</div>';
+      // OI signals — direction filtered
+      var tSig = td;
+      var tCeSig = tSig.ceSignal; var tPeSig = tSig.peSignal;
+      function tOiLbl(s) { return typeof s==='object' ? String(s.signal||'').replace(/_/g,' ') : String(s||'').replace(/_/g,' '); }
+      var tSureshRun = tPeSig && tOiLbl(tPeSig).toUpperCase().indexOf('COVERING') >= 0;
+      var tRameshRun = tCeSig && tOiLbl(tCeSig).toUpperCase().indexOf('COVERING') >= 0;
+      var tCeBull = ['CALL BUILDUP','OI BUILDUP','SHORT COVERING'];
+      var tPeBear = ['PUT BUILDUP','SHORT BUILDUP','LONG UNWINDING','PUT COVERING'];
+      if (!isBearTrade) {
+        if (tCeSig) { var l=tOiLbl(tCeSig); if(tCeBull.some(function(e){return l.toUpperCase().indexOf(e)>=0;})||tRameshRun) tcaps+='<div class="cap cap-p">📈 '+l+'</div>'; }
+        if (tSureshRun) tcaps+='<div class="cap cap-warn">⚠️ Suresh running — floor weak</div>';
+        if (tSig.rameshTrapped && !tRameshRun) tcaps+='<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>';
+      } else {
+        if (tPeSig) { var l2=tOiLbl(tPeSig); if(tPeBear.some(function(e){return l2.toUpperCase().indexOf(e)>=0;})||tSureshRun) tcaps+='<div class="cap cap-p">📉 '+l2+'</div>'; }
+        if (tRameshRun) tcaps+='<div class="cap cap-warn">⚠️ Ramesh running — ceiling weak</div>';
+        if (tSig.sureshTrapped && !tSureshRun) tcaps+='<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>';
+      }
+      // Volume
+      var tVr = parseFloat(tSig.volRatio) || 0;
+      if (tVr >= 1.2) tcaps += '<div class="cap cap-v">🔥 Vol ' + tVr.toFixed(1) + 'x</div>';
+      // Bias
+      if (tSig.bias === (isBearTrade?'BEARISH':'BULLISH')) tcaps += '<div class="cap cap-ok">✅ Index aligned</div>';
 
       var cls = isBear ? 'bearish' : 'bullish';
 
