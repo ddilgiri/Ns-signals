@@ -370,14 +370,14 @@ app.get("/token-list",async(e,t)=>{try{if(!SESSION._instruments||Date.now()-(SES
 
 app.listen(PORT,()=>{
   console.log("\n╔══════════════════════════════════════════════════════════════╗");
-  console.log("║   NSE F&O Signal Engine — DILIP FXO v3.1                     ║");
+  console.log("║   NSE F&O Signal Engine — DILIP FXO v3.2                     ║");
   console.log("╠══════════════════════════════════════════════════════════════╣");
   console.log(`║   Server  : http://localhost:${PORT}                                  ║`);
-  console.log("║   NEW v3.1: /market-status  /oi-history  /signal-log         ║");
-  console.log("║   NEW v3.1: Market hours gate on OI + signal-analysis        ║");
-  console.log("║   NEW v3.1: Expiry week detection (NSE Tuesday / BSE Thu)    ║");
-  console.log("║   NEW v3.1: OI snapshot history (Ramesh/Suresh trend)        ║");
-  console.log("║   NEW v3.1: Signal log with outcome tracking                 ║");
+  console.log("║   v3.1: /market-status /oi-history /signal-log               ║");
+  console.log("║   v3.1: Market hours gate · Expiry week detection            ║");
+  console.log("║   v3.1: OI snapshot history · Signal log                     ║");
+  console.log("║   v3.2: OI momentum in scoring · expiryRisk weight           ║");
+  console.log("║   v3.2: Ramesh/Suresh trend feeds into signal score          ║");
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
