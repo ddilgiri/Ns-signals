@@ -558,15 +558,17 @@ if(oiH&&oiH.trend!=="INSUFFICIENT_DATA"){
   }
   // OI velocity: compare last 2 snaps vs first 2 snaps
 let velNote="";
-if(oiH.history&&oiH.history.length>=3){
+try{if(oiH.history&&oiH.history.length>=3){
   const last=oiH.history[oiH.history.length-1];
   const prev=oiH.history[oiH.history.length-2];
-  const ceVel=prev.ceOI>0?Math.round((last.ceOI-prev.ceOI)/prev.ceOI*100):0;
-  const peVel=prev.peOI>0?Math.round((last.peOI-prev.peOI)/prev.peOI*100):0;
-  if(Math.abs(ceVel)>5||Math.abs(peVel)>5){
-    velNote=` | CE:${ceVel>0?"+":""}${ceVel}% PE:${peVel>0?"+":""}${peVel}% (velocity)`;
+  if(last&&prev){
+    const ceVel=prev.ceOI>0?Math.round((last.ceOI-prev.ceOI)/prev.ceOI*100):0;
+    const peVel=prev.peOI>0?Math.round((last.peOI-prev.peOI)/prev.peOI*100):0;
+    if(Math.abs(ceVel)>5||Math.abs(peVel)>5){
+      velNote=` | CE:${ceVel>0?"+":""}${ceVel}% PE:${peVel>0?"+":""}${peVel}% (velocity)`;
+    }
   }
-}
+}}catch(velErr){}
 omNote+=` (${oiH.snapCount} snaps, ${oiH.firstSnap}→${oiH.lastSnap}${velNote})`;
 }
 s.oiMomentum={earned:omEarned,max:t,pass:omEarned>=t*0.5,note:omNote};
@@ -631,7 +633,7 @@ app.post("/signal-analysis",async(e,t)=>{
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
-  t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...S,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms})}catch(e){log(`signal-analysis error: ${e.message}`,"ERR"),t.status(500).json({status:!1,message:e.message})}})
+  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
