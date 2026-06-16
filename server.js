@@ -592,25 +592,28 @@ if(!gb||!gb.isGammaBlast){
 }}
 {const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1,u=(e.oiScore,e.ceSignal?.signal||""),p=e.peSignal?.signal||"";a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}const r=Object.values(s).reduce((e,t)=>e+t.earned,0);const gbFired=s.gammaBlast&&s.gammaBlast.earned>0;const i=Object.values(s).reduce((e,t,idx,arr)=>{if(arr[idx]===s.gammaBlast&&!gbFired)return e;return e+t.max;},0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
-// If OI formula earned = 0 AND formula = AVOID or true mismatch → hard block
-// This prevents "technicals only" signals from passing through
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
 const oiPass=s.dilipOIFormula?.pass;
-// Hard block: OI formula explicitly says AVOID (both trapped) or CALL/PUT TRAP
-if(!n&&oiEarned===0&&oiPass===false){
-  // Check if it's a true hard block situation (not just NEUTRAL/insufficient data)
+
+// HARD BLOCK only for confirmed bad situations:
+// 1. AVOID = both sides strong = price trapped
+// 2. PUT TRAP or CALL TRAP active
+// NEUTRAL = OI data thin (e.g. next-month contract) → NOT a hard block
+if(!n&&oiPass===false){
   const isTrapped=oiFormula==="AVOID"||e.putTrapRisk||e.callTrapRisk;
-  const isWrongDir=oiFormula!=="NEUTRAL"&&oiEarned===0;
   if(isTrapped){n=true;o=s.dilipOIFormula?.note||"OI formula blocks this signal";}
 }
-// Score cap: if OI earned < 20% of max, cap final score at 59 (below MODERATE threshold)
-// This prevents pure-technical signals from reaching 60%+ and showing as MODERATE/STRONG
+
+// SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
+// NEUTRAL = insufficient data → allow signal through, no cap
+// Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
 let finalScore=Math.round(r/i*100);
-if(oiEarned<oiMax*0.2&&!n){
-  finalScore=Math.min(finalScore,59);// Cap at WEAK — OI is the gatekeeper
-  if(s.dilipOIFormula)s.dilipOIFormula.note+=" ⚠️ [Score capped — OI gate]";
+const oiWrongDir=oiEarned===0&&oiFormula!=="NEUTRAL"&&oiFormula!=="AVOID"&&oiPass===false;
+if(oiWrongDir&&!n){
+  finalScore=Math.min(finalScore,59);
+  if(s.dilipOIFormula)s.dilipOIFormula.note+=" ⚠️ [OI direction mismatch — capped]";
 }
 return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
