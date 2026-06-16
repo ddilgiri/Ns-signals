@@ -459,22 +459,53 @@ function buildVixResult(e,t,a,s){let n="NORMAL";null!==e&&(n=e<12?"VERY_LOW":e<1
 
 function getExpiryType(e){
   const t=(e||"").toUpperCase();
-  const exInfo=getExpiryWeekInfo(t);
-  if(t==="NIFTY")return exInfo.expiryType||"WEEKLY";
-  if(t==="BANKNIFTY"||t==="FINNIFTY"||t==="MIDCPNIFTY"||t==="MIDCAP")return"MONTHLY";
-  const n=exInfo.daysToNSEExpiry;
-  // n<=5 covers:
-  //   n<0  → expiry already passed this month (Wed/Thu after expiry) → use next month
-  //   n=0  → expiry day itself → use next month
-  //   n=1..5 → within 5 days of expiry → use next month (high margin, low liquidity)
-  //   n>5  → normal → use current month
-  if(n<=5){
-    const reason=n<0?`${t}: expiry passed (${Math.abs(n)}d ago) — scanning NEXT month`:
-                 n===0?`${t}: EXPIRY DAY — scanning NEXT month`:
-                 `${t}: ${n}d to expiry — using NEXT month (margin saving)`;
-    log(reason,"INFO");
+  // ALL instruments expire on LAST TUESDAY of month (NSE standard)
+  const now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+  const todayJS=now.getDay(); // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+
+  // Helper: last Tuesday of a given month
+  function lastTueOf(yr,mn){
+    const last=new Date(yr,mn,0); // last day of month
+    const diff=(last.getDay()>=2?last.getDay()-2:last.getDay()+5);
+    last.setDate(last.getDate()-diff);
+    last.setHours(0,0,0,0);
+    return last;
+  }
+
+  const todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const curLastTue=lastTueOf(now.getFullYear(),now.getMonth()+1);
+  const dteMs=curLastTue-todayMid;
+  const dte=Math.round(dteMs/86400000); // days to last Tuesday this month
+
+  // NIFTY — weekly expiry every Tuesday
+  // On expiry Tuesday: scan NEXT Tuesday's contract (not next month)
+  // Only jump to next month if we're past monthly expiry
+  if(t==="NIFTY"){
+    if(todayJS===2){
+      // Today is Tuesday — use NEXT weekly (7 days ahead)
+      log(`NIFTY: today is Tuesday (weekly expiry) — scanning next week contract`,"INFO");
+      return"NIFTY_NEXT_WEEKLY";
+    }
+    if(dte<=0){
+      // Past monthly expiry
+      log(`NIFTY: monthly expiry passed — scanning next month`,"INFO");
+      return"NEXT_MONTH";
+    }
+    return"NIFTY_WEEKLY"; // current week's contract
+  }
+
+  // BANKNIFTY, FINNIFTY, MIDCPNIFTY — monthly only (last Tuesday)
+  // Stocks also expire last Tuesday — same rule
+  // Switch to next month when <= 5 days before last Tuesday (Thu/Fri before expiry week)
+  if(dte<=0){
+    log(`${t}: monthly expiry passed — scanning next month`,"INFO");
     return"NEXT_MONTH";
   }
+  if(dte<=5){
+    log(`${t}: ${dte}d to expiry (expiry week) — switching to next month`,"INFO");
+    return"NEXT_MONTH";
+  }
+  // dte > 5 — normal, scan current month
   return"MONTHLY";
 }
 
@@ -522,17 +553,17 @@ let exEarned=t,exNote="";
 const dte=e.daysToExpiry;
 // Use OI-analysis daysToExpiry (which reflects actual contract being scanned — next month on expiry day)
 // NOT isExpiryDay which always refers to current month expiry
-const tradingNextMonth = typeof dte==="number" && dte > 5;
+// dte = days to expiry of the CONTRACT being scanned
+// >5 = safe (normal trading), 1-5 = expiry week (caution), <=0 = expiry day (avoid)
 const tradingCurrentExpiry = typeof dte==="number" && dte <= 0;
 const inExpiryWeek = typeof dte==="number" && dte > 0 && dte <= 5;
+const safeContract = typeof dte!=="number" || dte > 5;
 if(tradingCurrentExpiry){
-  exEarned=0;exNote="⚠️ EXPIRY DAY — scanning current expiry contract, avoid";
-} else if(tradingNextMonth){
-  exEarned=t;exNote=`Next month contract (${dte}d to expiry) — safe ✓`;
+  exEarned=0;exNote="⚠️ Expiry day contract — avoid, switch to next";
 } else if(inExpiryWeek){
   exEarned=Math.round(t*0.3);exNote=`⚠️ Expiry week (${dte}d left) — gamma elevated, reduce size`;
 } else {
-  exEarned=t;exNote="Not expiry week ✓";
+  exEarned=t;exNote=`Safe contract (${typeof dte==="number"?dte+"d":"?"} to expiry) ✓`;
 }
 s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};
 }{
@@ -598,25 +629,22 @@ const oiFormula=e.dilipFormula||"NEUTRAL";
 const oiPass=s.dilipOIFormula?.pass;
 
 // HARD BLOCK rules:
-// PUT TRAP / CALL TRAP → always hard block (real trap confirmed)
-// AVOID (both sides strong):
-//   → Hard block ONLY if stock is in its OWN expiry week (isExpiryDay=true or isExpiryWeek)
-//   → On Nifty-only expiry Tuesdays, stocks show false AVOID due to OI churn → cap instead
+// PUT TRAP / CALL TRAP → block ONLY if score < 65 (strong technicals can override trap on non-expiry days)
+// AVOID (both sides strong) → block ONLY if stock is in its OWN expiry week
 // NEUTRAL → never block
 if(!n&&oiPass===false){
   const isPutCallTrap=e.putTrapRisk||e.callTrapRisk;
   const isAvoid=oiFormula==="AVOID";
   const stockInOwnExpiry=e.isExpiryDay||e.isExpiryWeek;
   if(isPutCallTrap){
-    // Always block PUT/CALL trap
-    n=true;o=s.dilipOIFormula?.note||"OI formula blocks this signal";
+    // Block trap only when score is also weak — strong technicals (>=65) override trap on non-expiry days
+    if(stockInOwnExpiry||finalScore<65){
+      n=true;o=s.dilipOIFormula?.note||"OI trap detected — signal blocked";
+    }
   } else if(isAvoid&&stockInOwnExpiry){
-    // Block AVOID only when stock itself is near expiry
     n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
-  } else if(isAvoid&&!stockInOwnExpiry){
-    // AVOID on non-expiry day = possible OI churn — cap score, don't hard block
-    // Will be handled by oiWrongDir cap below
   }
+  // AVOID on non-expiry + NEUTRAL → no hard block, score cap handles it
 }
 
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
