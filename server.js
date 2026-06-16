@@ -597,23 +597,38 @@ const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
 const oiPass=s.dilipOIFormula?.pass;
 
-// HARD BLOCK only for confirmed bad situations:
-// 1. AVOID = both sides strong = price trapped
-// 2. PUT TRAP or CALL TRAP active
-// NEUTRAL = OI data thin (e.g. next-month contract) → NOT a hard block
+// HARD BLOCK rules:
+// PUT TRAP / CALL TRAP → always hard block (real trap confirmed)
+// AVOID (both sides strong):
+//   → Hard block ONLY if stock is in its OWN expiry week (isExpiryDay=true or isExpiryWeek)
+//   → On Nifty-only expiry Tuesdays, stocks show false AVOID due to OI churn → cap instead
+// NEUTRAL → never block
 if(!n&&oiPass===false){
-  const isTrapped=oiFormula==="AVOID"||e.putTrapRisk||e.callTrapRisk;
-  if(isTrapped){n=true;o=s.dilipOIFormula?.note||"OI formula blocks this signal";}
+  const isPutCallTrap=e.putTrapRisk||e.callTrapRisk;
+  const isAvoid=oiFormula==="AVOID";
+  const stockInOwnExpiry=e.isExpiryDay||e.isExpiryWeek;
+  if(isPutCallTrap){
+    // Always block PUT/CALL trap
+    n=true;o=s.dilipOIFormula?.note||"OI formula blocks this signal";
+  } else if(isAvoid&&stockInOwnExpiry){
+    // Block AVOID only when stock itself is near expiry
+    n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
+  } else if(isAvoid&&!stockInOwnExpiry){
+    // AVOID on non-expiry day = possible OI churn — cap score, don't hard block
+    // Will be handled by oiWrongDir cap below
+  }
 }
 
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
 // NEUTRAL = insufficient data → allow signal through, no cap
 // Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
 let finalScore=Math.round(r/i*100);
-const oiWrongDir=oiEarned===0&&oiFormula!=="NEUTRAL"&&oiFormula!=="AVOID"&&oiPass===false;
-if(oiWrongDir&&!n){
+// Cap score for: wrong direction OR avoid-on-non-expiry-day
+const oiWrongDir=oiEarned===0&&oiPass===false&&!n;
+if(oiWrongDir){
   finalScore=Math.min(finalScore,59);
-  if(s.dilipOIFormula)s.dilipOIFormula.note+=" ⚠️ [OI direction mismatch — capped]";
+  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
+  if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
 }
 return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
