@@ -591,6 +591,68 @@ app.get("/pcr",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({sta
 
 app.post("/option-ltp",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,strike:s,type:n,expiry:o}=e.body;if(!a||!s||!n)return t.status(400).json({status:!1,message:"symbol, strike, type required"});try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master...","INFO");const S=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=S.data,SESSION._instrFetchTime=Date.now(),log(`Instrument master loaded — ${SESSION._instruments.length} instruments`,"OK")}const i={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=i[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const l=a.toUpperCase(),c=n.toUpperCase(),u=parseFloat(s),p=new Date,d=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype?.includes("OPT"))return!1;const t=r(e.expiry);if(!t||t<p)return!1;const a=Math.round(parseFloat(e.strike));if(!(a===Math.round(100*u)||a===Math.round(u)))return!1;if(!e.symbol?.toUpperCase().endsWith(c))return!1;if(e.name?.toUpperCase()===l)return!0;const s=e.symbol.toUpperCase();return!!(s.startsWith(l)&&s.length>l.length&&/\d/.test(s[l.length]))});if(!d.length)return t.json({status:!1,message:`No NFO instrument for ${l} ${s} ${c}`});const g=d.map(e=>({...e,_exp:r(e.expiry)})).filter(e=>e._exp).sort((e,t)=>e._exp-t._exp);let m;if("MONTHLY"===o){const E=p.getMonth(),f=p.getFullYear(),I=g.filter(e=>e._exp.getMonth()===E&&e._exp.getFullYear()===f);m=I[I.length-1]||g[g.length-1]}else m="NEXT"===o&&g[1]||g[0];if(!m)return t.json({status:!1,message:`No valid expiry for ${l} ${s} ${c}`});log(`Option-LTP token: ${m.symbol} (${m.token})`,"INFO"),await angelRateLimit();const h=(await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:[String(m.token)]}},{headers:getHeaders(!0),timeout:15e3})).data;if(h.status&&h.data?.fetched?.length){const N=h.data.fetched[0],A=parseFloat(N.ltp||0)>0?parseFloat(N.ltp):parseFloat(N.close||0);return log(`✅ Option LTP: ${m.symbol} = ₹${A}`,"OK"),t.json({status:!0,ltp:A,symbolToken:m.token,tradingSymbol:m.symbol,expiry:m.expiry})}return t.json({status:!1,message:"LTP fetch returned no data"})}catch(k){const C=k.response?.data?.message||k.message;log(`Option LTP error: ${C}`,"WARN"),t.status(500).json({status:!1,message:C})}})
 
+// ═══════════════════════════════════════════════════════
+// LIVE TRADE PRICES — batch LTP for all open paper trades
+// POST /live-trade-prices
+// Body: { trades: [{symbol, strike, type}] }
+// Returns: { status:true, prices: {"NBCC_109_CE": 4.25, ...} }
+// ═══════════════════════════════════════════════════════
+app.post("/live-trade-prices",async(req,res)=>{
+  if(!isAuthenticated())return res.status(401).json({status:false,message:"Not authenticated"});
+  const{trades}=req.body;
+  if(!trades||!trades.length)return res.json({status:true,prices:{}});
+  try{
+    if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>14400000){
+      log("Downloading NFO instrument master for live trade prices...","INFO");
+      const R=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
+      SESSION._instruments=R.data;SESSION._instrFetchTime=Date.now();
+    }
+    const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
+    function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
+    const tokenMap={};const tokenToKey={};const now=new Date();
+    for(const trade of trades){
+      const sym=(trade.symbol||"").toUpperCase();
+      const strike=parseFloat(trade.strike);
+      const type=(trade.type||"CE").toUpperCase();
+      const key=`${sym}_${strike}_${type}`;
+      const matches=SESSION._instruments.filter(inst=>{
+        if(inst.exch_seg!=="NFO")return false;
+        if(!inst.instrumenttype?.includes("OPT"))return false;
+        const exp=parseExp(inst.expiry);if(!exp||exp<now)return false;
+        const is=Math.round(parseFloat(inst.strike));
+        if(!(is===Math.round(100*strike)||is===Math.round(strike)))return false;
+        if(!inst.symbol?.toUpperCase().endsWith(type))return false;
+        if(inst.name?.toUpperCase()===sym)return true;
+        const s2=inst.symbol.toUpperCase();
+        return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);
+      });
+      if(!matches.length){log(`live-trade-prices: no instrument for ${key}`,"WARN");continue;}
+      const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp).sort((a,b)=>a._exp-b._exp);
+      const best=sorted[0];
+      tokenMap[key]=String(best.token);
+      tokenToKey[String(best.token)]=key;
+    }
+    const tokens=Object.values(tokenMap);
+    if(!tokens.length)return res.json({status:true,prices:{}});
+    const prices={};const BATCH=50;
+    for(let i=0;i<tokens.length;i+=BATCH){
+      const batch=tokens.slice(i,i+BATCH);
+      try{
+        await angelRateLimit();
+        const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:batch}},{headers:getHeaders(true),timeout:15000});
+        if(r.data.status&&r.data.data?.fetched){
+          r.data.data.fetched.forEach(f=>{
+            const key=tokenToKey[String(f.symbolToken)];
+            if(key){const ltp=parseFloat(f.ltp||0)>0?parseFloat(f.ltp):parseFloat(f.close||0);prices[key]=ltp;}
+          });
+        }
+      }catch(bErr){log(`live-trade-prices batch error: ${bErr.message}`,"WARN");}
+    }
+    log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}`,"OK");
+    res.json({status:true,prices});
+  }catch(err){log(`live-trade-prices error: ${err.message}`,"ERR");res.status(500).json({status:false,message:err.message});}
+});
+
 app.post("/option-chain",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,spotPrice:s,expiry:n,depth:o=5}=e.body;if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master...","INFO");const w=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=w.data,SESSION._instrFetchTime=Date.now(),log(`Instrument master loaded — ${SESSION._instruments.length} instruments`,"OK")}const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t||t<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(0===p.length)return log(`No NFO options found for ${i} (checked ${SESSION._instruments?.length} instruments)`,"WARN"),t.json({status:!1,message:`No NFO options found for ${i}`});log(`Option chain ${i}: ${p.length} options matched`,"INFO");const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);if(!d.length)return t.json({status:!1,message:`No valid future expiries for ${i}`});let g;if("MONTHLY"===n){const b=c.getMonth(),_=c.getFullYear(),F=d.filter(e=>e.date.getMonth()===b&&e.date.getFullYear()===_);g=F.length?F[F.length-1]:d[0]}else if("NEXT_MONTH"===n){const R=(c.getMonth()+1)%12,x=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),P=d.filter(e=>e.date.getMonth()===R&&e.date.getFullYear()===x);g=P.length?P[P.length-1]:d[1]||d[0]}else g="NEXT"===n&&d[1]||d[0];const m=g.raw,h=p.filter(e=>e.expiry===m),S=[...new Set(h.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t);if(0===S.length)return t.json({status:!1,message:`No strikes found for ${i} expiry ${m}`});const E=S.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,S[0]),f=S.indexOf(E),I=Math.max(0,f-o),N=Math.min(S.length-1,f+o),A=S.slice(I,N+1),k=[],C={};for(const L of A){const D=Math.round(100*L),$=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("CE")),M=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("PE")),U=$[0],v=M[0];C[L]={CE_token:U?.token??null,PE_token:v?.token??null,CE_sym:U?.symbol??null,PE_sym:v?.symbol??null},U?.token&&k.push(String(U.token)),v?.token&&k.push(String(v.token))}if(log(`Option chain ${i}: expiry=${m}, ATM=${E}, strikes=${A.length}, tokens=${k.length}`,"INFO"),0===k.length)return t.json({status:!1,message:`No tokens found for ${i} — check instrument name matching`});const O={},T=50;for(let B=0;B<k.length;B+=T){const j=k.slice(B,B+T);try{const H=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:j}},{headers:getHeaders(!0),timeout:2e4});H.data.status&&H.data.data?.fetched&&H.data.data.fetched.forEach(e=>{const t=parseFloat(e.ltp||0);parseFloat(e.close||0);if(t>0)O[String(e.symbolToken)]=t;else{const t=parseFloat(e.close||0);t>0&&(O[String(e.symbolToken)]=t)}})}catch(V){log(`LTP batch failed: ${V.message}`,"WARN")}}const y=A.map(e=>{const t=C[e];return{strike:e,isATM:e===E,CE_ltp:t.CE_token?O[String(t.CE_token)]??null:null,PE_ltp:t.PE_token?O[String(t.PE_token)]??null:null,CE_token:t.CE_token,PE_token:t.PE_token,CE_sym:t.CE_sym,PE_sym:t.PE_sym}});return log(`✅ ${i}: ATM=${E}, ltps=${Object.keys(O).length}/${k.length} fetched`,"OK"),t.json({status:!0,symbol:i,spotPrice:l,atmStrike:E,expiry:m,strikes:y})}catch(W){const G=W.response?.data?.message||W.message;log(`Option chain error ${a}: ${G}`,"WARN"),t.status(500).json({status:!1,message:G})}})
 
 app.post("/refresh",async(e,t)=>{if(!SESSION.refreshToken)return t.json({status:!1,message:"No refresh token available"});try{const e=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,{refreshToken:SESSION.refreshToken},{headers:getHeaders(!0),timeout:15e3});if(!0===e.data.status&&e.data.data)return SESSION.jwtToken=e.data.data.jwtToken,SESSION.refreshToken=e.data.data.refreshToken,SESSION.expiresAt=Date.now()+288e5,log("Token refreshed","OK"),t.json({status:!0,message:"Token refreshed"});t.json({status:!1,message:"Token refresh failed"})}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
