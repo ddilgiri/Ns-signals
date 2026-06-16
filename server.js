@@ -237,7 +237,7 @@ function saveOISnapshot(symbol,oiData){
   if(!OI_HISTORY[symbol])OI_HISTORY[symbol]=[];
   OI_HISTORY[symbol].push({
     time:Date.now(),
-    t:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),
+    t:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Kolkata"}),
     atmStrike:oiData.atmStrike,
     totalCeOI:oiData.totalCeOI,
     totalPeOI:oiData.totalPeOI,
