@@ -701,6 +701,9 @@ const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
 const oiPass=s.dilipOIFormula?.pass;
 
+// Compute raw score FIRST so hard-block logic below can reference it
+let finalScore=Math.round(r/i*100);
+
 // HARD BLOCK rules:
 // PUT TRAP / CALL TRAP → block ONLY if score < 65 (strong technicals can override trap on non-expiry days)
 // AVOID (both sides strong) → block ONLY if stock is in its OWN expiry week
@@ -723,8 +726,6 @@ if(!n&&oiPass===false){
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
 // NEUTRAL = insufficient data → allow signal through, no cap
 // Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
-let finalScore=Math.round(r/i*100);
-// Cap score for: wrong direction OR avoid-on-non-expiry-day
 const oiWrongDir=oiEarned===0&&oiPass===false&&!n;
 if(oiWrongDir){
   finalScore=Math.min(finalScore,59);
