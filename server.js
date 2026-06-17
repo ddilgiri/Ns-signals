@@ -234,11 +234,32 @@ function detectGammaBlast(oiData, expiryInfo, vixValue, isIndex) {
 // ═══════════════════════════════════════════════════════
 const OI_HISTORY={};
 const OI_HISTORY_MAX=8;
+const OI_HISTORY_FILE=path.join(__dirname,"oi_history.json");
+// Load OI history from disk on startup
+function loadOIHistory(){
+  try{
+    if(fs.existsSync(OI_HISTORY_FILE)){
+      const raw=JSON.parse(fs.readFileSync(OI_HISTORY_FILE,"utf8"));
+      const cutoff=Date.now()-4*60*60*1000; // discard >4h old snaps
+      Object.keys(raw).forEach(sym=>{
+        const fresh=(raw[sym]||[]).filter(s=>s.ts&&s.ts>cutoff);
+        if(fresh.length)OI_HISTORY[sym]=fresh.slice(-OI_HISTORY_MAX);
+      });
+      log(`OI history loaded — ${Object.keys(OI_HISTORY).length} symbols`,"OK");
+    }
+  }catch(e){log(`OI history load failed: ${e.message}`,"WARN");}
+}
+function saveOIHistory(){
+  try{fs.writeFileSync(OI_HISTORY_FILE,JSON.stringify(OI_HISTORY),"utf8");}
+  catch(e){log(`OI history save failed: ${e.message}`,"WARN");}
+}
+loadOIHistory();
 
 function saveOISnapshot(symbol,oiData){
   if(!symbol||!oiData)return;
   if(!OI_HISTORY[symbol])OI_HISTORY[symbol]=[];
   OI_HISTORY[symbol].push({
+    ts:Date.now(),
     time:Date.now(),
     t:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Kolkata"}),
     atmStrike:oiData.atmStrike,
@@ -251,6 +272,7 @@ function saveOISnapshot(symbol,oiData){
     formula:oiData.dilipFormula
   });
   if(OI_HISTORY[symbol].length>OI_HISTORY_MAX)OI_HISTORY[symbol].shift();
+  saveOIHistory();
 }
 
 function getOITrend(symbol){
@@ -524,7 +546,30 @@ app.post("/oi-analysis",async(e,t)=>{
   const o=n||getExpiryType(a);
   try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master for OI analysis...","INFO");const de=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=de.data,SESSION._instrFetchTime=Date.now()}const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
 const _expiryEnd=new Date(c);_expiryEnd.setHours(15,30,0,0);
-const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){const ge=c.getMonth(),me=c.getFullYear(),he=d.filter(e=>e.date.getMonth()===ge&&e.date.getFullYear()===me);g=(he[he.length-1]||d[0])?.raw}else if("NEXT_MONTH"===o){const Se=(c.getMonth()+1)%12,Ee=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),fe=d.filter(e=>e.date.getMonth()===Se&&e.date.getFullYear()===Ee);g=(fe[fe.length-1]||d[1]||d[0])?.raw,log(`NEXT_MONTH expiry selected: ${g}`,"INFO")}else g="NEXT"===o?(d[1]||d[0])?.raw:d[0]?.raw;if(!g)return t.json({status:!1,message:"No valid expiry"});const m=p.filter(e=>e.expiry===g),h=[...new Set(m.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t),S=h.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,h[0]),E=h.indexOf(S),f=10,I=h.slice(Math.max(0,E-f),E+f+1),N=[],A={};for(const Ie of I){const Ne=100*Ie,Ae=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("CE")),ke=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("PE"));Ae[0]?.token&&(N.push(String(Ae[0].token)),A[String(Ae[0].token)]={strike:Ie,type:"CE"}),ke[0]?.token&&(N.push(String(ke[0].token)),A[String(ke[0].token)]={strike:Ie,type:"PE"})}const k={},C=50;for(let Ce=0;Ce<N.length;Ce+=C){const Oe=N.slice(Ce,Ce+C);try{const Te=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{NFO:Oe}},{headers:getHeaders(!0),timeout:2e4});Te.data.status&&Te.data.data?.fetched&&Te.data.data.fetched.forEach(e=>{const t=A[String(e.symbolToken)];t&&(k[t.strike]||(k[t.strike]={}),k[t.strike][t.type]={ltp:parseFloat(e.ltp||e.close||0),oi:parseInt(e.opnInterest||e.openInterest||e.oi||0),oiChange:parseInt(e.netChangeOI||e.netChange||e.oiChange||0),volume:parseInt(e.tradeVolume||e.volume||0)})})}catch(ye){log(`OI batch fetch error: ${ye.message}`,"WARN")}}
+const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){
+  const ge=c.getMonth(),me=c.getFullYear(),he=d.filter(e=>e.date.getMonth()===ge&&e.date.getFullYear()===me);
+  g=(he[he.length-1]||d[0])?.raw;
+}else if("NEXT_MONTH"===o){
+  const Se=(c.getMonth()+1)%12,Ee=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),fe=d.filter(e=>e.date.getMonth()===Se&&e.date.getFullYear()===Ee);
+  g=(fe[fe.length-1]||d[1]||d[0])?.raw;
+  log(`NEXT_MONTH expiry selected: ${g}`,"INFO");
+}else if("NIFTY_NEXT_WEEKLY"===o){
+  // Next Tuesday's contract — skip today's expiry, take next available Tuesday
+  const nowDay=c.getDay(); // 2=Tuesday
+  const daysToNext=nowDay===2?7:(2-nowDay+7)%7||7;
+  const nextTue=new Date(c);nextTue.setDate(c.getDate()+daysToNext);nextTue.setHours(0,0,0,0);
+  const nextTuePlusTol=new Date(nextTue);nextTuePlusTol.setDate(nextTue.getDate()+1);
+  // Find contract with expiry closest to next Tuesday
+  const weeklyMatch=d.filter(e=>e.date>=nextTue&&e.date<nextTuePlusTol);
+  g=(weeklyMatch[0]||d.find(e=>e.date>c)||d[0])?.raw;
+  log(`NIFTY_NEXT_WEEKLY expiry selected: ${g}`,"INFO");
+}else if("NIFTY_WEEKLY"===o){
+  // Current week's NIFTY contract
+  g=d[0]?.raw;
+  log(`NIFTY_WEEKLY expiry selected: ${g}`,"INFO");
+}else{
+  g="NEXT"===o?(d[1]||d[0])?.raw:d[0]?.raw;
+}if(!g)return t.json({status:!1,message:"No valid expiry"});const m=p.filter(e=>e.expiry===g),h=[...new Set(m.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t),S=h.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,h[0]),E=h.indexOf(S),f=10,I=h.slice(Math.max(0,E-f),E+f+1),N=[],A={};for(const Ie of I){const Ne=100*Ie,Ae=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("CE")),ke=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("PE"));Ae[0]?.token&&(N.push(String(Ae[0].token)),A[String(Ae[0].token)]={strike:Ie,type:"CE"}),ke[0]?.token&&(N.push(String(ke[0].token)),A[String(ke[0].token)]={strike:Ie,type:"PE"})}const k={},C=50;for(let Ce=0;Ce<N.length;Ce+=C){const Oe=N.slice(Ce,Ce+C);try{const Te=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{NFO:Oe}},{headers:getHeaders(!0),timeout:2e4});Te.data.status&&Te.data.data?.fetched&&Te.data.data.fetched.forEach(e=>{const t=A[String(e.symbolToken)];t&&(k[t.strike]||(k[t.strike]={}),k[t.strike][t.type]={ltp:parseFloat(e.ltp||e.close||0),oi:parseInt(e.opnInterest||e.openInterest||e.oi||0),oiChange:parseInt(e.netChangeOI||e.netChange||e.oiChange||0),volume:parseInt(e.tradeVolume||e.volume||0)})})}catch(ye){log(`OI batch fetch error: ${ye.message}`,"WARN")}}
   const exInfo=getExpiryWeekInfo(i);
   const thMul=exInfo.thresholdMultiplier;
   const O=I.map(e=>({strike:e,isATM:e===S,CE_ltp:k[e]?.CE?.ltp??null,CE_oi:k[e]?.CE?.oi??0,CE_oiChange:k[e]?.CE?.oiChange??0,CE_vol:k[e]?.CE?.volume??0,PE_ltp:k[e]?.PE?.ltp??null,PE_oi:k[e]?.PE?.oi??0,PE_oiChange:k[e]?.PE?.oiChange??0,PE_vol:k[e]?.PE?.volume??0})),T=O.reduce((e,t)=>e+(t.CE_oi||0),0),y=O.reduce((e,t)=>e+(t.PE_oi||0),0),w=T>0?parseFloat((y/T).toFixed(3)):null,b=null===w?"NEUTRAL":w>1.3?"BULLISH":w<.7?"BEARISH":"NEUTRAL",_=calcMaxPain(O),F=O.length>1?Math.abs(O[1].strike-O[0].strike):5,R=O.filter(e=>e.strike>S),x=O.filter(e=>e.strike<S),P=O.find(e=>e.strike===S)||{},L=R.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi),D=L[0]||null,$=R.reduce((e,t)=>e+(t.CE_oi||0),0),M=x.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi),U=M[0]||null,v=x.reduce((e,t)=>e+(t.PE_oi||0),0),B=x.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),j=B>.3*$,H=R.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),V=H>.3*v,W=(T+y)/(2*O.length||1),G=D&&D.oi>1.5*W*thMul,X=U&&U.oi>1.5*W*thMul,K=!D||D.oi<.7*W*thMul,Y=!U||U.oi<.7*W*thMul;let q="NEUTRAL",J="";G&&Y?(q="PE",J=`High CE ceiling (${D?.oi?.toLocaleString("en-IN")}) + weak PE floor = price free to fall`):X&&K?(q="CE",J=`High PE floor (${U?.oi?.toLocaleString("en-IN")}) + weak CE ceiling = price free to rise`):G&&X?(q="AVOID",J="Both sides strong = price trapped = avoid"):(q="NEUTRAL",J="No clear OI dominance");const Z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.PE_oiChange||0),0)/4,z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.CE_oiChange||0),0)/4,Q=Z>50&&"BEARISH"!==b,ee=z>50&&"BULLISH"!==b,te=(()=>{const e=z>5,t="BULLISH"===b;return e&&!t?{signal:"SHORT_BUILDUP",action:"BUY_PE",note:"Ramesh adding ceiling — bearish"}:e&&t?{signal:"LONG_BUILDUP",action:"CAUTION",note:"Both adding — uncertain"}:e||t?!e&&t?{signal:"SHORT_COVERING",action:"BUY_CE",note:"Ramesh RUNNING — buy CE fast!"}:{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Ramesh booking profit"}})(),ae=(()=>{const e=Z>5,t="BEARISH"===b;return e&&t?{signal:"LONG_BUILDUP",action:"BUY_CE",note:"Suresh adding floor — bullish"}:e&&!t?{signal:"PUT_TRAP",action:"AVOID_PE",note:"⚠️ PUT TRAP! Suresh collecting premium!"}:!e&&t?{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Suresh booking profit"}:e||t?{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"PUT_COVERING",action:"BUY_PE",note:"Suresh RUNNING — buy PE fast!"}})();let se="NEUTRAL",ne=0,oe=[];"CE"===q?(ne+=40,se="CE",oe.push(`Formula: ${J}`)):"PE"===q?(ne+=40,se="PE",oe.push(`Formula: ${J}`)):"AVOID"===q&&oe.push("Formula: Both trapped — avoid"),("BUY_CE"===te.action&&"PE"!==se||"BUY_PE"===te.action&&"CE"!==se)&&(ne+=20,oe.push(`CE: ${te.note}`)),("BUY_CE"===ae.action&&"CE"===se||"BUY_PE"===ae.action&&"PE"===se)&&(ne+=20,oe.push(`PE: ${ae.note}`)),"PE"===se&&Q&&(ne-=30,oe.push("⚠️ PUT TRAP risk detected!")),"CE"===se&&ee&&(ne-=30,oe.push("⚠️ CALL TRAP risk detected!")),"CE"===se&&j&&(ne+=20,oe.push("Ramesh trapped below = short covering likely")),"PE"===se&&V&&(ne+=20,oe.push("Suresh trapped above = put covering likely")),ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expiry week (${exInfo.daysToNSEExpiry}d left) — OI thresholds tighter, gamma elevated`);}
@@ -542,7 +587,14 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
 const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:8,instFlow:5,pcrBias:5,vixRegime:5,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:18,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
-function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const orbHour=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"})).getHours();const orbNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;if(null===n)s.orbBreakout={earned:orbNextMonth?Math.round(.5*t):orbHour<10?Math.round(.5*t):Math.round(.3*t),max:t,pass:null,note:orbNextMonth?"ORB neutral — next month contract":orbHour<10?"ORB not set yet (pre 10 AM)":"ORB not confirmed"};else{const o=a?e.ltp>n:e.ltp<n,r=a?e.ltp>.997*n&&e.ltp<=n:e.ltp<1.003*n&&e.ltp>=n;let i=o?t:r?.4*t:0;s.orbBreakout={earned:i,max:t,pass:o,note:o?`ORB ${a?"breakout":"breakdown"} confirmed ✓`:r?"Approaching ORB level — watch":"No ORB "+(a?"breakout":"breakdown")}}}{const t=SIGNAL_WEIGHTS.volumeConfirm,a=e.volRatio||1;let n=0,o="";
+function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
+const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
+const orbNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
+if(null===n){
+  if(preORB){s.orbBreakout={earned:0,max:t,pass:null,note:"Pre 9:30 AM — ORB not set yet (0 pts)"};}
+  else{s.orbBreakout={earned:orbNextMonth?Math.round(.5*t):Math.round(.3*t),max:t,pass:null,note:orbNextMonth?"ORB neutral — next month contract":"ORB not confirmed"};}
+}else{const o=a?e.ltp>n:e.ltp<n,r=a?e.ltp>.997*n&&e.ltp<=n:e.ltp<1.003*n&&e.ltp>=n;let i=o?t:r?.4*t:0;s.orbBreakout={earned:i,max:t,pass:o,note:o?`ORB ${a?"breakout":"breakdown"} confirmed ✓`:r?"Approaching ORB level — watch":"No ORB "+(a?"breakout":"breakdown")}}}{const t=SIGNAL_WEIGHTS.volumeConfirm,a=e.volRatio||1;let n=0,o="";
 // On expiry day scanning next-month contracts, volume is naturally thin — give neutral
 const isNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
 if(isNextMonth&&a<0.8){n=Math.round(.5*t);o=`Volume ${a}x — low but next-month contract (expiry day) — neutral`;s.volumeConfirm={earned:n,max:t,pass:null,note:o};}
@@ -565,8 +617,20 @@ if(tradingCurrentExpiry){
 } else {
   exEarned=t;exNote=`Safe contract (${typeof dte==="number"?dte+"d":"?"} to expiry) ✓`;
 }
-s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};
-}{
+s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};}
+// ── ATM DISTANCE scoring (bonus factor, not in weights — adjusts score quality)
+// Adds up to 5 bonus points if spot is close to strike (ATM signal = higher probability)
+{const spotPrice=e.ltp||0;const strikePrice=e.atmStrike||e.strike||0;
+if(spotPrice>0&&strikePrice>0){
+  const dist=Math.abs(spotPrice-strikePrice)/spotPrice*100;
+  let atmBonus=0,atmNote="";
+  if(dist<=0.5){atmBonus=5;atmNote=`ATM signal (${dist.toFixed(1)}% from strike) ✓✓`;}
+  else if(dist<=1.5){atmBonus=3;atmNote=`Near ATM (${dist.toFixed(1)}% from strike) ✓`;}
+  else if(dist<=3){atmBonus=1;atmNote=`Slightly OTM/ITM (${dist.toFixed(1)}% from strike)`;}
+  else{atmBonus=0;atmNote=`Far from ATM (${dist.toFixed(1)}% from strike) — lower probability`;}
+  s.atmDistance={earned:atmBonus,max:5,pass:dist<=2,note:atmNote};
+}}
+{
 // OI MOMENTUM scoring — Ramesh/Suresh trend from OI history
 const t=SIGNAL_WEIGHTS.oiMomentum;
 const isCE=a;
@@ -621,7 +685,16 @@ if(!gb||!gb.isGammaBlast){
          " | DTE="+gb.dte+" | "+gb.warning
   };
 }}
-{const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1,u=(e.oiScore,e.ceSignal?.signal||""),p=e.peSignal?.signal||"";a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}const r=Object.values(s).reduce((e,t)=>e+t.earned,0);const gbFired=s.gammaBlast&&s.gammaBlast.earned>0;const i=Object.values(s).reduce((e,t,idx,arr)=>{if(arr[idx]===s.gammaBlast&&!gbFired)return e;return e+t.max;},0);
+{const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1,u=(e.oiScore,e.ceSignal?.signal||""),p=e.peSignal?.signal||"";a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
+const atmBonus=s.atmDistance?.earned||0;
+const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
+const r=baseEarned+atmBonus;
+const gbFired=s.gammaBlast&&s.gammaBlast.earned>0;
+const i=Object.values(s).reduce((e,t,idx,arr)=>{
+  if(arr[idx]===s.gammaBlast&&!gbFired)return e;
+  if(arr[idx]===s.atmDistance)return e; // exclude from possible
+  return e+t.max;
+},0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
