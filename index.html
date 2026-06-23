@@ -381,11 +381,11 @@ function buildScoreBreakdown(e){
   if(!bd)return "";
   // New sections with weights shown, news/geo hidden if weight=0
   var sections=[
-    {name:"🧱 OI & FORMULA",keys:["dilipOIFormula","oiMomentum","pcrBias","gammaBlast"],color:"#22c55e"},
+    {name:"🧱 OI & FORMULA",keys:["dilipOIFormula","oiMomentum","pcrBias","pcrDelta","gammaBlast"],color:"#22c55e"},
     {name:"📊 TECHNICALS",keys:["marketBias","supertrend","rsi","macd","aboveVwap","orbBreakout"],color:"#3b82f6"},
     {name:"🌐 CONTEXT",keys:["volumeConfirm","instFlow","vixRegime","expiryRisk","atmDistance","newsSentiment","geoRisk"],color:"#f59e0b"}
   ];
-  var labels={dilipOIFormula:"Dilip OI Formula",oiMomentum:"OI Momentum",pcrBias:"PCR Bias",gammaBlast:"Gamma Blast",atmDistance:"ATM Distance",marketBias:"EMA Bias",supertrend:"Supertrend",rsi:"RSI",macd:"MACD",aboveVwap:"VWAP",orbBreakout:"ORB",volumeConfirm:"Volume",instFlow:"FII/DII Flow",vixRegime:"VIX Regime",newsSentiment:"News",geoRisk:"Geo Risk",expiryRisk:"Expiry Risk"};
+  var labels={dilipOIFormula:"Dilip OI Formula",oiMomentum:"OI Momentum",pcrBias:"PCR Bias",pcrDelta:"PCR Delta",gammaBlast:"Gamma Blast",atmDistance:"ATM Distance",marketBias:"EMA Bias",supertrend:"Supertrend",rsi:"RSI",macd:"MACD",aboveVwap:"VWAP",orbBreakout:"ORB",volumeConfirm:"Volume",instFlow:"FII/DII Flow",vixRegime:"VIX Regime",newsSentiment:"News",geoRisk:"Geo Risk",expiryRisk:"Expiry Risk"};
   // calc totals per section
   var html='<div class="score-breakdown">';
   sections.forEach(function(sec){

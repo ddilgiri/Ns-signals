@@ -591,7 +591,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
-const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
 const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
 const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
@@ -678,6 +678,7 @@ if(oiH&&oiH.trend!=="INSUFFICIENT_DATA"){
   }
   // OI velocity: compare last 2 snaps vs first 2 snaps
 let velNote="";
+let velBonus=0;
 try{if(oiH.history&&oiH.history.length>=3){
   const last=oiH.history[oiH.history.length-1];
   const prev=oiH.history[oiH.history.length-2];
@@ -686,12 +687,46 @@ try{if(oiH.history&&oiH.history.length>=3){
     const peVel=prev.peOI>0?Math.round((last.peOI-prev.peOI)/prev.peOI*100):0;
     if(Math.abs(ceVel)>5||Math.abs(peVel)>5){
       velNote=` | CE:${ceVel>0?"+":""}${ceVel}% PE:${peVel>0?"+":""}${peVel}% (velocity)`;
+      // Velocity bonus: fast unwinding in the right direction = +3 to score
+      if(isCE&&ceVel<=-10){velBonus=3;velNote+=` ⚡fast CE unwind +${velBonus}pts`;}
+      else if(!isCE&&peVel<=-10){velBonus=3;velNote+=` ⚡fast PE unwind +${velBonus}pts`;}
+      // Velocity penalty: fast buildup against direction
+      else if(isCE&&ceVel>=15){velBonus=-2;velNote+=` ⚠️ fast CE buildup ${velBonus}pts`;}
+      else if(!isCE&&peVel>=15){velBonus=-2;velNote+=` ⚠️ fast PE buildup ${velBonus}pts`;}
     }
   }
 }}catch(velErr){}
+omEarned=Math.min(t,Math.max(0,omEarned+velBonus));
 omNote+=` (${oiH.snapCount} snaps, ${oiH.firstSnap}→${oiH.lastSnap}${velNote})`;
 }
 s.oiMomentum={earned:omEarned,max:t,pass:omEarned>=t*0.5,note:omNote};
+}{
+// PCR DELTA SCORING — sudden PCR shift between scans
+// Uses oiTrendData.history PCR values (already available)
+const PCR_DELTA_MAX=SIGNAL_WEIGHTS.pcrDelta||8;
+let pcrDeltaEarned=0,pcrDeltaNote="No PCR history — neutral";
+try{
+  const hist=e.oiTrendData?.history;
+  if(hist&&hist.length>=2){
+    const latestPCR=hist[hist.length-1]?.pcr||0;
+    const prevPCR=hist[hist.length-2]?.pcr||0;
+    if(prevPCR>0){
+      const pcrShift=((latestPCR-prevPCR)/prevPCR)*100; // % change
+      if(a){// CE signal — rising PCR = Suresh arriving = bullish
+        if(pcrShift>=20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR spike +${pcrShift.toFixed(1)}% — Suresh army arriving ✓✓`;}
+        else if(pcrShift>=10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift ✓`;}
+        else if(pcrShift<=-15){pcrDeltaEarned=0;pcrDeltaNote=`PCR dropping ${pcrShift.toFixed(1)}% — bearish shift, CE caution`;}
+        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
+      }else{// PE signal — falling PCR = Ramesh arriving = bearish
+        if(pcrShift<=-20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR drop ${pcrShift.toFixed(1)}% — Ramesh army arriving ✓✓`;}
+        else if(pcrShift<=-10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR falling ${pcrShift.toFixed(1)}% — bearish shift ✓`;}
+        else if(pcrShift>=15){pcrDeltaEarned=0;pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift, PE caution`;}
+        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
+      }
+    }
+  }
+}catch(pcrErr){}
+s.pcrDelta={earned:pcrDeltaEarned,max:PCR_DELTA_MAX,pass:pcrDeltaEarned>=PCR_DELTA_MAX*0.4,note:pcrDeltaNote};
 }{
 // GAMMA BLAST scoring
 const t=SIGNAL_WEIGHTS.gammaBlast||15;
@@ -710,7 +745,47 @@ if(!gb||!gb.isGammaBlast){
          " | DTE="+gb.dte+" | "+gb.warning
   };
 }}
-{const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1,u=(e.oiScore,e.ceSignal?.signal||""),p=e.peSignal?.signal||"";a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
+{const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1;
+// Compute true OI signal from OI history + price — never trust Angel label alone
+let u="",p="";
+try{
+  const oiH=e.oiTrendData;
+  const hist=oiH?.history;
+  if(hist&&hist.length>=2){
+    const latest=hist[hist.length-1];
+    const prev=hist[hist.length-2];
+    const ceOIDelta=latest.ceOI-prev.ceOI;
+    const peOIDelta=latest.peOI-prev.peOI;
+    // Price direction from OI history PCR shift as proxy (ltp may not be in history)
+    // Use live ltp vs OI snapshot price context
+    const ltp=e.ltp||0;
+    const prevPCR=prev.pcr||0;
+    const latestPCR=latest.pcr||0;
+    // CE signal: OI falling + price rising = SHORT COVERING (confirmed)
+    //            OI falling + price falling = LONG UNWINDING (bearish, not CE opportunity)
+    //            OI rising  + price rising = LONG BUILDUP
+    //            OI rising  + price falling = SHORT BUILDUP (bearish)
+    const priceUp=latestPCR<prevPCR; // PCR falling = CE pressure = price likely rising
+    if(ceOIDelta<0&&priceUp)u="SHORT_COVERING";
+    else if(ceOIDelta<0&&!priceUp)u="LONG_UNWINDING";
+    else if(ceOIDelta>0&&priceUp)u="LONG_BUILDUP";
+    else if(ceOIDelta>0&&!priceUp)u="SHORT_BUILDUP";
+    // PE signal: OI falling + price falling = PUT COVERING (confirmed)
+    //            OI falling + price rising = LONG UNWINDING (bullish, not PE opportunity)
+    //            OI rising  + price falling = SHORT BUILDUP
+    //            OI rising  + price rising = LONG BUILDUP (bullish)
+    const priceDown=latestPCR>prevPCR; // PCR rising = PE pressure = price likely falling
+    if(peOIDelta<0&&priceDown)p="PUT_COVERING";
+    else if(peOIDelta<0&&!priceDown)p="LONG_UNWINDING";
+    else if(peOIDelta>0&&priceDown)p="SHORT_BUILDUP";
+    else if(peOIDelta>0&&!priceDown)p="LONG_BUILDUP";
+  }else{
+    // Fallback to Angel label only when no OI history available
+    u=e.ceSignal?.signal||"";
+    p=e.peSignal?.signal||"";
+  }
+}catch(sigErr){u=e.ceSignal?.signal||"";p=e.peSignal?.signal||"";}
+a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
 const atmBonus=s.atmDistance?.earned||0;
 const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
 const r=baseEarned+atmBonus;
@@ -875,14 +950,14 @@ app.get("/token-list",async(e,t)=>{try{if(!SESSION._instruments||Date.now()-(SES
 loadSignalLogFromDisk();
 app.listen(PORT,()=>{
   console.log("\n╔══════════════════════════════════════════════════════════════╗");
-  console.log("║   NSE F&O Signal Engine — DILIP FXO v3.4                     ║");
+  console.log("║   NSE F&O Signal Engine — DILIP FXO v5.1                     ║");
   console.log("╠══════════════════════════════════════════════════════════════╣");
   console.log(`║   Server  : http://localhost:${PORT}                                  ║`);
   console.log("║   v3.1: /market-status /oi-history /signal-log               ║");
-  console.log("║   v3.1: Market hours gate · Expiry week detection            ║");
-  console.log("║   v3.1: OI snapshot history · Signal log                     ║");
   console.log("║   v3.2: OI momentum in scoring · expiryRisk weight           ║");
   console.log("║   v3.4: VIX→GammaBlast, NSE cookie refresh, log persist      ║");
+  console.log("║   v5.0: Volume scoring · notifications · zero-premium skip   ║");
+  console.log("║   v5.1: PCR delta scoring · OI velocity bonus · banner sync  ║");
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
