@@ -524,15 +524,13 @@ function getExpiryType(e){
   // BANKNIFTY, FINNIFTY, MIDCPNIFTY — monthly only (last Tuesday)
   // Stocks also expire last Tuesday — same rule
   // Switch to next month when <= 5 days before last Tuesday (Thu/Fri before expiry week)
-  if(dte<=0){
+  // Only switch to next month when expiry has fully passed (dte < 0)
+  // dte == 0 means today IS expiry day — keep current month
+  // dte > 0 means expiry week — keep current month (let scrip master find nearest future expiry)
+  if(dte<0){
     log(`${t}: monthly expiry passed — scanning next month`,"INFO");
     return"NEXT_MONTH";
   }
-  if(dte<=5){
-    log(`${t}: ${dte}d to expiry (expiry week) — switching to next month`,"INFO");
-    return"NEXT_MONTH";
-  }
-  // dte > 5 — normal, scan current month
   return"MONTHLY";
 }
 
@@ -903,7 +901,24 @@ app.post("/live-trade-prices",async(req,res)=>{
       });
       if(!matches.length){log(`live-trade-prices: no instrument for ${key}`,"WARN");continue;}
       const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp).sort((a,b)=>a._exp-b._exp);
-      const best=sorted[0];
+      // Match same expiry logic as getExpiryType: if dte<0 use next month, else current month
+      const nowIST=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+      function lastTueOf2(yr,mn){const last=new Date(yr,mn,0);const diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}
+      const todayMid2=new Date(nowIST.getFullYear(),nowIST.getMonth(),nowIST.getDate());
+      const curLastTue2=lastTueOf2(nowIST.getFullYear(),nowIST.getMonth()+1);
+      const dte2=Math.round((curLastTue2-todayMid2)/86400000);
+      let best;
+      if(dte2<0){
+        // Current month expiry passed — use next month
+        const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
+        const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
+        best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
+      } else {
+        // Current month still valid — use current month last expiry
+        const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
+        const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
+        best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+      }
       tokenMap[key]=String(best.token);
       tokenToKey[String(best.token)]=key;
     }
