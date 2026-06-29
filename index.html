@@ -1536,6 +1536,31 @@ function buildTradeCardV4(tr) {
     }
   }
 
+  // Hold / Strong / Exit zones — always show from trade object (saved in localStorage)
+  var holdZ = tr.holdZone || '--';
+  var holdSZ = tr.holdStrongZone || tr.holdStrong || '--';
+  var exitZ = tr.exitZone || '--';
+  var holdR = tr.holdReason || '';
+  var holdSR = tr.holdStrongReason || '';
+  var exitR = tr.exitReason || '';
+  html += '<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">';
+  html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:9px;background:var(--amber-bg);border:1px solid rgba(245,158,11,.2)">';
+  html += '<span style="font-size:14px">💛</span>';
+  html += '<div><div style="font-size:11px;font-weight:800;color:var(--text)">'+holdZ+' = HOLD</div>';
+  if(holdR) html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">'+holdR+'</div>';
+  html += '</div></div>';
+  html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:9px;background:var(--green-bg);border:1px solid rgba(34,197,94,.2)">';
+  html += '<span style="font-size:14px">💪</span>';
+  html += '<div><div style="font-size:11px;font-weight:800;color:var(--text)">'+holdSZ+' = HOLD STRONG</div>';
+  if(holdSR) html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">'+holdSR+'</div>';
+  html += '</div></div>';
+  html += '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:9px;background:var(--red-bg);border:1px solid rgba(239,68,68,.2)">';
+  html += '<span style="font-size:14px">🛑</span>';
+  html += '<div><div style="font-size:11px;font-weight:800;color:var(--text)">'+exitZ+' = EXIT</div>';
+  if(exitR) html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">'+exitR+'</div>';
+  html += '</div></div>';
+  html += '</div>';
+
   html += '</div>'; // card-exp
   html += '</div>'; // v4-card
   return html;
