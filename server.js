@@ -521,16 +521,16 @@ function getExpiryType(e){
     return"NIFTY_WEEKLY"; // current week's contract
   }
 
-  // BANKNIFTY, FINNIFTY, MIDCPNIFTY — indices: use current month till expiry day itself
+  // BANKNIFTY, FINNIFTY, MIDCPNIFTY — indices: always current month (next month only after expiry passed)
   const INDICES=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
   if(INDICES.includes(t)){
-    if(dte<=0){
+    if(dte<0){
       log(`${t}: expiry passed — scanning next month`,"INFO");
       return"NEXT_MONTH";
     }
     return"MONTHLY";
   }
-  // STOCKS — switch to next month 5 days before expiry
+  // STOCKS only — switch to next month 5 days before expiry
   if(dte<=5){
     log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
@@ -915,7 +915,8 @@ app.post("/live-trade-prices",async(req,res)=>{
       // Indices use current month till expiry day; stocks switch 5 days before
       const _IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
       const _isIdx=_IDXLIST.includes(sym);
-      const _useNext=_isIdx?(dte2<=0):(dte2<=5);
+      // Indices: next month only after expiry passed (dte<0); Stocks: 5 days before (dte<=5)
+      const _useNext=_isIdx?(dte2<0):(dte2<=5);
       if(_useNext){
         const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
         const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
