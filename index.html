@@ -212,11 +212,7 @@ function updateAllCards(){
           tx.sureshTrapped=rn.sureshTrapped||!1;
           var oEl=document.getElementById("tlv-hold-"+tx.id),nEl=document.getElementById("tlv-hs-"+tx.id),sEl=document.getElementById("tlv-exit-"+tx.id);
           if(oEl||nEl||sEl){
-            var tempSig=Object.assign({},tx,{spotPrice:LIVE_PRICES[tx.sym]||tx.spotPrice||0});
-            computeLevels(tempSig);
-            tx.holdZone=tempSig.holdZone;tx.holdReason=tempSig.holdReason;
-            tx.holdStrong=tempSig.holdStrong;tx.holdStrongReason=tempSig.holdStrongReason;
-            tx.exitZone=tempSig.exitZone;tx.exitReason=tempSig.exitReason;
+            // Do NOT recompute levels from live spot — zones are fixed at scan time
             if(oEl){oEl.querySelector(".lv-spot").textContent=(tx.holdZone||"--")+" = HOLD";oEl.querySelector(".lv-reason").textContent=tx.holdReason||"";}
             if(nEl){nEl.querySelector(".lv-spot").textContent=(tx.holdStrong||"--")+" = HOLD STRONG";}
             if(sEl){sEl.querySelector(".lv-spot").textContent=(tx.exitZone||"--")+" = EXIT";sEl.querySelector(".lv-reason").textContent=tx.exitReason||"";}
