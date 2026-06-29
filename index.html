@@ -1441,7 +1441,9 @@ function buildTradeCardV4(tr) {
   html += '<span style="font-size:9px;color:var(--text3)">·</span>';
   html += '<span style="font-size:9px;font-weight:600;color:var(--text3)">'+tr.entryTime+'</span>';
   html += '</div>';
-  html += '<span style="font-size:10px;font-weight:700;color:'+pnlCol+'" id="tpnlchg-'+tr.id+'">'+diffStr+' ('+diffPct+'%)</span>';
+  var capUsed=avg*(tr.lot||1)*(tr.lots||1)*1.2;
+  var capStr2=capUsed>=100000?'₹'+(capUsed/100000).toFixed(1)+'L':capUsed>=1000?'₹'+Math.round(capUsed/1000)+'K':'₹'+Math.round(capUsed);
+  html += '<span style="font-size:10px;font-weight:700;color:var(--blue)">'+capStr2+'</span>';
   html += '</div>';
   html += '</div>'; // content
   html += '</div>'; // header
@@ -1472,7 +1474,7 @@ function buildTradeCardV4(tr) {
   html += '</div>';
   html += '</div>';
 
-  // Expanded section
+  // Expanded section — hidden by default, shown when v4-card has .open class
   html += '<div class="card-exp" style="padding:10px 13px 12px">';
 
   // Action buttons
