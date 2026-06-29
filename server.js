@@ -524,11 +524,9 @@ function getExpiryType(e){
   // BANKNIFTY, FINNIFTY, MIDCPNIFTY — monthly only (last Tuesday)
   // Stocks also expire last Tuesday — same rule
   // Switch to next month when <= 5 days before last Tuesday (Thu/Fri before expiry week)
-  // Only switch to next month when expiry has fully passed (dte < 0)
-  // dte == 0 means today IS expiry day — keep current month
-  // dte > 0 means expiry week — keep current month (let scrip master find nearest future expiry)
-  if(dte<0){
-    log(`${t}: monthly expiry passed — scanning next month`,"INFO");
+  // Switch to next month when within 5 days of expiry (expiry week) OR past expiry
+  if(dte<=5){
+    log(`${t}: ${dte}d to expiry — scanning next month contract`,"INFO");
     return"NEXT_MONTH";
   }
   return"MONTHLY";
@@ -908,13 +906,13 @@ app.post("/live-trade-prices",async(req,res)=>{
       const curLastTue2=lastTueOf2(nowIST.getFullYear(),nowIST.getMonth()+1);
       const dte2=Math.round((curLastTue2-todayMid2)/86400000);
       let best;
-      if(dte2<0){
-        // Current month expiry passed — use next month
+      if(dte2<=5){
+        // Expiry week or past — use next month contract
         const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
         const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
         best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
       } else {
-        // Current month still valid — use current month last expiry
+        // Normal — use current month last expiry
         const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
         const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
         best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
