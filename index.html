@@ -117,7 +117,9 @@ var _pChgInit=_pSign+_pDiff.toFixed(2)+" ("+_pSign+_pPct.toFixed(1)+"%)";var _pr
             var dayBase=sig.prevPremiumClose>0?sig.prevPremiumClose:(sig.entryPremium||prev);
             var dayDiff=ltp-dayBase;
             var dayPctMove=dayBase>0?Math.abs(dayDiff/dayBase*100):0;
-            el.className="prem-val "+(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-neutral");
+            // Preserve original class (v4-prem or prem-val), only update color class
+var baseClass=el.className.indexOf("v4-prem")>=0?"v4-prem":"prem-val";
+el.className=baseClass+" "+(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-neutral");
             el.style.color=dayDiff!==0?premColor(dayPctMove,dayDiff>0):"";
           }
           // Compare LIVE PREM against PREVIOUS DAY CLOSE (same logic as LIVE SPOT vs LIVE_PREV)
