@@ -1489,9 +1489,11 @@ function buildTradeCardV4(tr) {
       tr.lotPrices.map(function(p,i){ return 'L'+(i+1)+' ₹'+p.toFixed(2); }).join(' · ') + '</div>';
   }
 
-  // V4 fuel bar (from signal if available)
+  // V4 fuel bar and capsules — use trade object (saved in localStorage), fallback to live signal
   var sig = S.signals.find(function(s){ return s.id === tr.sigId; });
-  if(sig) {
+  var sigSrc = sig || tr; // use live signal if available, else trade data from localStorage
+  if(sigSrc) {
+  var sig = sigSrc; // alias so inner code works unchanged
     var fuelPct = v4FuelPct ? v4FuelPct(sig) : 50;
     var fuelCol = isPE ? 'var(--red)' : 'var(--green)';
     html += '<div style="margin-bottom:8px">';
