@@ -521,12 +521,18 @@ function getExpiryType(e){
     return"NIFTY_WEEKLY"; // current week's contract
   }
 
-  // BANKNIFTY, FINNIFTY, MIDCPNIFTY — monthly only (last Tuesday)
-  // Stocks also expire last Tuesday — same rule
-  // Switch to next month when <= 5 days before last Tuesday (Thu/Fri before expiry week)
-  // Switch to next month when within 5 days of expiry (expiry week) OR past expiry
+  // BANKNIFTY, FINNIFTY, MIDCPNIFTY — indices: use current month till expiry day itself
+  const INDICES=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
+  if(INDICES.includes(t)){
+    if(dte<=0){
+      log(`${t}: expiry passed — scanning next month`,"INFO");
+      return"NEXT_MONTH";
+    }
+    return"MONTHLY";
+  }
+  // STOCKS — switch to next month 5 days before expiry
   if(dte<=5){
-    log(`${t}: ${dte}d to expiry — scanning next month contract`,"INFO");
+    log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
   }
   return"MONTHLY";
@@ -906,13 +912,15 @@ app.post("/live-trade-prices",async(req,res)=>{
       const curLastTue2=lastTueOf2(nowIST.getFullYear(),nowIST.getMonth()+1);
       const dte2=Math.round((curLastTue2-todayMid2)/86400000);
       let best;
-      if(dte2<=5){
-        // Expiry week or past — use next month contract
+      // Indices use current month till expiry day; stocks switch 5 days before
+      const _IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
+      const _isIdx=_IDXLIST.includes(sym);
+      const _useNext=_isIdx?(dte2<=0):(dte2<=5);
+      if(_useNext){
         const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
         const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
         best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
       } else {
-        // Normal — use current month last expiry
         const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
         const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
         best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
