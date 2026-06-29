@@ -913,18 +913,33 @@ app.post("/live-trade-prices",async(req,res)=>{
       const dte2=Math.round((curLastTue2-todayMid2)/86400000);
       let best;
       // Indices use current month till expiry day; stocks switch 5 days before
-      const _IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
-      const _isIdx=_IDXLIST.includes(sym);
-      // Indices: next month only after expiry passed (dte<0); Stocks: 5 days before (dte<=5)
-      const _useNext=_isIdx?(dte2<0):(dte2<=5);
-      if(_useNext){
-        const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
-        const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
-        best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
+      // NIFTY: always nearest contract (weekly) — sorted[0]
+      // BANKNIFTY/FINNIFTY/MIDCPNIFTY: current month till expiry passed (dte<0)
+      // STOCKS: next month 5 days before expiry (dte<=5)
+      const _NIFTY_IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
+      if(sym==="NIFTY"){
+        best=sorted[0]; // always nearest weekly contract
+      } else if(_NIFTY_IDXLIST.includes(sym)){
+        if(dte2<0){
+          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
+          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
+          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[0];
+        } else {
+          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
+          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
+          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+        }
       } else {
-        const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
-        const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
-        best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+        // STOCKS — next month 5 days before
+        if(dte2<=5){
+          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
+          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
+          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
+        } else {
+          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
+          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
+          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+        }
       }
       tokenMap[key]=String(best.token);
       tokenToKey[String(best.token)]=key;
