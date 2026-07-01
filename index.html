@@ -225,7 +225,7 @@ function updateAllCards(){
   }finally{
     _oiRefreshLock=!1;
   }
-}function updateCardCapsules(e){var t=document.getElementById("card-"+e.id);if(t&&t.classList.contains("open")){var o=t.querySelector(".capsules");if(o){var n="PE"===e.type,s="";if(e.ceWalls&&e.ceWalls.length){var a=e.ceWalls[0],i=a.oi>=1e5?(a.oi/1e5).toFixed(1)+"L":a.oi>=1e3?Math.round(a.oi/1e3)+"K":String(a.oi||""),l="STRONG"===a.strength?"🔴STRONG":"🟡MED";s+='<div class="cap cap-r">🧱 Ramesh '+a.strike+" · "+i+" · "+l+"</div>"}if(e.peFloors&&e.peFloors.length){var r=e.peFloors[0],d=r.oi>=1e5?(r.oi/1e5).toFixed(1)+"L":r.oi>=1e3?Math.round(r.oi/1e3)+"K":String(r.oi||""),c="STRONG"===r.strength?"🟢STRONG":"🟡MED";s+='<div class="cap cap-s">🏠 Suresh '+r.strike+" · "+d+" · "+c+"</div>"}var p=e.ceSignal,v=e.peSignal,m=v&&I(v).toUpperCase().indexOf("COVERING")>=0,g=p&&I(p).toUpperCase().indexOf("COVERING")>=0;if(n){if(v){var y=I(v);["PUT BUILDUP","SHORT BUILDUP","LONG UNWINDING","PUT COVERING"].some(function(e){return y.toUpperCase().indexOf(e)>=0})?s+='<div class="cap cap-p">📉 '+y+"</div>":m&&(s+='<div class="cap cap-p">📉 Support collapsing — confirms bearish</div>')}g&&(s+='<div class="cap cap-warn">⚠️ Ramesh running — ceiling weak</div>'),e.sureshTrapped&&!m&&(s+='<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>')}else{if(p){var u=I(p);(["CALL BUILDUP","OI BUILDUP","SHORT COVERING"].some(function(e){return u.toUpperCase().indexOf(e)>=0})||g)&&(s+='<div class="cap cap-p">📈 '+u+"</div>")}m&&(s+='<div class="cap cap-warn">⚠️ Suresh running — weak floor</div>'),e.rameshTrapped&&!g&&(s+='<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>')}var S=parseFloat(e.volRatio)||0;S>=1.2&&(s+='<div class="cap cap-v">🔥 Vol '+S.toFixed(1)+"x</div>"),e.bias===(n?"BEARISH":"BULLISH")?s+='<div class="cap cap-ok">✅ Index aligned</div>':e.bias&&"NEUTRAL"!==e.bias&&(s+='<div class="cap cap-warn">⚠️ Index '+e.bias+"</div>"),s&&(o.innerHTML=s)}}function I(e){return"object"==typeof e?String(e.signal||"").replace(/_/g," "):String(e||"").replace(/_/g," ")}}function updateCardLevels(e){var t=document.getElementById("card-"+e.id);if(t&&t.classList.contains("open")){var o=t.querySelector("#lv-hold-"+e.id+" .lv-spot"),n=t.querySelector("#lv-hs-"+e.id+" .lv-spot"),s=t.querySelector("#lv-exit-"+e.id+" .lv-spot"),a=t.querySelector("#lv-hold-"+e.id+" .lv-reason"),i=t.querySelector("#lv-hs-"+e.id+" .lv-reason"),l=t.querySelector("#lv-exit-"+e.id+" .lv-reason");o&&(o.textContent=(e.holdZone||"--")+" = HOLD"),n&&(n.textContent=(e.holdStrong||"--")+" = HOLD STRONG"),s&&(s.textContent=(e.exitZone||"--")+" = EXIT"),a&&(a.textContent=e.holdReason||""),i&&(i.textContent=e.holdStrongReason||""),l&&(l.textContent=e.exitReason||"");var r=t.querySelector(".target-chip:first-child .t-val"),d=t.querySelector(".target-chip:last-child .t-val");r&&e.target1&&(r.textContent="₹"+e.target1.toLocaleString("en-IN",{maximumFractionDigits:2})),d&&e.target2&&(d.textContent="₹"+e.target2.toLocaleString("en-IN",{maximumFractionDigits:2}))}
+}function updateCardCapsules(e){var t=document.getElementById("card-"+e.id);if(t&&t.classList.contains("open")){var o=t.querySelector(".capsules");if(o){var n="PE"===e.type,s="";if(e.ceWalls&&e.ceWalls.length){var a=e.ceWalls[0],i=a.oi>=1e5?(a.oi/1e5).toFixed(1)+"L":a.oi>=1e3?Math.round(a.oi/1e3)+"K":String(a.oi||""),l="STRONG"===a.strength?"🔴STRONG":"🟡MED";s+='<div class="cap cap-r">🧱 Ramesh '+a.strike+" · "+i+" · "+l+"</div>"}if(e.peFloors&&e.peFloors.length){var r=e.peFloors[0],d=r.oi>=1e5?(r.oi/1e5).toFixed(1)+"L":r.oi>=1e3?Math.round(r.oi/1e3)+"K":String(r.oi||""),c="STRONG"===r.strength?"🟢STRONG":"🟡MED";s+='<div class="cap cap-s">🏠 Suresh '+r.strike+" · "+d+" · "+c+"</div>"}var p=e.ceSignal,v=e.peSignal,m=v&&I(v).toUpperCase().indexOf("COVERING")>=0,g=p&&I(p).toUpperCase().indexOf("COVERING")>=0;if(n){if(v){var y=I(v);["PUT BUILDUP","SHORT BUILDUP","LONG UNWINDING","PUT COVERING"].some(function(e){return y.toUpperCase().indexOf(e)>=0})?s+='<div class="cap cap-p">📉 '+y+"</div>":m&&(s+='<div class="cap cap-p">📉 Support collapsing — confirms bearish</div>')}g&&(s+='<div class="cap cap-warn">⚠️ Ramesh running — ceiling weak</div>'),e.sureshTrapped&&!m&&(s+='<div class="cap cap-r">⚡ Suresh Trapped — put cover likely</div>')}else{if(p){var u=I(p);(["CALL BUILDUP","OI BUILDUP","SHORT COVERING"].some(function(e){return u.toUpperCase().indexOf(e)>=0})||g)&&(s+='<div class="cap cap-p">📈 '+u+"</div>")}m&&(s+='<div class="cap cap-warn">⚠️ Suresh running — weak floor</div>'),e.rameshTrapped&&!g&&(s+='<div class="cap cap-s">⚡ Ramesh Trapped — short cover likely</div>')}var S=parseFloat(e.volRatio)||0;S>=1.2&&(s+='<div class="cap cap-v">🔥 Vol '+S.toFixed(1)+"x</div>"),e.bias===(n?"BEARISH":"BULLISH")?s+='<div class="cap cap-ok">✅ Index aligned</div>':e.bias&&"NEUTRAL"!==e.bias&&(s+='<div class="cap cap-warn">⚠️ Index '+e.bias+"</div>"),s&&(o.innerHTML=s)}}function I(e){return"object"==typeof e?String(e.signal||"").replace(/_/g," "):String(e||"").replace(/_/g," ")}}function updateCardLevels(e){var t=document.getElementById("card-"+e.id);if(t&&t.classList.contains("open")){var o=t.querySelector("#lv-hold-"+e.id+" .lv-spot"),n=t.querySelector("#lv-hs-"+e.id+" .lv-spot"),s=t.querySelector("#lv-exit-"+e.id+" .lv-spot"),a=t.querySelector("#lv-hold-"+e.id+" .lv-reason"),i=t.querySelector("#lv-hs-"+e.id+" .lv-reason"),l=t.querySelector("#lv-exit-"+e.id+" .lv-reason");o&&(o.textContent=(e.holdZone||"--")+" = HOLD"),n&&(n.textContent=(e.holdStrong||"--")+" = HOLD STRONG"),s&&(s.textContent=(e.exitZone||"--")+" = EXIT"),a&&(a.textContent=e.holdReason||""),i&&(i.textContent=e.holdStrongReason||""),l&&(l.textContent=e.exitReason||"");var r=t.querySelector(".target-chip:first-child .t-val"),d=t.querySelector(".target-chip:last-child .t-val");r&&e.target1&&(r.textContent="₹"+e.target1.toLocaleString("en-IN",{maximumFractionDigits:2})),d&&e.target2&&(d.textContent="₹"+e.target2.toLocaleString("en-IN",{maximumFractionDigits:2}))}var v4h=document.getElementById("v4hold-"+e.id),v4s=document.getElementById("v4strong-"+e.id),v4x=document.getElementById("v4exit-"+e.id);v4h&&(v4h.textContent=e.holdZone||"--"),v4s&&(v4s.textContent=e.holdStrong||"--"),v4x&&(v4x.textContent=e.exitZone||"--")
   // Live update the score ring number + opacity (circle stays live)
   var ringNum=document.getElementById("ringnum-"+e.id);
   if(ringNum&&typeof e.score==="number"){
@@ -966,10 +966,10 @@ function buildCardV4(e){
   var tStr=typeof target1==='number'?'₹'+target1.toFixed(2):target1;
   var stopStr=e.exitZone||'--';
 
-  // Hold/Strong/Exit spot prices
-  var holdSpot=(LIVE_PRICES[sym]||spot).toLocaleString('en-IN',{maximumFractionDigits:2});
-  var strongSpot=holdSpot;
-  var exitSpot=holdSpot;
+  // Hold/Strong/Exit — use actual computed zone values from computeLevels, not spot duplicated 3x
+  var holdSpot=e.holdZone||'--';
+  var strongSpot=e.holdStrong||'--';
+  var exitSpot=e.exitZone||'--';
 
   // Time — use scan-generated time (ts), not current time
   var now=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'});
@@ -1157,12 +1157,8 @@ window.updateAllCards=function(){
       chgEl.textContent=sign+diff.toFixed(2)+' ('+sign+pct.toFixed(1)+'%)';
       chgEl.className='v4-spot-chg '+dir;
     }
-    // Update hold/strong/exit spot buttons
-    var spotStr=live.toLocaleString('en-IN',{maximumFractionDigits:2});
-    ['v4hold-','v4strong-','v4exit-'].forEach(function(pfx){
-      var el=document.getElementById(pfx+sig.id);
-      if(el)el.textContent=spotStr;
-    });
+    // Hold/Strong/Exit are static computed zones (from computeLevels), not live spot —
+    // don't overwrite them here. They update via updateCardLevels() when OI refreshes.
   });
 };
 
