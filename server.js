@@ -571,6 +571,27 @@ app.post("/verify-tokens",async(e,t)=>{
     t.status(500).json({status:!1,message:msg});
   }
 });
+app.get("/oi-velocity",(e,t)=>{
+  try{
+    const results=[];
+    for(const sym of Object.keys(OI_HISTORY)){
+      const snaps=OI_HISTORY[sym];
+      if(!snaps||snaps.length<2)continue;
+      const latest=snaps[snaps.length-1];
+      const prior=snaps[Math.max(0,snaps.length-4)]; // compare vs ~3 snapshots back
+      if(!latest||!prior||prior.ts===latest.ts)continue;
+      const ceChg=prior.totalCeOI>0?((latest.totalCeOI-prior.totalCeOI)/prior.totalCeOI*100):0;
+      const peChg=prior.totalPeOI>0?((latest.totalPeOI-prior.totalPeOI)/prior.totalPeOI*100):0;
+      const maxAbsChg=Math.max(Math.abs(ceChg),Math.abs(peChg));
+      if(maxAbsChg<15)continue; // only report meaningful moves
+      results.push({sym,ceChg:Math.round(ceChg*10)/10,peChg:Math.round(peChg*10)/10,maxAbsChg:Math.round(maxAbsChg*10)/10,formula:latest.formula||"NEUTRAL",ageMs:latest.ts-prior.ts});
+    }
+    results.sort((a,b)=>b.maxAbsChg-a.maxAbsChg);
+    t.json({status:!0,count:results.length,movers:results.slice(0,20)});
+  }catch(e){
+    t.status(500).json({status:!1,message:e.message});
+  }
+});
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
 app.get("/push-public-key",(e,t)=>{t.json({status:!0,publicKey:VAPID_PUBLIC_KEY})});
