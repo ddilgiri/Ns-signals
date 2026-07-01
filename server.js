@@ -469,6 +469,65 @@ app.post("/signal-outcome",(req,res)=>{
 
 // ─── EXISTING ROUTES (unchanged) ───────────────────────────
 
+const FNO_LIST_CACHE={data:null,fetchTime:0};
+const FNO_LIST_TTL=24*60*60*1000; // refresh once a day
+const IDX_UNDERLYINGS=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
+async function buildFnoStockList(){
+  const resp=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:45000});
+  const master=resp.data;
+  // Step 1: find every distinct underlying "name" that has NFO stock options (OPTSTK) — this IS the F&O universe
+  const fnoNames=new Set();
+  const fnoLotByName={};
+  for(const row of master){
+    if(row.exch_seg==="NFO" && (row.instrumenttype==="OPTSTK"||row.instrumenttype==="FUTSTK")){
+      fnoNames.add(row.name);
+      fnoLotByName[row.name]=parseInt(row.lotsize)||1;
+    }
+  }
+  // Step 2: find NSE equity token for each F&O-eligible underlying (for spot price/candles)
+  const eqTokenByName={};
+  for(const row of master){
+    if(row.exch_seg==="NSE" && row.symbol && row.symbol.endsWith("-EQ")){
+      const baseSym=row.symbol.replace(/-EQ$/,"");
+      if(fnoNames.has(baseSym)) eqTokenByName[baseSym]=row.token;
+    }
+  }
+  // Step 3: assemble final stock list — only include names where we found BOTH an eq token AND an fno lot
+  const stocks=[];
+  for(const name of fnoNames){
+    if(eqTokenByName[name]){
+      stocks.push({sym:name,token:eqTokenByName[name],lot:fnoLotByName[name]});
+    }
+  }
+  stocks.sort((a,b)=>a.sym.localeCompare(b.sym));
+  // Step 4: derive current index option lot sizes (OPTIDX) for NIFTY/BANKNIFTY/FINNIFTY/MIDCPNIFTY
+  const idxLotByName={};
+  for(const row of master){
+    if(row.exch_seg==="NFO" && row.instrumenttype==="OPTIDX" && IDX_UNDERLYINGS.includes(row.name)){
+      idxLotByName[row.name]=parseInt(row.lotsize)||idxLotByName[row.name];
+    }
+  }
+  return{stocks,idxLots:idxLotByName};
+}
+app.get("/fno-stock-list",async(e,t)=>{
+  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});
+  try{
+    const forceRefresh=e.query.refresh==="1";
+    if(!forceRefresh && FNO_LIST_CACHE.data && Date.now()-FNO_LIST_CACHE.fetchTime<FNO_LIST_TTL){
+      return t.json({status:!0,cached:!0,count:FNO_LIST_CACHE.data.stocks.length,stocks:FNO_LIST_CACHE.data.stocks,idxLots:FNO_LIST_CACHE.data.idxLots,fetchedAt:new Date(FNO_LIST_CACHE.fetchTime).toISOString()});
+    }
+    log("Auto-deriving F&O stock list from Angel One scrip master...","INFO");
+    const result=await buildFnoStockList();
+    FNO_LIST_CACHE.data=result;
+    FNO_LIST_CACHE.fetchTime=Date.now();
+    log(`F&O stock list derived: ${result.stocks.length} stocks with valid token+lot`,"OK");
+    t.json({status:!0,cached:!1,count:result.stocks.length,stocks:result.stocks,idxLots:result.idxLots,fetchedAt:new Date(FNO_LIST_CACHE.fetchTime).toISOString()});
+  }catch(e){
+    const msg=e.response?.data?.message||e.message;
+    log(`F&O list derive error: ${msg}`,"ERR");
+    t.status(500).json({status:!1,message:msg});
+  }
+});
 app.post("/verify-tokens",async(e,t)=>{
   if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});
   try{
