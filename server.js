@@ -469,6 +469,49 @@ app.post("/signal-outcome",(req,res)=>{
 
 // ─── EXISTING ROUTES (unchanged) ───────────────────────────
 
+app.post("/verify-tokens",async(e,t)=>{
+  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});
+  try{
+    const stocks=e.body.stocks; // [{sym, token, lot}]
+    if(!Array.isArray(stocks))return t.status(400).json({status:!1,message:"stocks array required"});
+    log("Verifying "+stocks.length+" tokens against fresh Angel One scrip master...","INFO");
+    const resp=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:45000});
+    const master=resp.data;
+    // Build lookup: NSE equity symbol -> {token, lotsize}
+    const eqLookup={};
+    for(const row of master){
+      if(row.exch_seg==="NSE" && row.symbol && row.symbol.endsWith("-EQ")){
+        const baseSym=row.symbol.replace(/-EQ$/,"");
+        eqLookup[baseSym]={token:row.token,lot:row.lotsize};
+      }
+    }
+    const results=[];
+    let mismatches=0,missing=0,ok=0;
+    for(const s of stocks){
+      const fresh=eqLookup[s.sym];
+      if(!fresh){
+        results.push({sym:s.sym,status:"NOT_FOUND",yourToken:s.token,freshToken:null,yourLot:s.lot,freshLot:null});
+        missing++;
+        continue;
+      }
+      const tokenMatch=String(fresh.token)===String(s.token);
+      const lotMatch=String(fresh.lot)===String(s.lot);
+      if(tokenMatch&&lotMatch){
+        ok++;
+        results.push({sym:s.sym,status:"OK",yourToken:s.token,freshToken:fresh.token,yourLot:s.lot,freshLot:fresh.lot});
+      }else{
+        mismatches++;
+        results.push({sym:s.sym,status:"MISMATCH",yourToken:s.token,freshToken:fresh.token,yourLot:s.lot,freshLot:fresh.lot,tokenMatch,lotMatch});
+      }
+    }
+    log(`Token verify done: ${ok} OK, ${mismatches} MISMATCH, ${missing} NOT_FOUND`,mismatches||missing?"WARN":"OK");
+    t.json({status:!0,summary:{ok,mismatches,missing,total:stocks.length},results:results.filter(r=>r.status!=="OK")});
+  }catch(e){
+    const msg=e.response?.data?.message||e.message;
+    log(`Token verify error: ${msg}`,"ERR");
+    t.status(500).json({status:!1,message:msg});
+  }
+});
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
 app.get("/push-public-key",(e,t)=>{t.json({status:!0,publicKey:VAPID_PUBLIC_KEY})});
