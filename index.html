@@ -252,9 +252,29 @@ var i=t.slice();if("bear"===S.filterMode&&(i=t.filter(function(e){return"PE"===e
   addLog("Scanning cycle...","");
   // Indices first (sequential, only 4 — fast)
   for(var e=0;e<IDX_LIST.length&&S.scanning;e++)await scanSymbol(IDX_LIST[e].sym,IDX_LIST[e].token,IDX_LIST[e].lot,!0);
-  var t=NSE_STOCKS.slice(scanOffset,scanOffset+SCAN_BATCH);
-  t.length||(scanOffset=0,t=NSE_STOCKS.slice(0,SCAN_BATCH));
+  // Priority movers: use already-live LIVE_PRICES/LIVE_PREV (updated every 5s for all 208 stocks)
+  // to detect fast gainers/losers and scan them FIRST, ahead of the rotating batch.
+  // This catches breakouts (like DABUR/MARICO) that would otherwise wait ~3min for their turn.
+  var PRIORITY_MOVE_PCT_UP=1.5, PRIORITY_MOVE_PCT_DOWN=1.2, PRIORITY_MAX=8;
+  var moverCandidates=NSE_STOCKS.filter(function(stk){
+    var lp=LIVE_PRICES[stk.sym], pv=LIVE_PREV[stk.sym];
+    if(!lp||!pv||pv<=0) return false;
+    var chg=(lp-pv)/pv*100;
+    return chg>=PRIORITY_MOVE_PCT_UP || chg<=-PRIORITY_MOVE_PCT_DOWN;
+  }).sort(function(a,b){
+    var ca=Math.abs((LIVE_PRICES[a.sym]-LIVE_PREV[a.sym])/LIVE_PREV[a.sym]),
+        cb=Math.abs((LIVE_PRICES[b.sym]-LIVE_PREV[b.sym])/LIVE_PREV[b.sym]);
+    return cb-ca;
+  }).slice(0,PRIORITY_MAX);
+  var regularBatch=NSE_STOCKS.slice(scanOffset,scanOffset+SCAN_BATCH);
+  regularBatch.length||(scanOffset=0,regularBatch=NSE_STOCKS.slice(0,SCAN_BATCH));
   scanOffset=(scanOffset+SCAN_BATCH)%NSE_STOCKS.length;
+  var moverSyms={};moverCandidates.forEach(function(m){moverSyms[m.sym]=1;});
+  var t=moverCandidates.concat(regularBatch.filter(function(s){return !moverSyms[s.sym];}));
+  if(moverCandidates.length) addLog("⚡ Priority movers: "+moverCandidates.map(function(m){
+    var chg=((LIVE_PRICES[m.sym]-LIVE_PREV[m.sym])/LIVE_PREV[m.sym]*100);
+    return m.sym+(chg>=0?"↑":"↓")+Math.abs(chg).toFixed(1)+"%";
+  }).join(", "),"ok");
   S.scannedCount+=t.length;
   // PARALLEL stock scanning — process in groups of 6 concurrent requests
   // (Angel One API can handle moderate concurrency; 6 keeps rate-limit safe)
