@@ -1,4 +1,22 @@
-const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
+const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),webpush=require("web-push"),app=express(),PORT=process.env.PORT||3001;
+
+// ── PUSH NOTIFICATIONS (Web Push / VAPID) ──────────────────
+const VAPID_PUBLIC_KEY="BJQoaQv0vQqD2Z8luZjUiK35MmJFquAZRsVlwa61qPk42_UoUU20UtDGdjgvLrThYVlvGs6FJ8pFsO_QPATLP9s";
+const VAPID_PRIVATE_KEY="LEr9ayJQtXgauVlB8p16Sex5hbctaN5-IIlQ2S1JvLw";
+webpush.setVapidDetails("mailto:dilip@fxo.local",VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY);
+const PUSH_SUB_FILE=path.join(__dirname,"push-subscriptions.json");
+let PUSH_SUBS=[];
+try{if(fs.existsSync(PUSH_SUB_FILE))PUSH_SUBS=JSON.parse(fs.readFileSync(PUSH_SUB_FILE,"utf8"));}catch(e){}
+function savePushSubs(){try{fs.writeFileSync(PUSH_SUB_FILE,JSON.stringify(PUSH_SUBS));}catch(e){}}
+async function sendPushToAll(title,body,tag){
+  const payload=JSON.stringify({title,body,tag:tag||"fno-signal"});
+  const dead=[];
+  for(const sub of PUSH_SUBS){
+    try{await webpush.sendNotification(sub,payload);}
+    catch(e){if(e.statusCode===410||e.statusCode===404)dead.push(sub);}
+  }
+  if(dead.length){PUSH_SUBS=PUSH_SUBS.filter(s=>!dead.includes(s));savePushSubs();}
+}
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -453,6 +471,38 @@ app.post("/signal-outcome",(req,res)=>{
 
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
+app.get("/push-public-key",(e,t)=>{t.json({status:!0,publicKey:VAPID_PUBLIC_KEY})});
+app.post("/push-subscribe",(e,t)=>{
+  try{
+    const sub=e.body;
+    if(!sub||!sub.endpoint)return t.status(400).json({status:!1,message:"Invalid subscription"});
+    const exists=PUSH_SUBS.some(s=>s.endpoint===sub.endpoint);
+    if(!exists){PUSH_SUBS.push(sub);savePushSubs();log("Push subscription added — total: "+PUSH_SUBS.length,"OK");}
+    t.json({status:!0,message:"Subscribed"});
+  }catch(e){t.status(500).json({status:!1,message:e.message});}
+});
+app.post("/push-unsubscribe",(e,t)=>{
+  try{
+    const{endpoint:a}=e.body;
+    PUSH_SUBS=PUSH_SUBS.filter(s=>s.endpoint!==a);
+    savePushSubs();
+    t.json({status:!0,message:"Unsubscribed"});
+  }catch(e){t.status(500).json({status:!1,message:e.message});}
+});
+app.post("/push-test",async(e,t)=>{
+  try{await sendPushToAll("🔔 Test Notification","DILIP FXO push is working!","test");t.json({status:!0,sent:PUSH_SUBS.length});}
+  catch(e){t.status(500).json({status:!1,message:e.message});}
+});
+app.post("/push-signal",async(e,t)=>{
+  try{
+    const{sym:a,strike:s,type:n,verdict:o,score:r,spotPrice:i}=e.body;
+    if(!a)return t.status(400).json({status:!1,message:"sym required"});
+    const title="📡 "+a+" "+s+" "+n;
+    const body=(o||"")+" · Score "+(r||0)+"% · Spot ₹"+(i?Math.round(i).toLocaleString("en-IN"):"--");
+    await sendPushToAll(title,body,"signal-"+a+"-"+n);
+    t.json({status:!0,sent:PUSH_SUBS.length});
+  }catch(e){t.status(500).json({status:!1,message:e.message});}
+});
 app.post("/login",async(e,t)=>{try{const{clientCode:a,password:s,apiKey:n,totpSecret:o}=e.body;if(!a||!s||!n)return log("Login: Missing required fields","WARN"),t.status(400).json({status:!1,message:"clientCode, password, and apiKey are required"});SESSION.clientCode=a,SESSION.apiKey=n;let r="";o&&o.trim()&&(r=generateTOTP(o),r?log(`TOTP generated: ${r}`):log("TOTP secret invalid — proceeding without 2FA","WARN")),log(`Authenticating ${a}...`);const i=(await axios.post(`${ANGEL_API}/rest/auth/angelbroking/user/v1/loginByPassword`,{clientcode:a,password:s,totp:r},{headers:getHeaders(!1),timeout:25e3})).data;if(!0===i.status&&i.data)return SESSION.jwtToken=i.data.jwtToken,SESSION.refreshToken=i.data.refreshToken,SESSION.feedToken=i.data.feedToken,SESSION.expiresAt=Date.now()+288e5,log(`✅ Login successful — ${a}`,"OK"),t.json({status:!0,message:"Login successful",client:a,tokenExpiry:new Date(SESSION.expiresAt).toLocaleTimeString("en-IN")});const l=i.message||i.errorcode||"Unknown error";return log(`❌ Login failed: ${l}`,"ERR"),t.status(401).json({status:!1,message:l})}catch(e){const a=e.response?.data?.message||e.response?.data?.errorcode||e.message;log(`❌ Login error: ${a}`,"ERR"),t.status(500).json({status:!1,message:a||"Connection error — check if Angel One API is reachable"})}})
 app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;log(`Quote error: ${a}`,"WARN"),t.status(e.response?.status||500).json({status:!1,message:a})}})
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
