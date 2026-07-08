@@ -1014,21 +1014,38 @@ app.get("/fno-stock-list",async(req,res)=>{
       SESSION._instruments=r.data;SESSION._instrFetchTime=Date.now();
     }
     const now=new Date();
-    // Get unique stock names that have NFO options (F&O eligible)
+    const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
+    // Get unique stock names with future NFO options
     const fnoSet=new Set();
     SESSION._instruments.forEach(inst=>{
       if(inst.exch_seg!=="NFO")return;
       if(!inst.instrumenttype||!inst.instrumenttype.includes("OPT"))return;
-      // Exclude indices
-      const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
       const name=(inst.name||"").toUpperCase();
       if(!name||INDICES.includes(name))return;
-      // Only include if expiry is in future
       const exp=inst.expiry?new Date(inst.expiry):null;
       if(exp&&exp>now)fnoSet.add(name);
     });
-    const stocks=Array.from(fnoSet).sort();
-    log("F&O stock list derived: "+stocks.length+" stocks","OK");
+    // Build NSE token map for EQ segment
+    const nseTokenMap={};
+    SESSION._instruments.forEach(inst=>{
+      if(inst.exch_seg!=="NSE")return;
+      const sym=(inst.symbol||"").replace(/-EQ$/i,"").toUpperCase();
+      if(sym&&inst.token&&!nseTokenMap[sym])nseTokenMap[sym]=String(inst.token);
+    });
+    // Build lot size map from NSE FUT segment
+    const lotMap={};
+    SESSION._instruments.forEach(inst=>{
+      if(inst.exch_seg!=="NFO")return;
+      if(!inst.instrumenttype||!inst.instrumenttype.includes("FUT"))return;
+      const name=(inst.name||"").toUpperCase();
+      if(name&&inst.lotsize&&!lotMap[name])lotMap[name]=parseInt(inst.lotsize)||1;
+    });
+    const stocks=Array.from(fnoSet).sort().map(sym=>({
+      sym,
+      token:nseTokenMap[sym]||null,
+      lot:lotMap[sym]||1
+    }));
+    log("F&O stock list derived: "+stocks.length+" stocks with tokens","OK");
     res.json({status:true,stocks,count:stocks.length,cached:false});
   }catch(e){
     log("fno-stock-list error: "+e.message,"WARN");
