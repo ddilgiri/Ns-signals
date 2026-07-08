@@ -1604,6 +1604,8 @@ function buildTradeCardV4(tr) {
   var capStr2=capUsed>=100000?'₹'+(capUsed/100000).toFixed(1)+'L':capUsed>=1000?'₹'+Math.round(capUsed/1000)+'K':'₹'+Math.round(capUsed);
   html += '<span style="font-size:10px;font-weight:700;color:var(--blue)">'+capStr2+'</span>';
   html += '</div>';
+  // Delete button — always visible, no expand needed
+  html += '<button onclick="event.stopPropagation();if(confirm(\'Delete this trade?\')){var idx=S.paperTrades.findIndex(function(t){return t.id===\'' + tr.id + '\'});if(idx>-1){S.paperTrades.splice(idx,1);savePaperTrades();renderTradesV4();toast(\'🗑️ Trade deleted\');}}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 6px;opacity:0.6">🗑️</button>';
   html += '</div>'; // content
   html += '</div>'; // header
 
