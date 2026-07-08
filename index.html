@@ -1606,8 +1606,10 @@ function buildTradeCardV4(tr) {
   html += '</div>';
   html += '</div>'; // content
   html += '</div>'; // header
-  // Delete button — absolute top-right, always visible
-  html += '<button onclick="event.stopPropagation();if(confirm(\'Delete this trade?\')){var idx=S.paperTrades.findIndex(function(t){return t.id===\'' + tr.id + '\'});if(idx>-1){S.paperTrades.splice(idx,1);savePaperTrades();renderTradesV4();toast(\'🗑️ Trade deleted\');}}}" style="position:absolute;top:8px;right:10px;background:none;border:none;font-size:14px;cursor:pointer;opacity:0.5;z-index:10;padding:2px 4px">🗑️</button>';
+  // Delete button — shown after live bar row, left aligned, always visible
+  html += '<div style="padding:4px 13px 0;display:flex;justify-content:flex-end">';
+  html += '<button onclick="event.stopPropagation();if(confirm(\'Delete this trade?\')){var idx=S.paperTrades.findIndex(function(t){return t.id===\'' + tr.id + '\'});if(idx>-1){S.paperTrades.splice(idx,1);savePaperTrades();renderTradesV4();toast(\'🗑️ Deleted\');}}" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:11px;color:#ef4444;cursor:pointer;padding:3px 10px">🗑️ Delete</button>';
+  html += '</div>';
 
   // Divider
   html += '<div style="height:1px;background:var(--border);margin:0 13px"></div>';
