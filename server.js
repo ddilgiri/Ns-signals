@@ -1,22 +1,4 @@
-const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),webpush=require("web-push"),app=express(),PORT=process.env.PORT||3001;
-
-// ── PUSH NOTIFICATIONS (Web Push / VAPID) ──────────────────
-const VAPID_PUBLIC_KEY="BJQoaQv0vQqD2Z8luZjUiK35MmJFquAZRsVlwa61qPk42_UoUU20UtDGdjgvLrThYVlvGs6FJ8pFsO_QPATLP9s";
-const VAPID_PRIVATE_KEY="LEr9ayJQtXgauVlB8p16Sex5hbctaN5-IIlQ2S1JvLw";
-webpush.setVapidDetails("mailto:dilip@fxo.local",VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY);
-const PUSH_SUB_FILE=path.join(__dirname,"push-subscriptions.json");
-let PUSH_SUBS=[];
-try{if(fs.existsSync(PUSH_SUB_FILE))PUSH_SUBS=JSON.parse(fs.readFileSync(PUSH_SUB_FILE,"utf8"));}catch(e){}
-function savePushSubs(){try{fs.writeFileSync(PUSH_SUB_FILE,JSON.stringify(PUSH_SUBS));}catch(e){}}
-async function sendPushToAll(title,body,tag){
-  const payload=JSON.stringify({title,body,tag:tag||"fno-signal"});
-  const dead=[];
-  for(const sub of PUSH_SUBS){
-    try{await webpush.sendNotification(sub,payload);}
-    catch(e){if(e.statusCode===410||e.statusCode===404)dead.push(sub);}
-  }
-  if(dead.length){PUSH_SUBS=PUSH_SUBS.filter(s=>!dead.includes(s));savePushSubs();}
-}
+const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -469,163 +451,8 @@ app.post("/signal-outcome",(req,res)=>{
 
 // ─── EXISTING ROUTES (unchanged) ───────────────────────────
 
-const FNO_LIST_CACHE={data:null,fetchTime:0};
-const FNO_LIST_TTL=24*60*60*1000; // refresh once a day
-const IDX_UNDERLYINGS=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
-async function buildFnoStockList(){
-  const resp=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:45000});
-  const master=resp.data;
-  // Step 1: find every distinct underlying "name" that has NFO stock options (OPTSTK) — this IS the F&O universe
-  const fnoNames=new Set();
-  const fnoLotByName={};
-  for(const row of master){
-    if(row.exch_seg==="NFO" && (row.instrumenttype==="OPTSTK"||row.instrumenttype==="FUTSTK")){
-      fnoNames.add(row.name);
-      fnoLotByName[row.name]=parseInt(row.lotsize)||1;
-    }
-  }
-  // Step 2: find NSE equity token for each F&O-eligible underlying (for spot price/candles)
-  const eqTokenByName={};
-  for(const row of master){
-    if(row.exch_seg==="NSE" && row.symbol && row.symbol.endsWith("-EQ")){
-      const baseSym=row.symbol.replace(/-EQ$/,"");
-      if(fnoNames.has(baseSym)) eqTokenByName[baseSym]=row.token;
-    }
-  }
-  // Step 3: assemble final stock list — only include names where we found BOTH an eq token AND an fno lot
-  const stocks=[];
-  for(const name of fnoNames){
-    if(eqTokenByName[name]){
-      stocks.push({sym:name,token:eqTokenByName[name],lot:fnoLotByName[name]});
-    }
-  }
-  stocks.sort((a,b)=>a.sym.localeCompare(b.sym));
-  // Step 4: derive current index option lot sizes (OPTIDX) for NIFTY/BANKNIFTY/FINNIFTY/MIDCPNIFTY
-  const idxLotByName={};
-  for(const row of master){
-    if(row.exch_seg==="NFO" && row.instrumenttype==="OPTIDX" && IDX_UNDERLYINGS.includes(row.name)){
-      idxLotByName[row.name]=parseInt(row.lotsize)||idxLotByName[row.name];
-    }
-  }
-  return{stocks,idxLots:idxLotByName};
-}
-app.get("/fno-stock-list",async(e,t)=>{
-  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});
-  try{
-    const forceRefresh=e.query.refresh==="1";
-    if(!forceRefresh && FNO_LIST_CACHE.data && Date.now()-FNO_LIST_CACHE.fetchTime<FNO_LIST_TTL){
-      return t.json({status:!0,cached:!0,count:FNO_LIST_CACHE.data.stocks.length,stocks:FNO_LIST_CACHE.data.stocks,idxLots:FNO_LIST_CACHE.data.idxLots,fetchedAt:new Date(FNO_LIST_CACHE.fetchTime).toISOString()});
-    }
-    log("Auto-deriving F&O stock list from Angel One scrip master...","INFO");
-    const result=await buildFnoStockList();
-    FNO_LIST_CACHE.data=result;
-    FNO_LIST_CACHE.fetchTime=Date.now();
-    log(`F&O stock list derived: ${result.stocks.length} stocks with valid token+lot`,"OK");
-    t.json({status:!0,cached:!1,count:result.stocks.length,stocks:result.stocks,idxLots:result.idxLots,fetchedAt:new Date(FNO_LIST_CACHE.fetchTime).toISOString()});
-  }catch(e){
-    const msg=e.response?.data?.message||e.message;
-    log(`F&O list derive error: ${msg}`,"ERR");
-    t.status(500).json({status:!1,message:msg});
-  }
-});
-app.post("/verify-tokens",async(e,t)=>{
-  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});
-  try{
-    const stocks=e.body.stocks; // [{sym, token, lot}]
-    if(!Array.isArray(stocks))return t.status(400).json({status:!1,message:"stocks array required"});
-    log("Verifying "+stocks.length+" tokens against fresh Angel One scrip master...","INFO");
-    const resp=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:45000});
-    const master=resp.data;
-    // Build lookup: NSE equity symbol -> {token, lotsize}
-    const eqLookup={};
-    for(const row of master){
-      if(row.exch_seg==="NSE" && row.symbol && row.symbol.endsWith("-EQ")){
-        const baseSym=row.symbol.replace(/-EQ$/,"");
-        eqLookup[baseSym]={token:row.token,lot:row.lotsize};
-      }
-    }
-    const results=[];
-    let mismatches=0,missing=0,ok=0;
-    for(const s of stocks){
-      const fresh=eqLookup[s.sym];
-      if(!fresh){
-        results.push({sym:s.sym,status:"NOT_FOUND",yourToken:s.token,freshToken:null,yourLot:s.lot,freshLot:null});
-        missing++;
-        continue;
-      }
-      const tokenMatch=String(fresh.token)===String(s.token);
-      const lotMatch=String(fresh.lot)===String(s.lot);
-      if(tokenMatch&&lotMatch){
-        ok++;
-        results.push({sym:s.sym,status:"OK",yourToken:s.token,freshToken:fresh.token,yourLot:s.lot,freshLot:fresh.lot});
-      }else{
-        mismatches++;
-        results.push({sym:s.sym,status:"MISMATCH",yourToken:s.token,freshToken:fresh.token,yourLot:s.lot,freshLot:fresh.lot,tokenMatch,lotMatch});
-      }
-    }
-    log(`Token verify done: ${ok} OK, ${mismatches} MISMATCH, ${missing} NOT_FOUND`,mismatches||missing?"WARN":"OK");
-    t.json({status:!0,summary:{ok,mismatches,missing,total:stocks.length},results:results.filter(r=>r.status!=="OK")});
-  }catch(e){
-    const msg=e.response?.data?.message||e.message;
-    log(`Token verify error: ${msg}`,"ERR");
-    t.status(500).json({status:!1,message:msg});
-  }
-});
-app.get("/oi-velocity",(e,t)=>{
-  try{
-    const results=[];
-    for(const sym of Object.keys(OI_HISTORY)){
-      const snaps=OI_HISTORY[sym];
-      if(!snaps||snaps.length<2)continue;
-      const latest=snaps[snaps.length-1];
-      const prior=snaps[Math.max(0,snaps.length-4)]; // compare vs ~3 snapshots back
-      if(!latest||!prior||prior.ts===latest.ts)continue;
-      const ceChg=prior.totalCeOI>0?((latest.totalCeOI-prior.totalCeOI)/prior.totalCeOI*100):0;
-      const peChg=prior.totalPeOI>0?((latest.totalPeOI-prior.totalPeOI)/prior.totalPeOI*100):0;
-      const maxAbsChg=Math.max(Math.abs(ceChg),Math.abs(peChg));
-      if(maxAbsChg<15)continue; // only report meaningful moves
-      results.push({sym,ceChg:Math.round(ceChg*10)/10,peChg:Math.round(peChg*10)/10,maxAbsChg:Math.round(maxAbsChg*10)/10,formula:latest.formula||"NEUTRAL",ageMs:latest.ts-prior.ts});
-    }
-    results.sort((a,b)=>b.maxAbsChg-a.maxAbsChg);
-    t.json({status:!0,count:results.length,movers:results.slice(0,20)});
-  }catch(e){
-    t.status(500).json({status:!1,message:e.message});
-  }
-});
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
-app.get("/push-public-key",(e,t)=>{t.json({status:!0,publicKey:VAPID_PUBLIC_KEY})});
-app.post("/push-subscribe",(e,t)=>{
-  try{
-    const sub=e.body;
-    if(!sub||!sub.endpoint)return t.status(400).json({status:!1,message:"Invalid subscription"});
-    const exists=PUSH_SUBS.some(s=>s.endpoint===sub.endpoint);
-    if(!exists){PUSH_SUBS.push(sub);savePushSubs();log("Push subscription added — total: "+PUSH_SUBS.length,"OK");}
-    t.json({status:!0,message:"Subscribed"});
-  }catch(e){t.status(500).json({status:!1,message:e.message});}
-});
-app.post("/push-unsubscribe",(e,t)=>{
-  try{
-    const{endpoint:a}=e.body;
-    PUSH_SUBS=PUSH_SUBS.filter(s=>s.endpoint!==a);
-    savePushSubs();
-    t.json({status:!0,message:"Unsubscribed"});
-  }catch(e){t.status(500).json({status:!1,message:e.message});}
-});
-app.post("/push-test",async(e,t)=>{
-  try{await sendPushToAll("🔔 Test Notification","DILIP FXO push is working!","test");t.json({status:!0,sent:PUSH_SUBS.length});}
-  catch(e){t.status(500).json({status:!1,message:e.message});}
-});
-app.post("/push-signal",async(e,t)=>{
-  try{
-    const{sym:a,strike:s,type:n,verdict:o,score:r,spotPrice:i}=e.body;
-    if(!a)return t.status(400).json({status:!1,message:"sym required"});
-    const title="📡 "+a+" "+s+" "+n;
-    const body=(o||"")+" · Score "+(r||0)+"% · Spot ₹"+(i?Math.round(i).toLocaleString("en-IN"):"--");
-    await sendPushToAll(title,body,"signal-"+a+"-"+n);
-    t.json({status:!0,sent:PUSH_SUBS.length});
-  }catch(e){t.status(500).json({status:!1,message:e.message});}
-});
 app.post("/login",async(e,t)=>{try{const{clientCode:a,password:s,apiKey:n,totpSecret:o}=e.body;if(!a||!s||!n)return log("Login: Missing required fields","WARN"),t.status(400).json({status:!1,message:"clientCode, password, and apiKey are required"});SESSION.clientCode=a,SESSION.apiKey=n;let r="";o&&o.trim()&&(r=generateTOTP(o),r?log(`TOTP generated: ${r}`):log("TOTP secret invalid — proceeding without 2FA","WARN")),log(`Authenticating ${a}...`);const i=(await axios.post(`${ANGEL_API}/rest/auth/angelbroking/user/v1/loginByPassword`,{clientcode:a,password:s,totp:r},{headers:getHeaders(!1),timeout:25e3})).data;if(!0===i.status&&i.data)return SESSION.jwtToken=i.data.jwtToken,SESSION.refreshToken=i.data.refreshToken,SESSION.feedToken=i.data.feedToken,SESSION.expiresAt=Date.now()+288e5,log(`✅ Login successful — ${a}`,"OK"),t.json({status:!0,message:"Login successful",client:a,tokenExpiry:new Date(SESSION.expiresAt).toLocaleTimeString("en-IN")});const l=i.message||i.errorcode||"Unknown error";return log(`❌ Login failed: ${l}`,"ERR"),t.status(401).json({status:!1,message:l})}catch(e){const a=e.response?.data?.message||e.response?.data?.errorcode||e.message;log(`❌ Login error: ${a}`,"ERR"),t.status(500).json({status:!1,message:a||"Connection error — check if Angel One API is reachable"})}})
 app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;log(`Quote error: ${a}`,"WARN"),t.status(e.response?.status||500).json({status:!1,message:a})}})
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
@@ -777,38 +604,14 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
   const _vixForGamma=VIX_CACHE.data&&VIX_CACHE.data.vix?VIX_CACHE.data.vix:null;
   const _isIndexSym=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"].includes(i);
 const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,totalCeOI:T,totalPeOI:y},exInfoForGamma,_vixForGamma,_isIndexSym);
-  const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmCeOIChange:P.CE_oiChange||0,atmPeOIChange:P.PE_oiChange||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
+  const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
   // Save OI snapshot for trend tracking
   saveOISnapshot(i, oiResult);
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
 const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
-function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;
-  const oiConfirmsBullish=e.dilipFormula==="CE";
-  const oiConfirmsBearish=e.dilipFormula==="PE";
-  let o=0,r="";
-  if(a){
-    // CE: with OI confirmation, momentum RSI (60-85) is a GOOD sign, not overbought penalty
-    if(oiConfirmsBullish && n>=60 && n<85){o=t;r=`RSI ${n} — strong momentum, OI-confirmed ✓✓`;}
-    else if(n>85){o=.15*t;r=`RSI ${n} — extreme/blow-off risk, caution`;}
-    else if(n<35){o=t;r=`RSI ${n} — oversold, strong CE`;}
-    else if(n<45){o=.8*t;r=`RSI ${n} — below midline`;}
-    else if(n<60){o=.6*t;r=`RSI ${n} — neutral`;}
-    else if(n<70){o=.5*t;r=`RSI ${n} — elevated, no OI confirm yet`;}
-    else{o=.3*t;r=`RSI ${n} — overbought, no OI confirm`;}
-  }else{
-    // PE: with OI confirmation, momentum RSI (15-40) is a GOOD sign, not oversold penalty
-    if(oiConfirmsBearish && n<=40 && n>15){o=t;r=`RSI ${n} — strong down-momentum, OI-confirmed ✓✓`;}
-    else if(n<15){o=.15*t;r=`RSI ${n} — extreme/capitulation risk, caution`;}
-    else if(n>65){o=t;r=`RSI ${n} — overbought, strong PE`;}
-    else if(n>55){o=.8*t;r=`RSI ${n} — above midline`;}
-    else if(n>40){o=.6*t;r=`RSI ${n} — neutral`;}
-    else if(n>30){o=.5*t;r=`RSI ${n} — low, no OI confirm yet`;}
-    else{o=.3*t;r=`RSI ${n} — oversold, no OI confirm`;}
-  }
-  s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}
-}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
 const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
 const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
 const orbNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
@@ -1028,21 +831,28 @@ if(!n&&oiPass===false){
   const isPutCallTrap=e.putTrapRisk||e.callTrapRisk;
   const isAvoid=oiFormula==="AVOID";
   const stockInOwnExpiry=e.isExpiryDay||e.isExpiryWeek;
-  if(isPutCallTrap){
-    // Block trap only when score is also weak — strong technicals (>=65) override trap on non-expiry days
-    if(stockInOwnExpiry||finalScore<65){
-      n=true;o=s.dilipOIFormula?.note||"OI trap detected — signal blocked";
+  // Only hardBlock if there is meaningful OI data (oiEarned>0)
+  // On first day of new series, OI is thin → oiEarned=0 → skip trap block
+  const hasOIData=oiEarned>0||(e.atmCeOI>0||e.atmPeOI>0);
+  if(hasOIData){
+    if(isPutCallTrap){
+      if(stockInOwnExpiry||finalScore<65){
+        n=true;o=s.dilipOIFormula?.note||"OI trap detected — signal blocked";
+      }
+    } else if(isAvoid&&stockInOwnExpiry){
+      n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
     }
-  } else if(isAvoid&&stockInOwnExpiry){
-    n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
   }
-  // AVOID on non-expiry + NEUTRAL → no hard block, score cap handles it
+  // No OI data (new series day) → skip hard block, let score decide
 }
 
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
 // NEUTRAL = insufficient data → allow signal through, no cap
 // Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
-const oiWrongDir=oiEarned===0&&oiPass===false&&!n;
+// Only cap score if there IS meaningful OI data pointing wrong direction
+// If oiEarned=0 AND no ATM OI data → new series / thin data → don't cap
+const hasOIData2=(e.atmCeOI>0||e.atmPeOI>0);
+const oiWrongDir=oiEarned===0&&oiPass===false&&!n&&hasOIData2;
 if(oiWrongDir){
   finalScore=Math.min(finalScore,59);
   const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
@@ -1065,7 +875,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
-  let C,O;A?(C="TRAP",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=60?(C="MODERATE",O="Good setup — consider half position size"):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
+  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=60?(C="MODERATE",O="Good setup — consider half position size"):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
