@@ -340,13 +340,14 @@ async function loadFnoStockList(forceRefresh){
     var isStale=!cachedAt||(Date.now()-parseInt(cachedAt))>24*60*60*1000;
     if(cached && !isStale && !forceRefresh){
       var parsed=JSON.parse(cached);
-      if(parsed && parsed.length>50){NSE_STOCKS=parsed;addLog("✅ Using cached F&O list ("+NSE_STOCKS.length+" stocks)","ok");var btnEl0=document.getElementById("verifyTokBtn");if(btnEl0 && !btnEl0.disabled) btnEl0.innerHTML="🔄 Refresh F&O Stock List ("+NSE_STOCKS.length+" stocks)";return;}
+      if(parsed && parsed.length>50){NSE_STOCKS=parsed.map(function(s){return typeof s==="string"?{sym:s,token:null,lot:1}:s;});addLog("✅ Using cached F&O list ("+NSE_STOCKS.length+" stocks)","ok");var btnEl0=document.getElementById("verifyTokBtn");if(btnEl0 && !btnEl0.disabled) btnEl0.innerHTML="🔄 Refresh F&O Stock List ("+NSE_STOCKS.length+" stocks)";return;}
     }
     addLog("🔄 Auto-deriving F&O stock list from Angel One...","");
     var res=await fetch(getServer()+"/fno-stock-list"+(forceRefresh?"?refresh=1":""));
     var data=await res.json();
     if(data.status && data.stocks && data.stocks.length>50){
-      NSE_STOCKS=data.stocks;
+      // Convert string list to {sym,token,lot} objects expected by scanner
+      NSE_STOCKS=data.stocks.filter(function(s){return s&&typeof s==="string"}).map(function(s){return{sym:s,token:null,lot:1};});
       localStorage.setItem("fxo-fno-list",JSON.stringify(NSE_STOCKS));
       localStorage.setItem("fxo-fno-list-ts",String(Date.now()));
       // Also sync fresh index lot sizes if present
