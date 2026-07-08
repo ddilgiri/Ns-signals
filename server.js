@@ -1006,6 +1006,36 @@ app.get("/news-sentiment",async(e,t)=>{if(NEWS_CACHE.data&&Date.now()-NEWS_CACHE
 
 app.post("/resolve-tokens",async(e,t)=>{try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){const e=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=e.data,SESSION._instrFetchTime=Date.now()}const a=(e.body.symbols||[]).map(e=>e.toUpperCase()),s={};for(const e of a){const t=SESSION._instruments.find(t=>"NSE"===t.exch_seg&&(t.symbol===e+"-EQ"||t.symbol===e||t.name===e)&&t.token);t&&(s[e]=String(t.token))}log("Token resolution: "+Object.keys(s).length+" resolved","INFO"),t.json({status:!0,tokens:s})}catch(e){t.status(500).json({status:!1,message:e.message})}})
 
+app.get("/fno-stock-list",async(req,res)=>{
+  try{
+    if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>14400000){
+      log("Downloading scrip master for F&O list...","INFO");
+      const r=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
+      SESSION._instruments=r.data;SESSION._instrFetchTime=Date.now();
+    }
+    const now=new Date();
+    // Get unique stock names that have NFO options (F&O eligible)
+    const fnoSet=new Set();
+    SESSION._instruments.forEach(inst=>{
+      if(inst.exch_seg!=="NFO")return;
+      if(!inst.instrumenttype||!inst.instrumenttype.includes("OPT"))return;
+      // Exclude indices
+      const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
+      const name=(inst.name||"").toUpperCase();
+      if(!name||INDICES.includes(name))return;
+      // Only include if expiry is in future
+      const exp=inst.expiry?new Date(inst.expiry):null;
+      if(exp&&exp>now)fnoSet.add(name);
+    });
+    const stocks=Array.from(fnoSet).sort();
+    log("F&O stock list derived: "+stocks.length+" stocks","OK");
+    res.json({status:true,stocks,count:stocks.length,cached:false});
+  }catch(e){
+    log("fno-stock-list error: "+e.message,"WARN");
+    res.status(500).json({status:false,message:e.message});
+  }
+});
+
 app.get("/token-list",async(e,t)=>{try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading scrip master for token list...","INFO");const e=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=e.data,SESSION._instrFetchTime=Date.now()}const e={};SESSION._instruments.forEach(t=>{if("NSE"!==t.exch_seg)return;const a=(t.symbol||"").replace("-EQ","").toUpperCase();e[a]||(e[a]=String(t.token))}),log("Token list served: "+Object.keys(e).length+" NSE symbols","INFO"),t.json({status:!0,tokens:e,count:Object.keys(e).length})}catch(e){log("token-list error: "+e.message,"WARN"),t.status(500).json({status:!1,message:e.message})}})
 
 loadSignalLogFromDisk();
