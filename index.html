@@ -1678,8 +1678,8 @@ function buildTradeCardV4(tr) {
   // V4 fuel bar and capsules — use trade object (saved in localStorage), fallback to live signal
   var sig = S.signals.find(function(s){ return s.id === tr.sigId; });
   var sigSrc = sig || tr; // use live signal if available, else trade data from localStorage
+  sig = sigSrc; // update sig to use trade data if signal gone
   if(sigSrc) {
-  var sig = sigSrc; // alias so inner code works unchanged
     var fuelPct = v4FuelPct ? v4FuelPct(sig) : 50;
     var fuelCol = isPE ? 'var(--red)' : 'var(--green)';
     html += '<div style="margin-bottom:8px">';
