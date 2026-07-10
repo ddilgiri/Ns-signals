@@ -213,7 +213,7 @@ el.className=baseClass+" "+(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-n
       });
     });
     savePaperTrades();
-  }catch(err){console.warn("batchUpdatePremiums error:",err.message);}
+  }catch(err){console.warn("batchUpdatePremiums error:",err.message);if(err.message&&err.message.includes("Not authenticate")&&S.connected){S.connected=false;setTimeout(doLogin,3000);}}
 }
 function updateAllCards(){
   // Also update trade tab LIVE SPOT elements
