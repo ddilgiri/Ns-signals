@@ -638,14 +638,8 @@ setInterval(function(){try{savePaperTrades();}catch(e){}},8000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"){try{savePaperTrades();}catch(e){}}});
 window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
-window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),setTimeout(function(){if(typeof renderTradesV4==="function")renderTradesV4();},100),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("✅ Credentials found — auto connecting...","ok"),(function _ac(attempt,delay){
-  setTimeout(function(){
-    if(S.connected)return;
-    addLog("🔌 Auto connect attempt "+attempt+"...","");
-    try{doLogin();}catch(ex){addLog("❌ Error: "+ex.message,"err");}
-    if(attempt<8)_ac(attempt+1,attempt<3?10000:20000);
-  },delay);
-})(1,3000)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
+window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),setTimeout(function(){if(typeof renderTradesV4==="function")renderTradesV4();},200),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),
+(function _ac(attempt,delay){setTimeout(function(){if(S.connected)return;addLog("🔌 Auto connecting attempt "+attempt+"...","");try{doLogin();}catch(ex){addLog("❌ "+ex.message,"err");}if(attempt<8)_ac(attempt+1,attempt<3?10000:20000);},delay);})(1,3000)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
 // Zone A: Symbol · Strike · Premium · Meta
@@ -1521,10 +1515,7 @@ function renderTradesV4() {
   } else {
     openEl.innerHTML = S.paperTrades.map(function(tr) {
       try { return buildTradeCardV4(tr); }
-      catch(e) { 
-        console.error('buildTradeCardV4 error for', tr.sym, e.message);
-        return '<div style="padding:10px;color:red;font-size:11px">⚠️ Error rendering '+tr.sym+' '+tr.strike+' '+tr.type+'</div>';
-      }
+      catch(e) { return '<div style="padding:10px;color:red;font-size:11px">⚠️ Error: '+tr.sym+' '+tr.strike+' '+tr.type+'</div>'; }
     }).join('');
   }
 
@@ -1679,8 +1670,8 @@ function buildTradeCardV4(tr) {
   // V4 fuel bar and capsules — use trade object (saved in localStorage), fallback to live signal
   var sig = S.signals.find(function(s){ return s.id === tr.sigId; });
   var sigSrc = sig || tr; // use live signal if available, else trade data from localStorage
-  sig = sigSrc; // update sig to use trade data if signal gone
   if(sigSrc) {
+  var sig = sigSrc; // alias so inner code works unchanged
     var fuelPct = v4FuelPct ? v4FuelPct(sig) : 50;
     var fuelCol = isPE ? 'var(--red)' : 'var(--green)';
     html += '<div style="margin-bottom:8px">';
@@ -2084,8 +2075,12 @@ function v42SubmitTrade() {
   setTimeout(async function(){
     try {
       if(!S.connected) return;
-      // Use strike as approximate spot for OI analysis (no separate spot fetch needed)
-      var spot = LIVE_PRICES[sym] || strike;
+      var spotRes = await fetch(getServer()+'/market-data', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({symbolToken: trade.token||'', sym: sym, exchange:'NSE'})
+      });
+      var spotData = await spotRes.json();
+      var spot = spotData.ltp || strike;
 
       var oiRes = await fetch(getServer()+'/oi-analysis', {
         method:'POST', headers:{'Content-Type':'application/json'},
