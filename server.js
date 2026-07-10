@@ -909,7 +909,8 @@ app.post("/live-trade-prices",async(req,res)=>{
   const{trades}=req.body;
   if(!trades||!trades.length)return res.json({status:true,prices:{}});
   try{
-    await getInstruments();
+    try{await getInstruments();}catch(ie){log("Instruments unavailable: "+ie.message,"WARN");return res.json({status:true,prices:{}});}
+    if(!SESSION._instruments)return res.json({status:true,prices:{}});
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
     function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
     const tokenMap={};const tokenToKey={};const now=new Date();
