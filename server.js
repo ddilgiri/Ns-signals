@@ -1047,6 +1047,8 @@ app.get("/fno-stock-list",async(req,res)=>{
     }));
     log("F&O stock list derived: "+stocks.length+" stocks with tokens","OK");
     res.json({status:true,stocks,count:stocks.length,cached:false});
+    // Release from memory after serving
+    setTimeout(function(){delete SESSION._instruments;delete SESSION._instrFetchTime;},30000);
   }catch(e){
     log("fno-stock-list error: "+e.message,"WARN");
     res.status(500).json({status:false,message:e.message});
