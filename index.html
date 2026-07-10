@@ -638,22 +638,14 @@ setInterval(function(){try{savePaperTrades();}catch(e){}},8000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"){try{savePaperTrades();}catch(e){}}});
 window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
-window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),setTimeout(function(){if(typeof renderTradesV4==="function")renderTradesV4();},100),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("✅ Credentials found: "+t+" — connecting in 2s...","ok"),setTimeout(function(){
-  addLog("🔌 Calling doLogin now...","");
-  try{doLogin();}catch(ex){addLog("❌ doLogin error: "+ex.message,"err");}
-  setTimeout(function(){ 
-    if(!S.connected){
-      addLog("🔌 Retry 1 (15s)...","");
-      try{doLogin();}catch(ex){addLog("❌ Retry error: "+ex.message,"err");}
-    }
-  },15000);
-  setTimeout(function(){ 
-    if(!S.connected){
-      addLog("🔌 Retry 2 (35s)...","");
-      try{doLogin();}catch(ex){addLog("❌ Retry error: "+ex.message,"err");}
-    }
-  },35000);
-},2000)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
+window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),setTimeout(function(){if(typeof renderTradesV4==="function")renderTradesV4();},100),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("✅ Credentials found — auto connecting...","ok"),(function _ac(attempt,delay){
+  setTimeout(function(){
+    if(S.connected)return;
+    addLog("🔌 Auto connect attempt "+attempt+"...","");
+    try{doLogin();}catch(ex){addLog("❌ Error: "+ex.message,"err");}
+    if(attempt<8)_ac(attempt+1,attempt<3?10000:20000);
+  },delay);
+})(1,3000)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
 // Zone A: Symbol · Strike · Premium · Meta
