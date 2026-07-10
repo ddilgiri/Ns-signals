@@ -821,7 +821,7 @@ else if(!a&&p==="LONG_UNWINDING"){n=0.15*t;o="⚠️ Long unwinding — PE weak 
 else if(!a&&p==="SHORT_BUILDUP"){n=0.65*t;o="Short buildup — PE opportunity";r=true;}
 else{n=0.2*t;o=`OI neutral — technicals driving ${a?"CE":"PE"}`;r=null;}
 if(a&&e.rameshTrapped&&r){n=Math.min(t,n+5);o+=" + Ramesh trapped bonus";}
-if(!a&&e.sureshTrapped&&r){n=Math.min(t,n+5);o+=" + Suresh trapped bonus";},s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
+if(!a&&e.sureshTrapped&&r){n=Math.min(t,n+5);o+=" + Suresh trapped bonus";}s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
 const atmBonus=s.atmDistance?.earned||0;
 const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
 const r=baseEarned+atmBonus;
