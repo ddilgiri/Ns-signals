@@ -638,21 +638,19 @@ setInterval(function(){try{savePaperTrades();}catch(e){}},8000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"){try{savePaperTrades();}catch(e){}}});
 window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
-window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),
-(function autoConnect(attempt){
-  setTimeout(async function(){
-    // Check if server is alive first
-    try{
-      var r=await fetch(getServer()+"/health",{method:"GET"});
-      if(r.ok){addLog("Server ready — connecting (attempt "+attempt+")","");doLogin();}
-      else if(attempt<5){addLog("Server warming up... retry "+(attempt+1)+"/5","");autoConnect(attempt+1);}
+window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),renderTradesV4&&renderTradesV4(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),
+(function tryConnect(n){
+  setTimeout(function(){
+    fetch(getServer()+"/health").then(function(r){
+      if(r.ok){addLog("Server ready — auto connecting","");doLogin();}
+      else if(n>1){addLog("Server warming up ("+n+" retries left)...","");tryConnect(n-1);}
       else{addLog("Server not responding — tap Connect manually","warn");}
-    }catch(e){
-      if(attempt<5){addLog("Server warming up... retry "+(attempt+1)+"/5 ("+Math.round(attempt*3)+"s)","");autoConnect(attempt+1);}
-      else{addLog("Server not responding — tap Connect manually","warn");}
-    }
-  }, attempt===1?2000:attempt*3000);
-})(1)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
+    }).catch(function(){
+      if(n>1){addLog("Waiting for server... ("+n+" retries left)","");tryConnect(n-1);}
+      else{addLog("Server unavailable — tap Connect manually","warn");}
+    });
+  },n===5?2000:5000);
+})(5)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
 // Zone A: Symbol · Strike · Premium · Meta
