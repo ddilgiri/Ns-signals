@@ -804,7 +804,27 @@ try{
     p=e.peSignal?.signal||"";
   }
 }catch(sigErr){u=e.ceSignal?.signal||"";p=e.peSignal?.signal||"";}
-a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
+// ── JIOFIN-type fix: LONG_UNWINDING and SHORT_BUILDUP always block CE
+// LONG_UNWINDING = longs exiting = bearish = never good for CE
+// SHORT_BUILDUP = bears entering = bearish = never good for CE
+// PUT_COVERING and SHORT_COVERING for wrong direction = hard block
+const ceKiller=a&&(u==="LONG_UNWINDING"||u==="SHORT_BUILDUP");
+const peKiller=!a&&(p==="LONG_UNWINDING"||p==="SHORT_BUILDUP");
+if(a&&l){n=0;o="⚠️ PUT TRAP risk — blocks CE";r=false;}
+else if(!a&&c){n=0;o="⚠️ CALL TRAP risk — blocks PE";r=false;}
+else if(ceKiller){n=0;o=`❌ ${u} detected — CE blocked (bearish OI flow)`;r=false;}
+else if(peKiller){n=0;o=`❌ ${p} detected — PE blocked (bullish OI flow)`;r=false;}
+else if(a&&"CE"===i){n=t;o=`Dilip formula: ${e.dilipFormulaNote}`;r=true;}
+else if(!a&&"PE"===i){n=t;o=`Dilip formula: ${e.dilipFormulaNote}`;r=true;}
+else if("AVOID"===i){n=0;o="Both sides strong = price trapped";r=false;}
+else if(a&&u==="SHORT_COVERING"){n=0.85*t;o="Ramesh running — CE opportunity";r=true;}
+else if(!a&&p==="PUT_COVERING"){n=0.85*t;o="Suresh running — PE opportunity";r=true;}
+else if(a&&u==="LONG_BUILDUP"){n=0.6*t;o="Long buildup — CE with caution";r=true;}
+else if(!a&&p==="SHORT_BUILDUP"){n=0;o="Short buildup — PE blocked (bears entering)";r=false;}
+else if(!a&&p==="LONG_BUILDUP"){n=0.6*t;o="Long buildup — PE with caution";r=true;}
+else{n=0;o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`;r=false;}
+if(a&&e.rameshTrapped&&r){n=Math.min(t,n+5);o+=" + Ramesh trapped bonus";}
+if(!a&&e.sureshTrapped&&r){n=Math.min(t,n+5);o+=" + Suresh trapped bonus";},s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
 const atmBonus=s.atmDistance?.earned||0;
 const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
 const r=baseEarned+atmBonus;
@@ -841,6 +861,13 @@ if(!n&&oiPass===false){
       }
     } else if(isAvoid&&stockInOwnExpiry){
       n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
+    }
+    // Hard block if OI flow completely opposes direction — even strong technicals can't save this
+    if(!n&&oiEarned===0&&oiPass===false){
+      const note=s.dilipOIFormula?.note||"";
+      if(note.includes("LONG_UNWINDING")||note.includes("SHORT_BUILDUP")||note.includes("❌")){
+        n=true;o=note;
+      }
     }
   }
   // No OI data (new series day) → skip hard block, let score decide
