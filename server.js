@@ -868,14 +868,19 @@ if(!n&&oiPass===false){
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
 // NEUTRAL = insufficient data → allow signal through, no cap
 // Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
-// Only cap score if there IS meaningful OI data pointing wrong direction
-// If oiEarned=0 AND no ATM OI data → new series / thin data → don't cap
+// Cap score based on OI direction quality
 const hasOIData2=(e.atmCeOI>0||e.atmPeOI>0);
 const oiWrongDir=oiEarned===0&&oiPass===false&&!n&&hasOIData2;
+const oiWeakDir=oiPass===null&&oiEarned<0.2*oiMax; // LONG_UNWINDING/SHORT_BUILDUP for wrong side
 if(oiWrongDir){
+  // OI explicitly wrong direction — cap at 59 (below threshold)
   finalScore=Math.min(finalScore,59);
-  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
+  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped]":" ⚠️ [OI mismatch — capped]";
   if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
+} else if(oiWeakDir&&hasOIData2){
+  // OI weakly wrong (LONG_UNWINDING etc) — cap at 65 to reduce noise
+  finalScore=Math.min(finalScore,65);
+  if(s.dilipOIFormula)s.dilipOIFormula.note+=" ⚠️ [Weak OI — score capped at 65]";
 }
 return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
