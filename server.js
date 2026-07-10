@@ -2,6 +2,12 @@ const express=require("express"),cors=require("cors"),axios=require("axios"),spe
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
+let _instrPromise=null;
+async function getInstruments(){
+  if(SESSION._instruments&&Date.now()-(SESSION._instrFetchTime||0)<3600000)return SESSION._instruments;
+  if(!_instrPromise){_instrPromise=axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000}).then(r=>{SESSION._instruments=r.data;SESSION._instrFetchTime=Date.now();return r.data;}).catch(e=>{throw e;}).finally(()=>{_instrPromise=null;});}
+  return _instrPromise;
+}
 function isAuthenticated(){return SESSION.jwtToken&&Date.now()<SESSION.expiresAt}
 function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});console.log(`[${a}] [${t}] ${e}`)}
 
@@ -568,7 +574,7 @@ app.post("/oi-analysis",async(e,t)=>{
   const{symbol:a,spotPrice:s,expiry:n}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
-  try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master for OI analysis...","INFO");const de=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=de.data,SESSION._instrFetchTime=Date.now()}const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
+  try{await getInstruments();const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
 const _expiryEnd=new Date(c);_expiryEnd.setHours(15,30,0,0);
 const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){
   const ge=c.getMonth(),me=c.getFullYear(),he=d.filter(e=>e.date.getMonth()===ge&&e.date.getFullYear()===me);
@@ -903,11 +909,7 @@ app.post("/live-trade-prices",async(req,res)=>{
   const{trades}=req.body;
   if(!trades||!trades.length)return res.json({status:true,prices:{}});
   try{
-    if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>14400000){
-      log("Downloading NFO instrument master for live trade prices...","INFO");
-      const R=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
-      SESSION._instruments=R.data;SESSION._instrFetchTime=Date.now();
-    }
+    await getInstruments();
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
     function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
     const tokenMap={};const tokenToKey={};const now=new Date();
