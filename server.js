@@ -568,7 +568,7 @@ app.post("/oi-analysis",async(e,t)=>{
   const{symbol:a,spotPrice:s,expiry:n}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
-  try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master for OI analysis...","INFO");const de=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=de.data,SESSION._instrFetchTime=Date.now();setTimeout(function(){delete SESSION._instruments;delete SESSION._instrFetchTime;log("Instrument master cleared from memory","INFO");},60000)}const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
+  try{if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>144e5){log("Downloading NFO instrument master for OI analysis...","INFO");const de=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:3e4});SESSION._instruments=de.data;setTimeout(()=>{delete SESSION._instruments;},5000);setTimeout(function(){delete SESSION._instruments;delete SESSION._instrFetchTime;log("Instrument master cleared from memory","INFO");},60000)}const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
 const _expiryEnd=new Date(c);_expiryEnd.setHours(15,30,0,0);
 const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){
   const ge=c.getMonth(),me=c.getFullYear(),he=d.filter(e=>e.date.getMonth()===ge&&e.date.getFullYear()===me);
@@ -906,7 +906,7 @@ app.post("/live-trade-prices",async(req,res)=>{
     if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>14400000){
       log("Downloading NFO instrument master for live trade prices...","INFO");
       const R=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
-      SESSION._instruments=R.data;SESSION._instrFetchTime=Date.now();
+      SESSION._instruments=R.data;setTimeout(()=>{delete SESSION._instruments;},5000);
     }
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
     function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
@@ -1008,16 +1008,14 @@ app.post("/resolve-tokens",async(e,t)=>{try{if(!SESSION._instruments||Date.now()
 
 app.get("/fno-stock-list",async(req,res)=>{
   try{
-    if(!SESSION._instruments||Date.now()-(SESSION._instrFetchTime||0)>14400000){
-      log("Downloading scrip master for F&O list...","INFO");
-      const r=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
-      SESSION._instruments=r.data;SESSION._instrFetchTime=Date.now();
-    }
+    log("Downloading scrip master for F&O list...","INFO");
+    const _r=await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",{timeout:30000});
+    const _instr=_r.data; // LOCAL variable — never stored in SESSION
     const now=new Date();
     const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
     // Get unique stock names with future NFO options
     const fnoSet=new Set();
-    SESSION._instruments.forEach(inst=>{
+    _instr.forEach(inst=>{
       if(inst.exch_seg!=="NFO")return;
       if(!inst.instrumenttype||!inst.instrumenttype.includes("OPT"))return;
       const name=(inst.name||"").toUpperCase();
@@ -1027,14 +1025,14 @@ app.get("/fno-stock-list",async(req,res)=>{
     });
     // Build NSE token map for EQ segment
     const nseTokenMap={};
-    SESSION._instruments.forEach(inst=>{
+    _instr.forEach(inst=>{
       if(inst.exch_seg!=="NSE")return;
       const sym=(inst.symbol||"").replace(/-EQ$/i,"").toUpperCase();
       if(sym&&inst.token&&!nseTokenMap[sym])nseTokenMap[sym]=String(inst.token);
     });
     // Build lot size map from NSE FUT segment
     const lotMap={};
-    SESSION._instruments.forEach(inst=>{
+    _instr.forEach(inst=>{
       if(inst.exch_seg!=="NFO")return;
       if(!inst.instrumenttype||!inst.instrumenttype.includes("FUT"))return;
       const name=(inst.name||"").toUpperCase();
@@ -1048,7 +1046,7 @@ app.get("/fno-stock-list",async(req,res)=>{
     log("F&O stock list derived: "+stocks.length+" stocks with tokens","OK");
     res.json({status:true,stocks,count:stocks.length,cached:false});
     // Release from memory after serving
-    setTimeout(function(){delete SESSION._instruments;delete SESSION._instrFetchTime;},30000);
+    
   }catch(e){
     log("fno-stock-list error: "+e.message,"WARN");
     res.status(500).json({status:false,message:e.message});
