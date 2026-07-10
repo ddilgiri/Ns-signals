@@ -804,24 +804,7 @@ try{
     p=e.peSignal?.signal||"";
   }
 }catch(sigErr){u=e.ceSignal?.signal||"";p=e.peSignal?.signal||"";}
-// OI direction scoring — penalize bad flow but don't hard block
-// Let strong technicals still push weak OI signals through
-if(a&&l){n=0;o="⚠️ PUT TRAP risk — CE penalized";r=false;}
-else if(!a&&c){n=0;o="⚠️ CALL TRAP risk — PE penalized";r=false;}
-else if(a&&"CE"===i){n=t;o=`Dilip formula: ${e.dilipFormulaNote}`;r=true;}
-else if(!a&&"PE"===i){n=t;o=`Dilip formula: ${e.dilipFormulaNote}`;r=true;}
-else if("AVOID"===i){n=0;o="Both sides strong = price trapped";r=false;}
-else if(a&&u==="SHORT_COVERING"){n=0.85*t;o="Ramesh running — CE opportunity";r=true;}
-else if(!a&&p==="PUT_COVERING"){n=0.85*t;o="Suresh running — PE opportunity";r=true;}
-else if(a&&u==="LONG_BUILDUP"){n=0.65*t;o="Long buildup — CE with caution";r=true;}
-else if(!a&&p==="LONG_BUILDUP"){n=0.65*t;o="Long buildup — PE with caution";r=true;}
-else if(a&&u==="LONG_UNWINDING"){n=0.15*t;o="⚠️ Long unwinding — CE weak (bearish flow)";r=null;}
-else if(a&&u==="SHORT_BUILDUP"){n=0.1*t;o="⚠️ Short buildup — CE risky";r=null;}
-else if(!a&&p==="LONG_UNWINDING"){n=0.15*t;o="⚠️ Long unwinding — PE weak (bullish flow)";r=null;}
-else if(!a&&p==="SHORT_BUILDUP"){n=0.65*t;o="Short buildup — PE opportunity";r=true;}
-else{n=0.2*t;o=`OI neutral — technicals driving ${a?"CE":"PE"}`;r=null;}
-if(a&&e.rameshTrapped&&r){n=Math.min(t,n+5);o+=" + Ramesh trapped bonus";}
-if(!a&&e.sureshTrapped&&r){n=Math.min(t,n+5);o+=" + Suresh trapped bonus";}s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
+a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
 const atmBonus=s.atmDistance?.earned||0;
 const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
 const r=baseEarned+atmBonus;
@@ -859,8 +842,6 @@ if(!n&&oiPass===false){
     } else if(isAvoid&&stockInOwnExpiry){
       n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
     }
-    // Note: LONG_UNWINDING/SHORT_BUILDUP are penalized in score but not hard blocked
-    // Strong technicals (EMA/RSI/VWAP) can still push these through at reduced score
   }
   // No OI data (new series day) → skip hard block, let score decide
 }
@@ -868,19 +849,14 @@ if(!n&&oiPass===false){
 // SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
 // NEUTRAL = insufficient data → allow signal through, no cap
 // Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
-// Cap score based on OI direction quality
+// Only cap score if there IS meaningful OI data pointing wrong direction
+// If oiEarned=0 AND no ATM OI data → new series / thin data → don't cap
 const hasOIData2=(e.atmCeOI>0||e.atmPeOI>0);
 const oiWrongDir=oiEarned===0&&oiPass===false&&!n&&hasOIData2;
-const oiWeakDir=oiPass===null&&oiEarned<0.2*oiMax; // LONG_UNWINDING/SHORT_BUILDUP for wrong side
 if(oiWrongDir){
-  // OI explicitly wrong direction — cap at 59 (below threshold)
   finalScore=Math.min(finalScore,59);
-  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped]":" ⚠️ [OI mismatch — capped]";
+  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
   if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
-} else if(oiWeakDir&&hasOIData2){
-  // OI weakly wrong (LONG_UNWINDING etc) — cap at 65 to reduce noise
-  finalScore=Math.min(finalScore,65);
-  if(s.dilipOIFormula)s.dilipOIFormula.note+=" ⚠️ [Weak OI — score capped at 65]";
 }
 return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
