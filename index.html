@@ -1525,7 +1525,11 @@ function renderTradesV4() {
       '<div class="empty-sub">Engine auto-trades every new signal<br>1 lot · auto-exit on target/stop</div></div>';
   } else {
     openEl.innerHTML = S.paperTrades.map(function(tr) {
-      return buildTradeCardV4(tr);
+      try { return buildTradeCardV4(tr); }
+      catch(e) { 
+        console.error('buildTradeCardV4 error for', tr.sym, e.message);
+        return '<div style="padding:10px;color:red;font-size:11px">⚠️ Error rendering '+tr.sym+' '+tr.strike+' '+tr.type+'</div>';
+      }
     }).join('');
   }
 
@@ -2085,12 +2089,8 @@ function v42SubmitTrade() {
   setTimeout(async function(){
     try {
       if(!S.connected) return;
-      var spotRes = await fetch(getServer()+'/market-data', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({symbolToken: trade.token||'', sym: sym, exchange:'NSE'})
-      });
-      var spotData = await spotRes.json();
-      var spot = spotData.ltp || strike;
+      // Use strike as approximate spot for OI analysis (no separate spot fetch needed)
+      var spot = LIVE_PRICES[sym] || strike;
 
       var oiRes = await fetch(getServer()+'/oi-analysis', {
         method:'POST', headers:{'Content-Type':'application/json'},
