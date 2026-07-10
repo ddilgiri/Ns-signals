@@ -1240,6 +1240,7 @@ function buildCardV4(e){
   caps.forEach(function(c){html+='<div class="v4-cap '+c.t+'">'+c.text+'</div>';});
   html+='</div>';
   html+='</div>';
+  } // end else v4GenCapsules
 
   // Zone D
   html+='<div class="v4-zd '+(isPE?'pe-sig':'ce-sig')+'">';
@@ -1679,8 +1680,17 @@ function buildTradeCardV4(tr) {
     html += '<div style="height:100%;width:'+fuelPct+'%;background:'+fuelCol+';border-radius:10px"></div>';
     html += '</div></div>';
 
-    // Zone C capsules
-    if(typeof v4GenCapsules === 'function') {
+    // Zone C capsules — use pre-computed capsules for manual trades if available
+    if(tr.v4Capsules && tr.v4Capsules.length && tr.manual) {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">';
+      tr.v4Capsules.forEach(function(cap){
+        var bgMap={bear:'rgba(239,68,68,.1)',bull:'rgba(34,197,94,.1)',neutral:'rgba(99,102,241,.1)',warn:'rgba(245,158,11,.1)'};
+        var colMap={bear:'#ef4444',bull:'#22c55e',neutral:'#6366f1',warn:'#f59e0b'};
+        var bg=bgMap[cap.t]||bgMap.neutral, col=colMap[cap.t]||colMap.neutral;
+        html += '<div style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:8px;background:'+bg+';color:'+col+'">'+cap.text+'</div>';
+      });
+      html += '</div>';
+    } else if(typeof v4GenCapsules === 'function') {
       var atmData = {
         atmStrike: sig.atmStrike || sig.strike,
         floorStrike: sig.peFloors&&sig.peFloors.length ? sig.peFloors[0].strike : sig.strike,
@@ -2059,10 +2069,80 @@ function v42SubmitTrade() {
     (note?' — '+note:''), 'ok');
   toast('📝 Trade added — '+sym+' '+strike+' '+v42Type);
 
-  // Auto-fetch live premium
-  setTimeout(function(){
-    if(S.connected && typeof batchUpdatePremiums === 'function') batchUpdatePremiums();
-  }, 1000);
+  // Auto-fetch OI analysis and populate reasons/zones for manual trade
+  setTimeout(async function(){
+    try {
+      if(!S.connected) return;
+      var spotRes = await fetch(getServer()+'/market-data', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({symbolToken: trade.token||'', sym: sym, exchange:'NSE'})
+      });
+      var spotData = await spotRes.json();
+      var spot = spotData.ltp || strike;
+
+      var oiRes = await fetch(getServer()+'/oi-analysis', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({symbol: sym, spotPrice: spot})
+      });
+      var oi = await oiRes.json();
+      if(oi.status) {
+        // Find trade and update with OI data
+        var tr = S.paperTrades.find(function(t){ return t.id === trade.id; });
+        if(tr) {
+          tr.ceWalls = oi.ceWalls || [];
+          tr.peFloors = oi.peFloors || [];
+          tr.ceSignal = oi.ceSignal || null;
+          tr.peSignal = oi.peSignal || null;
+          tr.rameshTrapped = oi.rameshTrapped || false;
+          tr.sureshTrapped = oi.sureshTrapped || false;
+          tr.pcr = oi.pcr || null;
+          tr.putTrapRisk = oi.putTrapRisk || false;
+          tr.callTrapRisk = oi.callTrapRisk || false;
+          tr.atmStrike = oi.atmStrike || strike;
+          tr.score = oi.oiScore || 0;
+          // Generate Hold/Strong/Exit zones from OI data
+          var isPE = v42Type === 'PE';
+          var walls = oi.ceWalls || [];
+          var floors = oi.peFloors || [];
+          var nearWall = walls.length ? walls[0].strike : null;
+          var nearFloor = floors.length ? floors[0].strike : null;
+          if(isPE) {
+            // PE: exit if price goes back up through floor, hold if stays below wall
+            tr.holdZone = nearFloor ? (nearFloor-2)+' – '+nearFloor : '--';
+            tr.holdReason = nearFloor ? 'Suresh floor '+nearFloor+' holding' : '';
+            tr.holdStrong = nearFloor ? (nearFloor-5)+'' : '--';
+            tr.holdStrongReason = nearWall ? 'Ramesh wall '+nearWall+' intact' : '';
+            tr.exitZone = nearFloor ? (nearFloor+2)+' – '+(nearFloor+5) : (stop?'₹'+stop.toFixed(2):'--');
+            tr.exitReason = nearFloor ? 'Suresh floor '+nearFloor+' broken — exit' : '';
+          } else {
+            // CE: exit if price falls below floor, hold if stays above
+            tr.holdZone = nearWall ? nearWall+' – '+(nearWall+2) : '--';
+            tr.holdReason = nearWall ? 'Ramesh wall '+nearWall+' breaking' : '';
+            tr.holdStrong = nearWall ? (nearWall+5)+'' : '--';
+            tr.holdStrongReason = nearFloor ? 'Suresh floor '+nearFloor+' supporting' : '';
+            tr.exitZone = nearFloor ? (nearFloor-5)+' – '+nearFloor : (stop?'₹'+stop.toFixed(2):'--');
+            tr.exitReason = nearFloor ? 'Suresh floor '+nearFloor+' broken — exit' : '';
+          }
+          // Generate capsules from OI data
+          var caps = [];
+          if(oi.pcrBias) caps.push({t:'neutral', text:'PCR '+oi.pcr+' · '+(oi.pcrBias==='BULLISH'?'Bulls win':'Bears win')});
+          if(nearWall) caps.push({t:'bear', text:'Ramesh '+nearWall+' · dominant'});
+          if(nearFloor) caps.push({t:'bull', text:'Suresh '+nearFloor+' · dominant'});
+          if(oi.rameshTrapped) caps.push({t:'bull', text:'Ramesh trapped'});
+          if(oi.sureshTrapped) caps.push({t:'bear', text:'Suresh trapped'});
+          if(oi.dilipFormula) caps.push({t: oi.dilipFormula==='PE'?'bear':'bull', text:'Dilip formula: '+oi.dilipFormulaNote});
+          tr.v4Capsules = caps;
+          savePaperTrades();
+          if(typeof renderTradesV4 === 'function') renderTradesV4();
+          addLog('📊 OI analysis loaded for '+sym+' '+strike+' '+v42Type, 'ok');
+        }
+      }
+    } catch(e) {
+      // OI fetch failed silently — trade still works
+    }
+    // Also update live premium
+    if(typeof batchUpdatePremiums === 'function') batchUpdatePremiums();
+  }, 1500);
 }
 
 // ── 6. SHOW MINE badge in V4 trade cards ────────────
