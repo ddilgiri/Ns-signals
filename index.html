@@ -1911,6 +1911,13 @@ console.log('✅ DILIP FXO V4 Auto-Trade Engine loaded');
 
 // ── 3. MANUAL TRADE STATE ────────────────────────────
 var v42Type = 'PE';
+var v42Lots = 1;
+
+function v42ChangeLots(delta) {
+  v42Lots = Math.max(1, v42Lots + delta);
+  var el = document.getElementById('v42-lots-val');
+  if(el) el.textContent = v42Lots;
+}
 
 function v42SetType(t) {
   v42Type = t;
@@ -1963,6 +1970,15 @@ function v42OpenModal() {
     '</div>' +
 
     '<div class="v42-field">' +
+    '<label class="v42-label">Lots</label>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    '<button type="button" onclick="v42ChangeLots(-1)" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:18px;font-weight:800;color:var(--text)">−</button>' +
+    '<span id="v42-lots-val" style="min-width:24px;text-align:center;font-size:15px;font-weight:800;color:var(--text)">1</span>' +
+    '<button type="button" onclick="v42ChangeLots(1)" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:18px;font-weight:800;color:var(--text)">+</button>' +
+    '</div>' +
+    '</div>' +
+
+    '<div class="v42-field">' +
     '<label class="v42-label">Entry Premium ₹</label>' +
     '<input class="v42-input" id="v42-entry" type="number" step="0.05" placeholder="e.g. 25.00">' +
     '</div>' +
@@ -1992,6 +2008,7 @@ function v42OpenModal() {
 
   // Reset type
   v42Type = 'PE';
+  v42Lots = 1;
 }
 
 function v42CloseModal() {
@@ -2035,8 +2052,8 @@ function v42SubmitTrade() {
     strike: strike,
     type: v42Type,
     lot: lotSize,
-    lots: 1,
-    lotPrices: [entry],
+    lots: v42Lots,
+    lotPrices: Array(v42Lots).fill(entry),
     avgPremium: entry,
     entryPremium: entry,
     prevClose: 0,
