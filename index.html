@@ -1058,20 +1058,21 @@ function buildCardV4(e){
   var fuelPct=v4FuelPct(e);
   var hasRoadblock=v4Roadblock(e);
   var fuelClass=hasRoadblock?'danger':(isPE?'pe':'ce');
-  // Car position based on spot progress: entry zone → ATM → target
-  var _entrySpot=e.spotPrice||spot;
-  var _targetSpot=e.target1||e.suggestedTarget||0; // target1 is the spot target
-  var _targetNum=parseFloat(String(_targetSpot).replace(/[^0-9.]/g,''))||0;
-  var carPct=fuelPct; // fallback to OI fuel
-  if(_entrySpot>0&&_targetNum>0&&spot>0){
+  // Car position: stop loss → current spot → target
+  // Using stop as baseline gives accurate progress even when signal fires mid-move
+  var _targetNum=parseFloat(String(e.target1||e.suggestedTarget||0).replace(/[^0-9.]/g,''))||0;
+  var _stopStr=String(e.suggestedStop||e.exitZone||'');
+  var _stopNum=parseFloat(_stopStr.replace(/[^0-9.]/g,''))||0;
+  var carPct=fuelPct; // fallback
+  if(_stopNum>0&&_targetNum>0&&spot>0){
     if(isPE){
-      // PE: spot falls from entry toward target (lower)
-      var _range=_entrySpot-_targetNum;
-      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((_entrySpot-spot)/_range*100)));
+      // PE: stop(high) → spot → target(low)
+      var _range=_stopNum-_targetNum;
+      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((_stopNum-spot)/_range*100)));
     } else {
-      // CE: spot rises from entry toward target (higher)
-      var _range=_targetNum-_entrySpot;
-      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((spot-_entrySpot)/_range*100)));
+      // CE: stop(low) → spot → target(high)
+      var _range=_targetNum-_stopNum;
+      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((spot-_stopNum)/_range*100)));
     }
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
