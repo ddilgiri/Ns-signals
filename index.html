@@ -1060,7 +1060,7 @@ function buildCardV4(e){
   var fuelClass=hasRoadblock?'danger':(isPE?'pe':'ce');
   // Car position based on spot progress: entry zone → ATM → target
   var _entrySpot=e.spotPrice||spot;
-  var _targetSpot=e.suggestedTarget||e.exitZone||0;
+  var _targetSpot=e.target1||e.suggestedTarget||0; // target1 is the spot target
   var _targetNum=parseFloat(String(_targetSpot).replace(/[^0-9.]/g,''))||0;
   var carPct=fuelPct; // fallback to OI fuel
   if(_entrySpot>0&&_targetNum>0&&spot>0){
