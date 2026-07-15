@@ -1223,7 +1223,9 @@ function buildCardV4(e){
   html+='<div class="v4-fuel-row2">';
   html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+fuelClass+'" style="width:'+fuelPct+'%"></div></div>';
   // Car dot
-  html+='<div class="v4-car" style="left:'+carPct+'%">';
+  // Offset for ENTRY/TARGET labels: track runs ~10% to 90% of row width
+  var _carLeft=Math.round(10+carPct*0.8);
+  html+='<div class="v4-car" style="left:'+_carLeft+'%">';
   html+='<div class="v4-car-dot '+(hasRoadblock?'danger':(isPE?'pe':'ce'))+'">'+(isPE?'🔴':'🟢')+'</div>';
   html+='<span class="v4-car-arrow '+(isPE?'pe':'ce')+'">→</span>';
   html+='</div>';
