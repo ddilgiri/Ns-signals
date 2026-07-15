@@ -1065,15 +1065,19 @@ function buildCardV4(e){
   var _stopNum=parseFloat(_stopStr.replace(/[^0-9.]/g,''))||0;
   var carPct=fuelPct; // fallback
   if(_stopNum>0&&_targetNum>0&&spot>0){
+    var _spotPct=0;
     if(isPE){
-      // PE: stop(high) → spot → target(low)
       var _range=_stopNum-_targetNum;
-      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((_stopNum-spot)/_range*100)));
+      if(_range>0) _spotPct=Math.min(100,Math.max(0,(_stopNum-spot)/_range*100));
     } else {
-      // CE: stop(low) → spot → target(high)
       var _range=_targetNum-_stopNum;
-      if(_range>0) carPct=Math.min(95,Math.max(2,Math.round((spot-_stopNum)/_range*100)));
+      if(_range>0) _spotPct=Math.min(100,Math.max(0,(spot-_stopNum)/_range*100));
     }
+    // Premium weight: 30% premium gain + 70% spot progress
+    var _entryPrem=e.entryPremium||prem;
+    var _premGain=_entryPrem>0?Math.min(100,(prem-_entryPrem)/_entryPrem*100*2):0;
+    var _combined=Math.round(_spotPct*0.7+Math.max(0,_premGain)*0.3);
+    carPct=Math.min(95,Math.max(2,_combined));
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
 
@@ -1221,7 +1225,7 @@ function buildCardV4(e){
   html+='<span class="v4-fuel-pct" style="color:'+fuelCol+'">'+fuelPct+'% '+(hasRoadblock?'⚠️':fuelPct>=80?'🔥':fuelPct>=50?'⛽':'⏳')+'</span>';
   html+='</div>';
   html+='<div class="v4-fuel-row2">';
-  html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+fuelClass+'" style="width:'+fuelPct+'%"></div></div>';
+  html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+fuelClass+'" style="width:'+carPct+'%"></div></div>';
   // Car dot
   // Offset for ENTRY/TARGET labels: track runs ~10% to 90% of row width
   var _carLeft=Math.round(10+carPct*0.8);
