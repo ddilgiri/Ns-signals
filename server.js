@@ -633,6 +633,25 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
 const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,totalCeOI:T,totalPeOI:y},exInfoForGamma,_vixForGamma,_isIndexSym);
   const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
   // Save OI snapshot for trend tracking
+  // Mahesh confirmation: OI direction + LTP direction at Ramesh wall / Suresh floor
+  try{
+    const wallStrikeData = D ? O.find(e=>e.strike===D.strike) : null;
+    const floorStrikeData = U ? O.find(e=>e.strike===U.strike) : null;
+    const wallLtpUp = wallStrikeData && wallStrikeData.CE_ltp!=null && wallStrikeData.CE_prevClose!=null ? wallStrikeData.CE_ltp > wallStrikeData.CE_prevClose : null;
+    const floorLtpUp = floorStrikeData && floorStrikeData.PE_ltp!=null && floorStrikeData.PE_prevClose!=null ? floorStrikeData.PE_ltp > floorStrikeData.PE_prevClose : null;
+    const wallOiRising = D ? D.change > 0 : null;
+    const floorOiRising = U ? U.change > 0 : null;
+    let maheshWall = "UNKNOWN", maheshFloor = "UNKNOWN";
+    if(wallOiRising===true && wallLtpUp===false) maheshWall = "CONFIRMED_WALL";
+    else if(wallOiRising===true && wallLtpUp===true) maheshWall = "WALL_UNDER_PRESSURE";
+    else if(wallOiRising===false) maheshWall = "WALL_BREAKING";
+    if(floorOiRising===true && floorLtpUp===true) maheshFloor = "CONFIRMED_FLOOR";
+    else if(floorOiRising===true && floorLtpUp===false) maheshFloor = "FLOOR_NOT_TRUSTED";
+    else if(floorOiRising===false) maheshFloor = "FLOOR_BREAKING";
+    oiResult.maheshWall = maheshWall;
+    oiResult.maheshFloor = maheshFloor;
+  }catch(maheshErr){ log(`Mahesh check skipped: ${maheshErr.message}`,"WARN"); }
+
   saveOISnapshot(i, oiResult);
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
