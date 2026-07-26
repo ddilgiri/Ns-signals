@@ -43,7 +43,7 @@
 <div class="v5-rail" id="v5DynamicRail"><div class="v5-empty-hint">Tap 🔄 Refresh below to load</div></div>
 <div style="padding:0 13px 20px"><button class="btn-primary" onclick="v5RefreshAll()" id="v5RefreshBtn">🔄 Refresh Shortlist</button></div>
 <div id="v5DetailContainer"></div>
-</div></div><div class="page" id="pg-setup"><div class="scroll-area"><div class="card"><div class="card-header"><span class="card-title">Angel One Connection</span> <span id="connStatus" style="font-size:10px;color:var(--text3)">Not connected</span></div><div class="card-body"><div class="field"><label class="field-lbl">Client Code</label><input class="field-inp" id="cfgClient" type="text" placeholder="Your Angel One client code" autocomplete="off"></div><div class="field"><label class="field-lbl">Password</label><input class="field-inp" id="cfgPass" type="password" placeholder="Your password"></div><div class="field"><label class="field-lbl">API Key</label><input class="field-inp" id="cfgApi" type="text" placeholder="Your API key" autocomplete="off"></div><div class="field"><label class="field-lbl">TOTP Secret (optional)</label><input class="field-inp" id="cfgTotp" type="text" placeholder="Auto 2FA — leave blank if manual" autocomplete="off"></div><button class="btn-primary" id="loginBtn" onclick="doLogin()">🔐 Connect Angel One</button></div></div><div class="card"><div class="card-header"><span class="card-title">Scan Settings</span></div><div class="card-body"><div class="field"><label class="field-lbl">Min Confidence %</label><input class="field-inp" id="cfgMinConf" type="number" value="60" min="40" max="90"></div><div class="field"><label class="field-lbl">Max Capital ₹</label><input class="field-inp" id="cfgMaxCap" type="number" value="30000" min="5000" step="5000" placeholder="e.g. 30000"></div><div class="field"><label class="field-lbl">Signal Type</label> <select class="field-inp" id="cfgType"><option value="BOTH">Both CE &amp; PE</option><option value="CE">CE Only (Bullish)</option><option value="PE">PE Only (Bearish)</option></select></div><div class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><label class="field-lbl" style="margin-bottom:0">🔔 Notifications</label><div id="notifToggle" onclick="toggleNotifMute()" style="width:44px;height:24px;border-radius:12px;background:var(--green);position:relative;cursor:pointer;transition:background .2s"><div id="notifToggleDot" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:23px;transition:left .2s"></div></div></div><button class="btn-primary" style="background:var(--card2);color:var(--text);border:1px solid var(--border)" onclick="refreshFnoList()" id="verifyTokBtn">🔄 Refresh F&amp;O Stock List</button><div id="verifyTokResult" style="margin-top:10px;font-size:11px"></div></div></div><div class="card"><div class="card-header"><span class="card-title">Activity Log</span> <span onclick="clearLog()" style="font-size:10px;color:var(--blue);cursor:pointer">Clear</span></div><div class="card-body" style="padding:10px"><div class="log-area" id="logArea"></div></div></div></div></div></div><script>const S={connected:!1,scanning:!1,scanInt:null,signals:[],filterMode:"all",scannedCount:0,paperTrades:[],closedPaperTrades:[]};
+</div></div><div class="page" id="pg-setup"><div class="scroll-area"><div class="card"><div class="card-header"><span class="card-title">Angel One Connection</span> <span id="connStatus" style="font-size:10px;color:var(--text3)">Not connected</span></div><div class="card-body"><div class="field"><label class="field-lbl">Client Code</label><input class="field-inp" id="cfgClient" type="text" placeholder="Your Angel One client code" autocomplete="off"></div><div class="field"><label class="field-lbl">Password</label><input class="field-inp" id="cfgPass" type="password" placeholder="Your password"></div><div class="field"><label class="field-lbl">API Key</label><input class="field-inp" id="cfgApi" type="text" placeholder="Your API key" autocomplete="off"></div><div class="field"><label class="field-lbl">TOTP Secret (optional)</label><input class="field-inp" id="cfgTotp" type="text" placeholder="Auto 2FA — leave blank if manual" autocomplete="off"></div><button class="btn-primary" id="loginBtn" onclick="doLogin()">🔐 Connect Angel One</button></div></div><div class="card"><div class="card-header"><span class="card-title">Scan Settings</span></div><div class="card-body"><div class="field"><label class="field-lbl">Min Confidence %</label><input class="field-inp" id="cfgMinConf" type="number" value="60" min="40" max="90"></div><div class="field"><label class="field-lbl">Max Capital ₹</label><input class="field-inp" id="cfgMaxCap" type="number" value="30000" min="5000" step="5000" placeholder="e.g. 30000"></div><div class="field"><label class="field-lbl">Signal Type</label> <select class="field-inp" id="cfgType"><option value="BOTH">Both CE &amp; PE</option><option value="CE">CE Only (Bullish)</option><option value="PE">PE Only (Bearish)</option></select></div><div class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><label class="field-lbl" style="margin-bottom:0">🔔 Notifications</label><div id="notifToggle" onclick="toggleNotifMute()" style="width:44px;height:24px;border-radius:12px;background:var(--green);position:relative;cursor:pointer;transition:background .2s"><div id="notifToggleDot" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:23px;transition:left .2s"></div></div></div><button class="btn-primary" style="background:var(--card2);color:var(--text);border:1px solid var(--border)" onclick="refreshFnoList()" id="verifyTokBtn">🔄 Refresh F&amp;O Stock List</button><div id="verifyTokResult" style="margin-top:10px;font-size:11px"></div></div></div><div class="card"><div class="card-header"><span class="card-title">V5 Scan Settings</span></div><div class="card-body"><div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5">V5's freshness tracking is stored on this device only (not on the server) — it auto-clears at the start of each trading day. Use this to wipe it manually anytime.</div><button class="btn-primary" style="background:var(--card2);color:var(--text);border:1px solid var(--border)" onclick="v5ClearFreshnessHistory();toast('🗑️ V5 history cleared')">🗑️ Clear V5 History</button></div></div><div class="card"><div class="card-header"><span class="card-title">Activity Log</span> <span onclick="clearLog()" style="font-size:10px;color:var(--blue);cursor:pointer">Clear</span></div><div class="card-body" style="padding:10px"><div class="log-area" id="logArea"></div></div></div></div></div></div><script>const S={connected:!1,scanning:!1,scanInt:null,signals:[],filterMode:"all",scannedCount:0,paperTrades:[],closedPaperTrades:[]};
 // ── NOTIFICATION SYSTEM ──────────────────────────────────
 var _notifGranted=false,_zoneAlerted={};
 (function(){try{if("Notification"in window&&Notification.permission!=="denied"){Notification.requestPermission().then(function(p){_notifGranted=p==="granted";if(_notifGranted)setupPushSubscription();});}}catch(e){}})();
@@ -2221,10 +2221,67 @@ function v5CasePillHtml(caseNum,confidence,isSqueeze){
   return '<span class="v5-case-pill '+cls+'">'+label+'</span><span class="v5-conf '+cls+'">'+confidence+'%</span>';
 }
 
-function v5BestCase(caseAnalysisForStrike){
+// ---- V5 client-side freshness (25% of total score) ----
+// Freshness lives entirely in localStorage now — server holds no history,
+// so this is what protects Render's RAM. Auto-clears on a new trading day,
+// and can be wiped manually from Setup tab ("Clear V5 History").
+function v5FreshnessKey(sym,strike,side){return "v5fresh_"+sym+"_"+strike+"_"+side;}
+function v5TodayStr(){
+  var d=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+  return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();
+}
+function v5CheckNewDayAndMaybeClear(){
+  try{
+    var lastDay=localStorage.getItem("v5fresh_day");
+    var today=v5TodayStr();
+    if(lastDay!==today){
+      v5ClearFreshnessHistory();
+      localStorage.setItem("v5fresh_day",today);
+    }
+  }catch(e){}
+}
+function v5ClearFreshnessHistory(){
+  try{
+    var keys=Object.keys(localStorage).filter(function(k){return k.indexOf("v5fresh_")===0&&k!=="v5fresh_day";});
+    keys.forEach(function(k){localStorage.removeItem(k);});
+  }catch(e){}
+}
+// Compute freshness score (0-25) by comparing this reading to the last one
+// stored locally for this exact symbol+strike+side, then save this reading.
+function v5ComputeFreshness(sym,strike,side,oiChangePct,ltpChangePct,isSqueeze){
+  var key=v5FreshnessKey(sym,strike,side);
+  var freshnessScore=0,note="first read — no prior local history";
+  try{
+    var raw=localStorage.getItem(key);
+    if(raw){
+      var prev=JSON.parse(raw);
+      var oiGrowing=Math.abs(oiChangePct)>=Math.abs(prev.oiChangePct);
+      var ltpGrowing=Math.abs(ltpChangePct)>=Math.abs(prev.ltpChangePct);
+      if(oiGrowing&&ltpGrowing){freshnessScore=25;note="still building vs last check";}
+      else if(!oiGrowing&&!ltpGrowing){freshnessScore=0;note="fading vs last check";}
+      else{freshnessScore=12.5;note="mixed vs last check";}
+    }
+    localStorage.setItem(key,JSON.stringify({oiChangePct:oiChangePct,ltpChangePct:ltpChangePct,ts:Date.now()}));
+  }catch(e){}
+  return {score:freshnessScore,note:note};
+}
+// Merge server's 0-75 subtotal with client's 0-25 freshness into final 0-100 confidence
+function v5FinalizeConfidence(sideResult,sym,strike){
+  if(!sideResult||sideResult.confidence===null&&sideResult.serverScore===undefined)return sideResult;
+  if(sideResult.caseNum==null||!(sideResult.serverScore>=0))return sideResult; // no-entry case, nothing to finalize
+  var fresh=v5ComputeFreshness(sym,strike,sideResult.side,sideResult.oiChangePct,sideResult.ltpChangePct,sideResult.isSqueeze);
+  var total=sideResult.serverScore+fresh.score;
+  if(sideResult.isSqueeze)total=Math.min(total,55);
+  sideResult.confidence=Math.round(total);
+  sideResult.freshnessNote=fresh.note;
+  return sideResult;
+}
+
+function v5BestCase(caseAnalysisForStrike,sym){
   // pick whichever side (CE/PE) has a real entry case with highest confidence, at the ATM-ish strike
   if(!caseAnalysisForStrike)return null;
-  var ce=caseAnalysisForStrike.CE,pe=caseAnalysisForStrike.PE;
+  var ce=v5FinalizeConfidence(caseAnalysisForStrike.CE,sym,caseAnalysisForStrike.strike);
+  var pe=v5FinalizeConfidence(caseAnalysisForStrike.PE,sym,caseAnalysisForStrike.strike);
   var candidates=[];
   if(ce&&ce.confidence!=null)candidates.push(ce);
   if(pe&&pe.confidence!=null)candidates.push(pe);
@@ -2274,7 +2331,7 @@ async function v5RenderRail(containerId,stocks,isWatchlist){
     var best=null,reason=s.reason||"";
     if(oi&&oi.caseAnalysis&&oi.caseAnalysis.length){
       var atmEntry=oi.caseAnalysis.reduce(function(a,b){return Math.abs(b.strike-(s.spotPrice||oi.spotPrice))<Math.abs(a.strike-(s.spotPrice||oi.spotPrice))?b:a;});
-      best=v5BestCase(atmEntry);
+      best=v5BestCase(atmEntry,s.sym);
     }
     var spot=(oi&&oi.spotPrice)||s.spotPrice||0;
     html+=v5BoxHtml(s.sym,spot,s.percentChange||0,best,reason,isWatchlist);
@@ -2341,7 +2398,7 @@ async function v5OpenDetail(sym,boxEl){
   var rows="";
   oi.caseAnalysis.forEach(function(entry){
     var isSpot=Math.abs(entry.strike-spot)<(oi.chain&&oi.chain.length>1?Math.abs(oi.chain[1].strike-oi.chain[0].strike):5)/2;
-    var ce=entry.CE,pe=entry.PE;
+    var ce=v5FinalizeConfidence(entry.CE,sym,entry.strike),pe=v5FinalizeConfidence(entry.PE,sym,entry.strike);
     var ceHtml=v5CasePillHtmlSide(ce);
     var peHtml=v5CasePillHtmlSide(pe);
     rows+='<div class="v5-drow'+(isSpot?" v5-spotrow":"")+'"><div class="v5-strikenum">'+entry.strike+'</div><div class="v5-halfside">'+ceHtml+'</div><div class="v5-halfside">'+peHtml+'</div></div>';
@@ -2378,7 +2435,7 @@ async function v5RefreshAll(){
   btn.disabled=false;btn.innerHTML="🔄 Refresh Shortlist";
 }
 
-v5LoadWatchlist();v5LoadLastPrices();
+v5LoadWatchlist();v5LoadLastPrices();v5CheckNewDayAndMaybeClear();
 document.addEventListener("DOMContentLoaded",function(){try{v5RenderWatchlist();}catch(e){}});
 
 console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
