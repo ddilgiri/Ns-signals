@@ -7,7 +7,44 @@
 
 // In-memory store of the previous chain read per symbol, for freshness check
 // (per Dilip: on-demand only, no continuous background scan)
-const PREV_CHAIN_SNAPSHOT = {}; // { symbol: { strike: {CE_oiChange, CE_ltpPct, PE_oiChange, PE_ltpPct}, ts } }
+// CAPPED to avoid unbounded RAM growth on Render's free tier — old symbol entries
+// (not touched in 2+ hours) are pruned, and total symbol count is hard-capped.
+const PREV_CHAIN_SNAPSHOT = {};
+const SNAPSHOT_MAX_SYMBOLS = 120;
+const SNAPSHOT_STALE_MS = 2 * 60 * 60 * 1000; // 2 hours
+function pruneSnapshotStore() {
+  const now = Date.now();
+  const symbols = Object.keys(PREV_CHAIN_SNAPSHOT);
+  // Drop symbols with no reading touched in the last 2 hours
+  for (const sym of symbols) {
+    const strikes = PREV_CHAIN_SNAPSHOT[sym];
+    let newestTs = 0;
+    for (const strike in strikes) {
+      for (const side in strikes[strike]) {
+        const ts = strikes[strike][side].ts || 0;
+        if (ts > newestTs) newestTs = ts;
+      }
+    }
+    if (now - newestTs > SNAPSHOT_STALE_MS) delete PREV_CHAIN_SNAPSHOT[sym];
+  }
+  // Hard cap: if still too many symbols, drop the oldest ones
+  const remaining = Object.keys(PREV_CHAIN_SNAPSHOT);
+  if (remaining.length > SNAPSHOT_MAX_SYMBOLS) {
+    const withAge = remaining.map(sym => {
+      let newestTs = 0;
+      const strikes = PREV_CHAIN_SNAPSHOT[sym];
+      for (const strike in strikes) for (const side in strikes[strike]) {
+        const ts = strikes[strike][side].ts || 0;
+        if (ts > newestTs) newestTs = ts;
+      }
+      return { sym, newestTs };
+    }).sort((a, b) => a.newestTs - b.newestTs);
+    const toDrop = withAge.slice(0, remaining.length - SNAPSHOT_MAX_SYMBOLS);
+    toDrop.forEach(x => delete PREV_CHAIN_SNAPSHOT[x.sym]);
+  }
+}
+// Prune periodically, not on every call (cheap, runs every 10 min)
+setInterval(pruneSnapshotStore, 10 * 60 * 1000);
 
 function pctChange(current, prev) {
   if (!prev || prev === 0) return 0;
