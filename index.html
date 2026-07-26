@@ -2326,10 +2326,17 @@ async function v5RenderRail(containerId,stocks,isWatchlist){
   var el=document.getElementById(containerId);
   if(!stocks||!stocks.length){el.innerHTML='<div class="v5-empty-hint">No stocks here right now</div>';return;}
   el.innerHTML='<div class="v5-empty-hint">Loading…</div>';
+  var results=new Array(stocks.length);
+  var BATCH=5;
+  for(var b=0;b<stocks.length;b+=BATCH){
+    var chunk=stocks.slice(b,b+BATCH);
+    var chunkResults=await Promise.all(chunk.map(function(s){return v5FetchOiForSymbol(s.sym,s.spotPrice);}));
+    for(var j=0;j<chunk.length;j++)results[b+j]=chunkResults[j];
+  }
   var html="";
   for(var i=0;i<stocks.length;i++){
     var s=stocks[i];
-    var oi=await v5FetchOiForSymbol(s.sym,s.spotPrice);
+    var oi=results[i];
     var best=null,reason=s.reason||"";
     if(oi&&oi.caseAnalysis&&oi.caseAnalysis.length){
       var atmEntry=oi.caseAnalysis.reduce(function(a,b){return Math.abs(b.strike-(s.spotPrice||oi.spotPrice))<Math.abs(a.strike-(s.spotPrice||oi.spotPrice))?b:a;});
