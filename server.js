@@ -931,6 +931,52 @@ app.post("/signal-analysis",async(e,t)=>{
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
+// V5: 75-stock dynamic shortlist — top gainers, top losers, plus a dynamic pool
+// (high OI change, high volume) filling remaining slots. Falls back to
+// NSE_STOCKS_FALLBACK-derived symbols if Angel One's gainersAndLosers call fails.
+async function fetchGainersLosersType(datatype){
+  try{
+    const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
+      {datatype,expirytype:"NEAR"},{headers:getHeaders(!0),timeout:15000});
+    if(r.data&&r.data.status&&Array.isArray(r.data.data))return r.data.data;
+    return [];
+  }catch(e){
+    log(`gainersAndLosers ${datatype} failed: ${e.message}`,"WARN");
+    return [];
+  }
+}
+function futSymToStock(tradingSymbol){
+  // e.g. "HDFCBANK25JAN24FUT" -> "HDFCBANK"
+  if(!tradingSymbol)return null;
+  const m=String(tradingSymbol).match(/^([A-Z&-]+?)\d{2}[A-Z]{3}\d{2,4}FUT$/);
+  return m?m[1]:null;
+}
+app.get("/dynamic-shortlist",async(e,t)=>{
+  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
+  try{
+    const [priceGainersRaw,priceLosersRaw,oiGainersRaw]=await Promise.all([
+      fetchGainersLosersType("PercPriceGainers"),
+      fetchGainersLosersType("PercPriceLosers"),
+      fetchGainersLosersType("PercOIGainers")
+    ]);
+    const toEntry=(row,changeField)=>({
+      sym:futSymToStock(row.tradingSymbol),
+      percentChange:row.percentChange||0,
+      oi:row.opnInterest||0,
+      oiChange:row.netChangeOpnInterest||0
+    });
+    const gainers=priceGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,25);
+    const losers=priceLosersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,25);
+    const usedSyms=new Set([...gainers,...losers].map(x=>x.sym));
+    const dynamic=oiGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym&&!usedSyms.has(x.sym)).slice(0,25);
+    const usedAll=gainers.length+losers.length+dynamic.length;
+    t.json({status:!0,gainers,losers,dynamic,total:usedAll,source:"angelone-gainersLosers"});
+  }catch(e){
+    log(`/dynamic-shortlist error: ${e.message}`,"ERR");
+    t.status(500).json({status:!1,message:e.message,gainers:[],losers:[],dynamic:[]});
+  }
+});
+
 const MCX_SYMBOLS=["GOLD","SILVER","CRUDEOIL","NATURALGAS","COPPER","ALUMINIUM","ZINC","LEAD","NICKEL"];
 async function getMCXTokens(){try{await ensureInstruments("MCX tokens");}catch(e){return log("Instrument master download failed: "+e.message,"WARN"),{}}const e=new Date,t={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function a(e){if(!e)return null;const a=String(e).trim().toUpperCase(),s=a.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(s){const e=t[s[2]];if(void 0!==e)return new Date(+s[3],e,+s[1])}const n=a.match(/^(\d{4})(\d{2})(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=a.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(o)return new Date(+o[1],+o[2]-1,+o[3]);const r=new Date(e);return isNaN(r)?null:r}const s={};for(const t of MCX_SYMBOLS){const n=SESSION._instruments.filter(s=>{if("MCX"!==s.exch_seg)return!1;if(!s.name||s.name.toUpperCase()!==t)return!1;if("FUTCOM"!==s.instrumenttype)return!1;const n=a(s.expiry);return n&&n>=e}).sort((e,t)=>a(e.expiry)-a(t.expiry));n.length>0&&(s[t]=n[0].token,log(`MCX ${t}: token ${n[0].token} exp ${n[0].expiry}`,"INFO"))}return s}
 
