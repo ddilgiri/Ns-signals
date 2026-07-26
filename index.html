@@ -2275,7 +2275,6 @@ function v5FinalizeConfidence(sideResult,sym,strike){
   if(typeof sideResult.serverScore!=="number"){sideResult.confidence=null;return sideResult;}
   var fresh=v5ComputeFreshness(sym,strike,sideResult.side,sideResult.oiChangePct,sideResult.ltpChangePct,sideResult.isSqueeze);
   var total=sideResult.serverScore+fresh.score;
-  if(sideResult.isSqueeze)total=Math.min(total,55);
   sideResult.confidence=Math.round(total);
   sideResult.freshnessNote=fresh.note;
   return sideResult;
