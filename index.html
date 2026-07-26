@@ -2267,8 +2267,9 @@ function v5ComputeFreshness(sym,strike,side,oiChangePct,ltpChangePct,isSqueeze){
 }
 // Merge server's 0-75 subtotal with client's 0-25 freshness into final 0-100 confidence
 function v5FinalizeConfidence(sideResult,sym,strike){
-  if(!sideResult||sideResult.confidence===null&&sideResult.serverScore===undefined)return sideResult;
-  if(sideResult.caseNum==null||!(sideResult.serverScore>=0))return sideResult; // no-entry case, nothing to finalize
+  if(!sideResult)return sideResult;
+  // No-entry cases (1/3/5/7) have serverScore undefined and caseNum still set — leave them alone
+  if(typeof sideResult.serverScore!=="number"){sideResult.confidence=null;return sideResult;}
   var fresh=v5ComputeFreshness(sym,strike,sideResult.side,sideResult.oiChangePct,sideResult.ltpChangePct,sideResult.isSqueeze);
   var total=sideResult.serverScore+fresh.score;
   if(sideResult.isSqueeze)total=Math.min(total,55);
