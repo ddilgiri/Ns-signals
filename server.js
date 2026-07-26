@@ -965,8 +965,8 @@ app.get("/dynamic-shortlist",async(e,t)=>{
       oi:row.opnInterest||0,
       oiChange:row.netChangeOpnInterest||0
     });
-    const gainers=priceGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,25);
-    const losers=priceLosersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,25);
+    const gainers=priceGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,15);
+    const losers=priceLosersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,15);
     const usedSyms=new Set([...gainers,...losers].map(x=>x.sym));
     const dynamic=oiGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym&&!usedSyms.has(x.sym)).slice(0,25);
     const usedAll=gainers.length+losers.length+dynamic.length;
