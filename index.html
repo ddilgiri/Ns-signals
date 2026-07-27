@@ -2372,8 +2372,8 @@ function v5RemoveFromWatchlist(sym){
 async function v5AddToWatchlist(sym){
   sym=sym.toUpperCase();
   if(V5.watchlist.indexOf(sym)>=0){toast(sym+" already in watchlist");return;}
-  V5.watchlist.push(sym);
-  if(V5.watchlist.length>15)V5.watchlist.shift(); // FIFO drop oldest
+  V5.watchlist.unshift(sym);
+  if(V5.watchlist.length>15)V5.watchlist.pop(); // FIFO drop oldest (now from the end, since new ones go to front)
   v5SaveWatchlist();
   document.getElementById("v5SearchInput").value="";
   document.getElementById("v5SearchResults").innerHTML="";
