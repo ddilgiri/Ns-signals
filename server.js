@@ -939,7 +939,10 @@ async function fetchGainersLosersType(datatype){
     const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
       {datatype,expirytype:"NEAR"},{headers:getHeaders(!0),timeout:15000});
     log(`gainersAndLosers ${datatype}: httpStatus=${r.status} dataType=${typeof r.data} rawData=${JSON.stringify(r.data).slice(0,300)}`,"INFO");
-    if(r.data&&r.data.status&&Array.isArray(r.data.data))return r.data.data;
+    // Defensive parsing: handle {status,data:[...]} wrapper, bare array, or data nested one level deeper
+    if(Array.isArray(r.data))return r.data;
+    if(r.data&&Array.isArray(r.data.data))return r.data.data;
+    if(r.data&&r.data.data&&Array.isArray(r.data.data.data))return r.data.data.data;
     return [];
   }catch(e){
     log(`gainersAndLosers ${datatype} failed: ${e.message} | response: ${JSON.stringify(e.response?.data||{})}`,"WARN");
