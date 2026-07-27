@@ -123,11 +123,13 @@ function computeConfidence(chain, strikeIdx, side, spotPrice) {
 }
 
 function computeChainCases(chain, symbol, spotPrice) {
-  return chain.map((entry, idx) => ({
-    strike: entry.strike,
-    CE: computeConfidence(chain, idx, 'CE', spotPrice),
-    PE: computeConfidence(chain, idx, 'PE', spotPrice)
-  }));
+  return chain.map((entry, idx) => {
+    var ce = computeConfidence(chain, idx, 'CE', spotPrice);
+    var pe = computeConfidence(chain, idx, 'PE', spotPrice);
+    if (ce) ce.ltp = entry.CE_ltp ?? null;
+    if (pe) pe.ltp = entry.PE_ltp ?? null;
+    return { strike: entry.strike, CE: ce, PE: pe };
+  });
 }
 
 module.exports = { computeChainCases, classifyCase, isEntryCase, isSqueezeCase };
