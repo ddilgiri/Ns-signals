@@ -938,10 +938,11 @@ async function fetchGainersLosersType(datatype){
   try{
     const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
       {datatype,expirytype:"NEAR"},{headers:getHeaders(!0),timeout:15000});
+    log(`gainersAndLosers ${datatype}: status=${r.data?.status} msg=${r.data?.message} errorcode=${r.data?.errorcode} rows=${Array.isArray(r.data?.data)?r.data.data.length:'not-array'}`,"INFO");
     if(r.data&&r.data.status&&Array.isArray(r.data.data))return r.data.data;
     return [];
   }catch(e){
-    log(`gainersAndLosers ${datatype} failed: ${e.message}`,"WARN");
+    log(`gainersAndLosers ${datatype} failed: ${e.message} | response: ${JSON.stringify(e.response?.data||{})}`,"WARN");
     return [];
   }
 }
