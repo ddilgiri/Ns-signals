@@ -936,10 +936,9 @@ app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json(
 // NSE_STOCKS_FALLBACK-derived symbols if Angel One's gainersAndLosers call fails.
 async function fetchGainersLosersType(datatype){
   try{
-    const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
-      {datatype,expirytype:"NEAR"},{headers:getHeaders(!0),timeout:15000});
+    const r=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
+      {datatype,expirytype:"NEAR"});
     log(`gainersAndLosers ${datatype}: httpStatus=${r.status} dataType=${typeof r.data} rawData=${JSON.stringify(r.data).slice(0,300)}`,"INFO");
-    // Defensive parsing: handle {status,data:[...]} wrapper, bare array, or data nested one level deeper
     if(Array.isArray(r.data))return r.data;
     if(r.data&&Array.isArray(r.data.data))return r.data.data;
     if(r.data&&r.data.data&&Array.isArray(r.data.data.data))return r.data.data.data;
