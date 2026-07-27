@@ -14,7 +14,7 @@
 .v5-box.v5-glow-hi{box-shadow:0 0 0 1px rgba(34,197,94,.3)}.v5-box.v5-glow-med{box-shadow:0 0 0 1px rgba(245,158,11,.28)}
 .v5-box-delete{position:absolute;top:5px;right:5px;width:17px;height:17px;border-radius:50%;background:var(--red-bg);border:1px solid rgba(239,68,68,.35);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--red);z-index:5}
 .v5-box-top{display:flex;align-items:center;gap:8px}.v5-logo{width:36px;height:36px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;flex-shrink:0;border:1px solid var(--border);overflow:hidden}.v5-logo img{width:100%;height:100%;object-fit:contain}.v5-name{font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Roboto,sans-serif}
-.v5-spot{font-family:Roboto,sans-serif;font-size:16px;font-weight:800;margin-top:9px}.v5-spot.v5-up{color:var(--green)}.v5-spot.v5-down{color:var(--red)}.v5-pct{font-size:11px;font-weight:700;margin-top:2px}.v5-pct.v5-up{color:var(--green)}.v5-pct.v5-down{color:var(--red)}
+.v5-spot{font-family:Roboto,sans-serif;font-size:16px;font-weight:800;margin-top:9px}.v5-spot.v5-up{color:var(--green)}.v5-spot.v5-down{color:var(--red)}.v5-pct{font-size:10.5px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v5-pct.v5-up{color:var(--green)}.v5-pct.v5-down{color:var(--red)}
 .v5-lastview{font-size:8.5px;margin-top:2px;font-family:Roboto,sans-serif}.v5-lastview.v5-up{color:#6ee7a0}.v5-lastview.v5-down{color:#f87171}
 .v5-case-row{display:flex;align-items:center;gap:4px;margin-top:7px;padding-top:6px;border-top:1px solid var(--border)}.v5-case-pill{font-size:8.5px;font-weight:800;padding:2px 5px;border-radius:5px}.v5-case-pill.v5-hi{background:var(--green-bg);color:var(--green)}.v5-case-pill.v5-med{background:var(--amber-bg);color:var(--amber)}.v5-case-pill.v5-no{background:0 0;color:var(--text3);border:1px solid var(--border)}
 .v5-conf{font-size:9.5px;font-weight:800;margin-left:auto;font-family:Roboto,sans-serif}.v5-conf.v5-hi{color:var(--green)}.v5-conf.v5-med{color:var(--amber)}.v5-conf.v5-no{color:var(--text3)}
@@ -2318,10 +2318,16 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
     lastViewHtml='<div class="v5-lastview '+lvCls+'">'+lvArrow+' '+Math.abs(lvPct).toFixed(1)+'% since last view</div>';
   }
   var reasonHtml=reason?'<div class="v5-reason">'+reason+'</div>':"";
+  var rupeeHtml="";
+  var prevClose=LIVE_PREV[sym];
+  if(prevClose&&spotPrice){
+    var rupeeChg=spotPrice-prevClose;
+    rupeeHtml=(rupeeChg>=0?"+":"-")+"₹"+Math.abs(rupeeChg).toLocaleString("en-IN",{maximumFractionDigits:2})+" ";
+  }
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
     '<div class="v5-box-top">'+v5LogoImg(sym,"v5-logo")+'<div class="v5-name">'+sym+'</div></div>'+
     '<div class="v5-spot '+pctCls+'">₹'+(spotPrice?spotPrice.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
-    '<div class="v5-pct '+pctCls+'">'+arrow+' '+Math.abs(pctChange||0).toFixed(2)+'%</div>'+
+    '<div class="v5-pct '+pctCls+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
     lastViewHtml+
     '<div class="v5-case-row">'+caseHtml+'</div>'+reasonHtml+'</div>';
 }
