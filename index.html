@@ -2454,6 +2454,26 @@ function v5StartAutoRefresh(){
 function v5StopAutoRefresh(){
   if(V5_AUTO_INTERVAL){clearInterval(V5_AUTO_INTERVAL);V5_AUTO_INTERVAL=null;}
 }
+var _v5SeedOffset=0;
+function v5SeedOiHistoryBatch(gainersTop,losersTop){
+  // Widen OI_HISTORY beyond gainers/losers so Dynamic Watch has a bigger pool to rank from.
+  // Runs quietly in the background (not awaited by the visible refresh), 8 stocks per cycle, rotating through the full F&O list.
+  try{
+    var usedSyms={};gainersTop.forEach(function(g){usedSyms[g.sym]=true;});losersTop.forEach(function(g){usedSyms[g.sym]=true;});
+    var candidates=NSE_STOCKS.filter(function(s){return !usedSyms[s.sym];});
+    if(!candidates.length)return;
+    var BATCH=8;
+    var batch=[];
+    for(var i=0;i<BATCH;i++){
+      batch.push(candidates[(_v5SeedOffset+i)%candidates.length]);
+    }
+    _v5SeedOffset=(_v5SeedOffset+BATCH)%candidates.length;
+    batch.forEach(function(stk){
+      var spot=LIVE_PRICES[stk.sym];
+      if(spot)v5FetchOiForSymbol(stk.sym,spot).catch(function(){});
+    });
+  }catch(e){}
+}
 async function v5RefreshAll(){
   var btn=document.getElementById("v5RefreshBtn");
   if(!S.connected){toast("⚠️ Login first (Setup tab)");return;}
@@ -2472,7 +2492,7 @@ async function v5RefreshAll(){
     losses.sort(function(a,b){return a.percentChange-b.percentChange;});
     var gainersTop=gains.slice(0,15),losersTop=losses.slice(0,15);
     var usedSyms={};gainersTop.forEach(function(g){usedSyms[g.sym]=true;});losersTop.forEach(function(g){usedSyms[g.sym]=true;});
-    // Dynamic Watch: real OI-velocity ranking from server-side OI_HISTORY (populated as stocks get scanned)
+    // Dynamic Watch: real OI-velocity ranking from server-side OI_HISTORY, with price-magnitude fallback to fill gaps early in session
     var dynamicTop=[];
     try{
       var oiVelRes=await fetch(getServer()+"/oi-velocity-shortlist");
@@ -2483,6 +2503,14 @@ async function v5RefreshAll(){
         });
       }
     }catch(oiVelErr){addLog("OI velocity fetch failed: "+oiVelErr.message,"warn");}
+    if(dynamicTop.length<25){
+      var dynSyms={};dynamicTop.forEach(function(d){dynSyms[d.sym]=true;});
+      var rest=gains.concat(losses).filter(function(g){return !usedSyms[g.sym]&&!dynSyms[g.sym];});
+      rest.sort(function(a,b){return Math.abs(b.percentChange)-Math.abs(a.percentChange);});
+      var fillCount=25-dynamicTop.length;
+      var filled=rest.slice(0,fillCount).map(function(g){return {sym:g.sym,percentChange:g.percentChange,spotPrice:g.spotPrice,reason:"Active mover (building OI history…)"};});
+      dynamicTop=dynamicTop.concat(filled);
+    }
     if(!LIVE_PRICES||!Object.keys(LIVE_PRICES).length){
       toast("⏳ Live prices still loading — try again in a few seconds");
       addLog("V5 scan complete — live price data not ready yet","warn");
@@ -2492,6 +2520,7 @@ async function v5RefreshAll(){
       await v5RenderRail("v5DynamicRail",dynamicTop,false);
       toast("✅ Shortlist refreshed");
       addLog("V5 scan complete — "+gainersTop.length+" gainers, "+losersTop.length+" losers, "+dynamicTop.length+" dynamic (computed from live prices)","ok");
+      v5SeedOiHistoryBatch(gainersTop,losersTop);
     }
   }catch(e){toast("⚠️ Refresh failed: "+e.message);addLog("V5 scan error: "+e.message,"err");}
   btn.classList.remove("spinning");
