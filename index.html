@@ -2434,12 +2434,12 @@ async function v5OpenDetail(sym,boxEl){
 function v5CasePillHtmlSide(side){
   if(!side||side.confidence==null){
     var ltpHtmlNo=side&&side.ltp!=null?'<span class="v5-sideltp v5-no">₹'+side.ltp.toFixed(2)+'</span>':'';
-    return '<span class="v5-case-pill v5-no">'+(side&&side.caseNum?((side.caseNum<=4?"C":"P")+side.caseNum):"--")+'</span><span class="v5-sideconf v5-no">—</span>'+ltpHtmlNo;
+    return ltpHtmlNo+'<span class="v5-case-pill v5-no">'+(side&&side.caseNum?((side.caseNum<=4?"C":"P")+side.caseNum):"--")+'</span><span class="v5-sideconf v5-no">—</span>';
   }
   var cls=side.isSqueeze?"v5-med":"v5-hi";
   var label=(side.caseNum<=4?"C":"P")+side.caseNum;
   var ltpHtml=side.ltp!=null?'<span class="v5-sideltp '+cls+'">₹'+side.ltp.toFixed(2)+'</span>':'';
-  return '<span class="v5-case-pill '+cls+'">'+label+'</span><span class="v5-sideconf '+cls+'">'+side.confidence+'</span>'+ltpHtml;
+  return ltpHtml+'<span class="v5-case-pill '+cls+'">'+label+'</span><span class="v5-sideconf '+cls+'">'+side.confidence+'</span>';
 }
 
 var V5_AUTO_INTERVAL=null;
