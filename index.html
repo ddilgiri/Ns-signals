@@ -189,7 +189,7 @@ var _pPrevC=e.prevPremiumClose>0?e.prevPremiumClose:(e.entryPremium||e.premium||
 var _pDiff=(e.premium||0)-_pPrevC,_pPct=_pPrevC>0?_pDiff/_pPrevC*100:0,_pSign=_pDiff>=0?"+":"",_pCol=_pDiff>=0?"var(--green)":"var(--red)";
 var _pChgInit=_pSign+_pDiff.toFixed(2)+" ("+_pSign+_pPct.toFixed(1)+"%)";var _premClass=_pDiff>0?"price-up":_pDiff<0?"price-down":"price-neutral";var _premStyle=_pDiff!==0?" style=\"color:"+premColor(Math.abs(_pPct),_pDiff>0)+"\"":"";return'<div class="sig-card '+o+n+gbClass+'" onclick="toggleCard(this)" id="card-'+e.id+'"><div class="card-col"><div class="stk-logo">'+l+'</div><div class="card-mid"><div class="badge-row">'+d+r+oiInitBadge+p+gbBadge+'</div><div class="stk-name">'+s+'</div><div class="stk-sub">'+e.strike+" "+e.type+" · Lot "+(e.lot||1)+'</div></div>'+buildScoreRing(e.score,e.verdict,e.breakdown,e.initialScore,e.id)+'<div class="card-right"><div class="prem-val '+_premClass+'"'+_premStyle+' id="cpm-'+e.id+'" data-base="'+_pPrevC+'">₹'+K+'</div><div class="prem-chg" id="cpmchg-'+e.id+'" style="color:'+_pCol+'">'+_pChgInit+'</div><div class="pnl-tag none">'+calcCapital(e.premium||0,e.lot||1)+' min</div></div></div><div class="card-live-bar" id="clbar-'+e.id+'"><div class="clb-item"><span class="clb-lbl">LIVE SPOT</span><span class="clb-val"><span id="clspot-'+e.id+'">₹'+G+'</span><span class="clb-arr" id="clarr-'+e.id+'"> ▲</span><span class="clb-chg" id="clchg-'+e.id+'"></span></span></div><div class="clb-divider"></div><div class="clb-item"><span class="clb-lbl">ENTRY PREM</span><span class="clb-val" id="cprev-'+e.id+'">₹'+EP+'</span></div><div class="clb-divider"></div><div class="clb-zone" id="clzone-'+e.id+'">—</div></div><div class="card-divider"></div><div class="card-exp"><div class="buy-box"><div><div class="buy-lbl">Strike</div><div class="buy-strike">'+e.strike+" "+e.type+'</div></div><div style="text-align:center"><div class="buy-lbl">Lot Size</div><div style="font-size:14px;font-weight:800;color:var(--text)">'+(e.lot||1)+'</div></div><div style="text-align:right"><div class="pm-lbl">Min Capital</div><div class="pm-val" style="font-size:15px;color:var(--blue)" id="cap-'+e.id+'">'+calcCapital(e.premium||0,e.lot||1)+'</div></div></div><div class="levels"><div class="lv-row hold" id="lv-hold-'+e.id+'"><div class="lv-icon">💛</div><div><div class="lv-spot">'+(e.holdZone||"--")+' = HOLD</div><div class="lv-reason">'+(e.holdReason||"")+'</div></div></div><div class="lv-row hold-strong" id="lv-hs-'+e.id+'"><div class="lv-icon">💪</div><div><div class="lv-spot">'+(e.holdStrong||"--")+' = HOLD STRONG</div><div class="lv-reason">'+(e.holdStrongReason||"")+'</div></div></div><div class="lv-row exit" id="lv-exit-'+e.id+'"><div class="lv-icon">🛑</div><div><div class="lv-spot">'+(e.exitZone||"--")+' = EXIT</div><div class="lv-reason">'+(e.exitReason||"")+'</div></div></div></div><div class="target-row"><div class="target-chip"><div class="t-lbl">Target 1</div><div class="t-val">'+y+'</div></div><div class="target-chip"><div class="t-lbl">Target 2</div><div class="t-val">'+u+'</div></div></div><div class="capsules">'+I+'</div>'+buildOITrendHTML(e)+buildGammaBlastHTML(e)+buildScoreBreakdown(e)+'<div class="paper-btn" onclick="addPaperTrade(event,\''+e.id+"')\">📋 Add to Paper Trade</div></div></div>"}function calcCapital(e,t){var o=e*t*1.2;return o>=1e5?"₹"+(o/1e5).toFixed(1)+"L":o>=1e3?"₹"+Math.round(o/1e3)+"K":"₹"+Math.round(o)}setInterval(function(){try{S.connected&&getMarketStatus().nseOpen&&loadIndices()}catch(e){}},3e4);fetchMarketStatus();setInterval(fetchMarketStatus,60000);loadSignalLog();;var LIVE_PRICES={},spotTimers={},LIVE_PREV={},LIVE_PREMIUMS={},liveUpdateInt=null,_priceTickCount=0;function buildTokenMap(){var e={};return NSE_STOCKS.forEach(function(t){e[String(t.token)]=t.sym}),IDX_LIST.forEach(function(t){e[String(t.token)]=t.sym}),e}async function batchUpdatePrices(){if(S.connected)try{for(var e=buildTokenMap(),t=Object.keys(e),o=0;o<t.length;o+=50){var n=t.slice(o,o+50);try{var s=await fetch(getServer()+"/quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"FULL",exchangeTokens:{NSE:n}})}),a=await s.json();a.status&&a.data&&a.data.fetched&&a.data.fetched.forEach(function(t){var o=e[String(t.symbolToken)];var n=parseFloat(t.ltp||t.close||0);var closeVal=parseFloat(t.close||0);var prevCloseVal=parseFloat(t.previousClose||0);var reportedPct=parseFloat(t.percentchange||t.changepercent||t.pChange||0);// Angel One sometimes returns an exact 100000 sentinel for an uninitialized/no-data token — never real market data
 if(n===100000||closeVal===100000)return;
-var s=closeVal>0?closeVal:(prevCloseVal>0?prevCloseVal:0);if(o&&n>0){if(!LIVE_PREV[o]){var validClose=s>0&&s<n*3&&s>n/3;var validPct=reportedPct!==0&&Math.abs(reportedPct)<50;if(validClose&&(reportedPct===0||Math.abs((n-s)/s*100-reportedPct)<5)){LIVE_PREV[o]=s;}else if(validPct){var derivedBase=n/(1+reportedPct/100);if(derivedBase>0&&derivedBase<n*3&&derivedBase>n/3)LIVE_PREV[o]=derivedBase;}else if(validClose){LIVE_PREV[o]=s;}}LIVE_PRICES[o]=n;}})}catch(e){}}updateAllCards(),updateMoodStrip(),updateMoverTicker(),batchUpdatePremiums(),++_priceTickCount%6===0&&S.signals.length&&addLog("🔄 Live prices updated ("+S.signals.length+" signals)",""),++oiRefreshCount>=9&&(oiRefreshCount=0,refreshSignalOI())}catch(e){}}async function batchUpdatePremiums(){
+var s=closeVal>0?closeVal:(prevCloseVal>0?prevCloseVal:0);if(o&&n>0){if(!LIVE_PREV[o]){var validClose=s>0&&s<n*3&&s>n/3;var validPct=reportedPct!==0&&Math.abs(reportedPct)<50;if(validClose&&(reportedPct===0||Math.abs((n-s)/s*100-reportedPct)<5)){LIVE_PREV[o]=s;}else if(validPct){var derivedBase=n/(1+reportedPct/100);if(derivedBase>0&&derivedBase<n*3&&derivedBase>n/3)LIVE_PREV[o]=derivedBase;}else if(validClose){LIVE_PREV[o]=s;}}LIVE_PRICES[o]=n;}})}catch(e){}}updateAllCards(),updateMoodStrip(),updateMoverTicker(),v5UpdateLiveBoxPrices(),batchUpdatePremiums(),++_priceTickCount%6===0&&S.signals.length&&addLog("🔄 Live prices updated ("+S.signals.length+" signals)",""),++oiRefreshCount>=9&&(oiRefreshCount=0,refreshSignalOI())}catch(e){}}async function batchUpdatePremiums(){
   if(!S.connected)return;
   // Build list of unique symbols from signals + trades
   var allItems=[],seen={};
@@ -2311,6 +2311,32 @@ async function v5FetchOiForSymbol(sym,spotPrice){
   }catch(e){return null;}
 }
 
+function v5UpdateLiveBoxPrices(){
+  try{
+    document.querySelectorAll(".v5-live-spot").forEach(function(el){
+      var sym=el.getAttribute("data-sym");
+      var lp=LIVE_PRICES[sym];
+      if(!lp)return;
+      var pv=LIVE_PREV[sym];
+      el.textContent="₹"+lp.toLocaleString("en-IN",{maximumFractionDigits:2});
+      if(pv){
+        var up=lp>=pv;
+        el.className="v5-spot v5-live-spot "+(up?"v5-up":"v5-down");
+      }
+    });
+    document.querySelectorAll(".v5-live-pct").forEach(function(el){
+      var sym=el.getAttribute("data-sym");
+      var lp=LIVE_PRICES[sym],pv=LIVE_PREV[sym];
+      if(!lp||!pv)return;
+      var chg=lp-pv,pct=chg/pv*100;
+      var up=chg>=0;
+      var arrow=up?"▲":"▼";
+      var rupeeHtml=(up?"+":"-")+"₹"+Math.abs(chg).toLocaleString("en-IN",{maximumFractionDigits:2})+" ";
+      el.textContent=arrow+" "+rupeeHtml+"("+Math.abs(pct).toFixed(2)+"%)";
+      el.className="v5-pct v5-live-pct "+(up?"v5-up":"v5-down");
+    });
+  }catch(e){}
+}
 function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
   var pctCls=pctChange>=0?"v5-up":"v5-down";
   var arrow=pctChange>=0?"▲":"▼";
@@ -2333,8 +2359,8 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
   }
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
     '<div class="v5-box-top">'+v5LogoImg(sym,"v5-logo")+'<div class="v5-name">'+sym+'</div></div>'+
-    '<div class="v5-spot '+pctCls+'">₹'+(spotPrice?spotPrice.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
-    '<div class="v5-pct '+pctCls+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
+    '<div class="v5-spot v5-live-spot '+pctCls+'" data-sym="'+sym+'">₹'+(spotPrice?spotPrice.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
+    '<div class="v5-pct v5-live-pct '+pctCls+'" data-sym="'+sym+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
     lastViewHtml+
     '<div class="v5-case-row">'+caseHtml+'</div>'+reasonHtml+'</div>';
 }
