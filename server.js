@@ -980,6 +980,37 @@ app.get("/dynamic-shortlist",async(e,t)=>{
   }
 });
 
+app.get("/oi-velocity-shortlist",async(e,t)=>{
+  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
+  try{
+    const results=[];
+    for(const sym of Object.keys(OI_HISTORY)){
+      const trend=getOITrend(sym);
+      if(trend.trend==="INSUFFICIENT_DATA")continue;
+      const velocity=Math.abs(trend.ceChange||0)+Math.abs(trend.peChange||0);
+      if(velocity<=0)continue;
+      results.push({
+        sym,
+        velocity,
+        ceChange:trend.ceChange,
+        peChange:trend.peChange,
+        trend:trend.trend,
+        reason:trend.trend==="BULLISH_MOMENTUM"?"OI: Ramesh unwinding, Suresh building":
+               trend.trend==="BEARISH_MOMENTUM"?"OI: Ramesh building, Suresh unwinding":
+               trend.trend==="BOTH_ADDING_TRAPPED"?"OI: both sides adding — trapped":
+               trend.trend==="BOTH_RUNNING_UNCERTAIN"?"OI: both unwinding — uncertain":"OI: mixed activity"
+      });
+    }
+    results.sort((a,b)=>b.velocity-a.velocity);
+    const top=results.slice(0,25);
+    log(`OI velocity shortlist: ${Object.keys(OI_HISTORY).length} symbols with history, ${results.length} with movement, top ${top.length} returned`,"INFO");
+    t.json({status:!0,dynamic:top,totalTracked:Object.keys(OI_HISTORY).length,source:"oi-history-velocity"});
+  }catch(e){
+    log(`/oi-velocity-shortlist error: ${e.message}`,"ERR");
+    t.status(500).json({status:!1,message:e.message,dynamic:[]});
+  }
+});
+
 const MCX_SYMBOLS=["GOLD","SILVER","CRUDEOIL","NATURALGAS","COPPER","ALUMINIUM","ZINC","LEAD","NICKEL"];
 async function getMCXTokens(){try{await ensureInstruments("MCX tokens");}catch(e){return log("Instrument master download failed: "+e.message,"WARN"),{}}const e=new Date,t={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function a(e){if(!e)return null;const a=String(e).trim().toUpperCase(),s=a.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(s){const e=t[s[2]];if(void 0!==e)return new Date(+s[3],e,+s[1])}const n=a.match(/^(\d{4})(\d{2})(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=a.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(o)return new Date(+o[1],+o[2]-1,+o[3]);const r=new Date(e);return isNaN(r)?null:r}const s={};for(const t of MCX_SYMBOLS){const n=SESSION._instruments.filter(s=>{if("MCX"!==s.exch_seg)return!1;if(!s.name||s.name.toUpperCase()!==t)return!1;if("FUTCOM"!==s.instrumenttype)return!1;const n=a(s.expiry);return n&&n>=e}).sort((e,t)=>a(e.expiry)-a(t.expiry));n.length>0&&(s[t]=n[0].token,log(`MCX ${t}: token ${n[0].token} exp ${n[0].expiry}`,"INFO"))}return s}
 

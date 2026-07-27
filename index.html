@@ -2472,10 +2472,17 @@ async function v5RefreshAll(){
     losses.sort(function(a,b){return a.percentChange-b.percentChange;});
     var gainersTop=gains.slice(0,15),losersTop=losses.slice(0,15);
     var usedSyms={};gainersTop.forEach(function(g){usedSyms[g.sym]=true;});losersTop.forEach(function(g){usedSyms[g.sym]=true;});
-    // Dynamic Watch: next-biggest movers (either direction) not already in gainers/losers — proxy for "active" stocks
-    var rest=gains.concat(losses).filter(function(g){return !usedSyms[g.sym];});
-    rest.sort(function(a,b){return Math.abs(b.percentChange)-Math.abs(a.percentChange);});
-    var dynamicTop=rest.slice(0,25).map(function(g){return {sym:g.sym,percentChange:g.percentChange,spotPrice:g.spotPrice,reason:"Active mover"};});
+    // Dynamic Watch: real OI-velocity ranking from server-side OI_HISTORY (populated as stocks get scanned)
+    var dynamicTop=[];
+    try{
+      var oiVelRes=await fetch(getServer()+"/oi-velocity-shortlist");
+      var oiVelData=await oiVelRes.json();
+      if(oiVelData.status&&oiVelData.dynamic){
+        dynamicTop=oiVelData.dynamic.filter(function(d){return !usedSyms[d.sym];}).map(function(d){
+          return {sym:d.sym,percentChange:0,spotPrice:LIVE_PRICES[d.sym]||0,reason:d.reason};
+        });
+      }
+    }catch(oiVelErr){addLog("OI velocity fetch failed: "+oiVelErr.message,"warn");}
     if(!LIVE_PRICES||!Object.keys(LIVE_PRICES).length){
       toast("⏳ Live prices still loading — try again in a few seconds");
       addLog("V5 scan complete — live price data not ready yet","warn");
