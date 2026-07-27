@@ -938,7 +938,7 @@ async function fetchGainersLosersType(datatype){
   try{
     const r=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
       {datatype,expirytype:"NEAR"});
-    log(`gainersAndLosers ${datatype}: httpStatus=${r.status} dataType=${typeof r.data} rawData=${JSON.stringify(r.data).slice(0,300)}`,"INFO");
+    log(`##GAINLOSE-DEBUG## ${datatype}: httpStatus=${r.status} dataType=${typeof r.data} rawData=${JSON.stringify(r.data).slice(0,400)}`,"ERR");
     if(Array.isArray(r.data))return r.data;
     if(r.data&&Array.isArray(r.data.data))return r.data.data;
     if(r.data&&r.data.data&&Array.isArray(r.data.data.data))return r.data.data.data;
