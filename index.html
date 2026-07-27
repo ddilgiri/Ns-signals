@@ -2450,18 +2450,31 @@ async function v5RefreshAll(){
   btn.classList.add("spinning");
   addLog("V5 scan started...","");
   try{
-    var r=await fetch(getServer()+"/dynamic-shortlist");
-    var d=await r.json();
-    if(!d.status){toast("⚠️ "+(d.message||"Shortlist fetch failed"));addLog("V5 scan failed: "+(d.message||"Shortlist fetch failed"),"warn");btn.classList.remove("spinning");return;}
-    await v5RenderRail("v5GainersRail",(d.gainers||[]).map(function(g){return {sym:g.sym,percentChange:g.percentChange};}),false);
-    await v5RenderRail("v5LosersRail",(d.losers||[]).map(function(g){return {sym:g.sym,percentChange:g.percentChange};}),false);
-    await v5RenderRail("v5DynamicRail",(d.dynamic||[]).map(function(g){return {sym:g.sym,percentChange:g.percentChange,reason:"OI spike"};}),false);
-    if(!(d.gainers||[]).length&&!(d.losers||[]).length&&!(d.dynamic||[]).length){
-      toast("⏳ Exchange data thin — try again in a few minutes (common right after market open)");
-      addLog("V5 scan complete — exchange data thin (0 gainers/losers/dynamic)","warn");
+    var gains=[],losses=[];
+    NSE_STOCKS.forEach(function(stk){
+      var lp=LIVE_PRICES[stk.sym],pv=LIVE_PREV[stk.sym];
+      if(!lp||!pv||pv<=0)return;
+      var chg=(lp-pv)/pv*100;
+      if(Math.abs(chg)<0.3)return;
+      (chg>=0?gains:losses).push({sym:stk.sym,percentChange:chg,spotPrice:lp});
+    });
+    gains.sort(function(a,b){return b.percentChange-a.percentChange;});
+    losses.sort(function(a,b){return a.percentChange-b.percentChange;});
+    var gainersTop=gains.slice(0,15),losersTop=losses.slice(0,15);
+    var usedSyms={};gainersTop.forEach(function(g){usedSyms[g.sym]=true;});losersTop.forEach(function(g){usedSyms[g.sym]=true;});
+    // Dynamic Watch: next-biggest movers (either direction) not already in gainers/losers — proxy for "active" stocks
+    var rest=gains.concat(losses).filter(function(g){return !usedSyms[g.sym];});
+    rest.sort(function(a,b){return Math.abs(b.percentChange)-Math.abs(a.percentChange);});
+    var dynamicTop=rest.slice(0,25).map(function(g){return {sym:g.sym,percentChange:g.percentChange,spotPrice:g.spotPrice,reason:"Active mover"};});
+    if(!LIVE_PRICES||!Object.keys(LIVE_PRICES).length){
+      toast("⏳ Live prices still loading — try again in a few seconds");
+      addLog("V5 scan complete — live price data not ready yet","warn");
     }else{
+      await v5RenderRail("v5GainersRail",gainersTop,false);
+      await v5RenderRail("v5LosersRail",losersTop,false);
+      await v5RenderRail("v5DynamicRail",dynamicTop,false);
       toast("✅ Shortlist refreshed");
-      addLog("V5 scan complete — "+(d.gainers||[]).length+" gainers, "+(d.losers||[]).length+" losers, "+(d.dynamic||[]).length+" dynamic","ok");
+      addLog("V5 scan complete — "+gainersTop.length+" gainers, "+losersTop.length+" losers, "+dynamicTop.length+" dynamic (computed from live prices)","ok");
     }
   }catch(e){toast("⚠️ Refresh failed: "+e.message);addLog("V5 scan error: "+e.message,"err");}
   btn.classList.remove("spinning");
