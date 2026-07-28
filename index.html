@@ -2404,9 +2404,8 @@ function v5OpenViewAll(sectionKey){
 function v5CloseViewAll(){
   document.getElementById("v5ViewAllOverlay").style.display="none";
 }
-function v5RenderHiSig(){
-  var listEl=document.getElementById("v5HiSigList");
-  if(!listEl)return;
+var V5_HISIG_PREV={};
+function v5ComputeHiSigHits(){
   var seen={};
   var hits=[];
   ["watchlist","gainers","losers","dynamic"].forEach(function(sectionKey){
@@ -2419,6 +2418,28 @@ function v5RenderHiSig(){
     });
   });
   hits.sort(function(a,b){return b.best.confidence-a.best.confidence;});
+  return hits;
+}
+function v5CheckHiSigNotify(hits){
+  var current={};
+  hits.forEach(function(h){
+    var key=h.sym+"-"+h.best.caseNum;
+    current[key]=h.best.confidence;
+    var prevConf=V5_HISIG_PREV[key];
+    if(prevConf===undefined){
+      var label=(h.best.caseNum<=4?"C":"P")+h.best.caseNum;
+      fxoNotify("🎯 "+h.sym+" "+label+" — "+h.best.confidence+"%","New 60%+ signal on "+h.sym,"new");
+    }else if(prevConf!==h.best.confidence){
+      var label2=(h.best.caseNum<=4?"C":"P")+h.best.caseNum;
+      fxoNotify("↻ "+h.sym+" "+label2+" — "+h.best.confidence+"%","Confidence changed from "+prevConf+"% to "+h.best.confidence+"%","hold");
+    }
+  });
+  V5_HISIG_PREV=current;
+}
+function v5RenderHiSig(){
+  var listEl=document.getElementById("v5HiSigList");
+  if(!listEl)return;
+  var hits=v5ComputeHiSigHits();
   if(!hits.length){
     listEl.innerHTML='<div class="v5-empty-hint" style="padding:24px 15px">No Case 2/4/6/8 signals at 60%+ right now — check back after the next V5 refresh</div>';
     return;
@@ -2638,6 +2659,7 @@ async function v5RefreshAll(){
       toast("✅ Shortlist refreshed");
       addLog("V5 scan complete — "+gainersTop.length+" gainers, "+losersTop.length+" losers, "+dynamicTop.length+" dynamic (computed from live prices)","ok");
       v5SeedOiHistoryBatch(gainersTop,losersTop);
+      v5CheckHiSigNotify(v5ComputeHiSigHits());
       if(document.getElementById("pg-hisig")&&document.getElementById("pg-hisig").classList.contains("active"))v5RenderHiSig();
     }
   }catch(e){toast("⚠️ Refresh failed: "+e.message);addLog("V5 scan error: "+e.message,"err");}
