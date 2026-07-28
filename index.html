@@ -2339,6 +2339,7 @@ async function v5FetchOiForSymbol(sym,spotPrice){
 function v5UpdateLiveBoxPrices(){
   try{
     document.querySelectorAll(".v5-live-spot").forEach(function(el){
+      if(el.getAttribute("data-hasoption")==="1")return;
       var sym=el.getAttribute("data-sym");
       var lp=LIVE_PRICES[sym];
       if(!lp)return;
@@ -2350,6 +2351,7 @@ function v5UpdateLiveBoxPrices(){
       }
     });
     document.querySelectorAll(".v5-live-pct").forEach(function(el){
+      if(el.getAttribute("data-hasoption")==="1")return;
       var sym=el.getAttribute("data-sym");
       var lp=LIVE_PRICES[sym],pv=LIVE_PREV[sym];
       if(!lp||!pv)return;
@@ -2398,10 +2400,13 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
       '<div class="v5-confstrip-item v5-confstrip-side">'+aboveTxt+'</div>'+
       '</div>';
   }
+  var optionLtp=best&&best.ltp!=null?best.ltp:null;
+  var priceToShow=optionLtp!=null?optionLtp:spotPrice;
+  var hasOptFlag=optionLtp!=null?'1':'0';
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
     '<div class="v5-box-top"><div class="v5-box-topleft">'+v5LogoImg(sym,"v5-logo")+'<div><div class="v5-name">'+sym+'</div>'+strikeLabelHtml+'</div></div>'+caseTopHtml+'</div>'+
-    '<div class="v5-spot v5-live-spot '+pctCls+'" data-sym="'+sym+'">₹'+(spotPrice?spotPrice.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
-    '<div class="v5-pct v5-live-pct '+pctCls+'" data-sym="'+sym+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
+    '<div class="v5-spot v5-live-spot '+pctCls+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">₹'+(priceToShow!=null?priceToShow.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
+    '<div class="v5-pct v5-live-pct '+pctCls+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
     lastViewHtml+reasonHtml+confStripHtml+'</div>';
 }
 
