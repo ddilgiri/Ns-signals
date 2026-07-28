@@ -2403,10 +2403,24 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist,showOptionLtp
   var optionLtp=showOptionLtp&&best&&best.ltp!=null?best.ltp:null;
   var priceToShow=optionLtp!=null?optionLtp:spotPrice;
   var hasOptFlag=optionLtp!=null?'1':'0';
+  var pctClsFinal=pctCls,arrowFinal=arrow,rupeeHtmlFinal=rupeeHtml,pctChangeFinal=pctChange;
+  if(optionLtp!=null){
+    if(best.prevClose!=null&&best.prevClose>0){
+      var optChg=optionLtp-best.prevClose;
+      var optPct=(optChg/best.prevClose)*100;
+      pctClsFinal=optChg>=0?"v5-up":"v5-down";
+      arrowFinal=optChg>=0?"▲":"▼";
+      rupeeHtmlFinal=(optChg>=0?"+":"-")+"₹"+Math.abs(optChg).toLocaleString("en-IN",{maximumFractionDigits:2})+" ";
+      pctChangeFinal=optPct;
+    }else{
+      pctClsFinal="v5-up";arrowFinal="";rupeeHtmlFinal="";pctChangeFinal=null;
+    }
+  }
+  var pctLine=pctChangeFinal!=null?arrowFinal+' '+rupeeHtmlFinal+'('+Math.abs(pctChangeFinal).toFixed(2)+'%)':'Prev close unavailable';
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
     '<div class="v5-box-top"><div class="v5-box-topleft">'+v5LogoImg(sym,"v5-logo")+'<div><div class="v5-name">'+sym+'</div>'+strikeLabelHtml+'</div></div>'+caseTopHtml+'</div>'+
-    '<div class="v5-spot v5-live-spot '+pctCls+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">₹'+(priceToShow!=null?priceToShow.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
-    '<div class="v5-pct v5-live-pct '+pctCls+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
+    '<div class="v5-spot v5-live-spot '+pctClsFinal+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">₹'+(priceToShow!=null?priceToShow.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
+    '<div class="v5-pct v5-live-pct '+pctClsFinal+'" data-sym="'+sym+'" data-hasoption="'+hasOptFlag+'">'+pctLine+'</div>'+
     lastViewHtml+reasonHtml+confStripHtml+'</div>';
 }
 
