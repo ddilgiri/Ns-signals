@@ -13,7 +13,7 @@
 .v5-box{flex-shrink:0;width:172px;background:var(--card);border:1px solid var(--border);border-radius:15px;padding:14px 13px;position:relative;cursor:pointer;transition:transform .1s}.v5-box:active{transform:scale(.97)}
 .v5-box.v5-glow-hi{box-shadow:0 0 0 1px rgba(34,197,94,.3)}.v5-box.v5-glow-med{box-shadow:0 0 0 1px rgba(245,158,11,.28)}
 .v5-box-delete{position:absolute;top:5px;right:5px;width:17px;height:17px;border-radius:50%;background:var(--red-bg);border:1px solid rgba(239,68,68,.35);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--red);z-index:5}
-.v5-box-top{display:flex;align-items:center;gap:8px}.v5-logo{width:36px;height:36px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:400;flex-shrink:0;border:1px solid var(--border);overflow:hidden}.v5-logo img{width:100%;height:100%;object-fit:contain}.v5-name{font-size:14.5px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Roboto,sans-serif}
+.v5-box-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.v5-box-topleft{display:flex;align-items:center;gap:8px;min-width:0}.v5-strikelabel{font-size:10.5px;color:var(--text3);margin-top:1px;font-family:Roboto,sans-serif}.v5-confstrip{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:8px;border-top:1px solid var(--border)}.v5-confstrip-item{font-size:10.5px;font-family:Roboto,sans-serif;text-align:center;flex:1}.v5-confstrip-side{color:var(--text3)}.v5-confstrip-mid{font-weight:800;font-size:13px}.v5-confstrip-mid.v5-call-hi{color:var(--green)}.v5-confstrip-mid.v5-call-med{color:#16a34a}.v5-confstrip-mid.v5-put-hi{color:var(--red)}.v5-confstrip-mid.v5-put-med{color:#dc2626}.v5-logo{width:36px;height:36px;border-radius:9px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:400;flex-shrink:0;border:1px solid var(--border);overflow:hidden}.v5-logo img{width:100%;height:100%;object-fit:contain}.v5-name{font-size:14.5px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Roboto,sans-serif}
 .v5-spot{font-family:Roboto,sans-serif;font-size:17.5px;font-weight:400;margin-top:9px}.v5-spot.v5-up{color:var(--green)}.v5-spot.v5-down{color:var(--red)}.v5-pct{font-size:12px;font-weight:400;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v5-pct.v5-up{color:var(--green)}.v5-pct.v5-down{color:var(--red)}
 .v5-lastview{font-size:8.5px;margin-top:2px;font-family:Roboto,sans-serif}.v5-lastview.v5-up{color:#6ee7a0}.v5-lastview.v5-down{color:#f87171}
 .v5-case-row{display:flex;align-items:center;gap:4px;margin-top:7px;padding-top:6px;border-top:1px solid var(--border)}.v5-case-pill{font-size:12px;font-weight:400;padding:2px 6px;border-radius:5px}.v5-case-pill.v5-hi{background:var(--green-bg);color:var(--green)}.v5-case-pill.v5-med{background:var(--amber-bg);color:var(--amber)}.v5-case-pill.v5-no{background:0 0;color:var(--text3);border:1px solid var(--border)}.v5-case-pill.v5-call-hi{background:var(--green-bg);color:var(--green)}.v5-case-pill.v5-call-med{background:rgba(34,197,94,.14);color:#16a34a}.v5-case-pill.v5-put-hi{background:var(--red-bg);color:var(--red)}.v5-case-pill.v5-put-med{background:rgba(239,68,68,.14);color:#dc2626}
@@ -2301,7 +2301,7 @@ function v5FinalizeConfidence(sideResult,sym,strike){
   return sideResult;
 }
 
-function v5BestCase(caseAnalysisForStrike,sym){
+function v5BestCase(caseAnalysisForStrike,sym,fullChain){
   // pick whichever side (CE/PE) has a real entry case with highest confidence, at the ATM-ish strike
   if(!caseAnalysisForStrike)return null;
   var ce=v5FinalizeConfidence(caseAnalysisForStrike.CE,sym,caseAnalysisForStrike.strike);
@@ -2311,7 +2311,21 @@ function v5BestCase(caseAnalysisForStrike,sym){
   if(pe&&pe.confidence!=null)candidates.push(pe);
   if(!candidates.length)return null;
   candidates.sort(function(a,b){return b.confidence-a.confidence;});
-  return candidates[0];
+  var winner=candidates[0];
+  winner.strike=caseAnalysisForStrike.strike;
+  winner.isCall=winner.caseNum<=4;
+  // Neighboring confidence: same side (CE/PE) at the strike below and above, if available
+  if(fullChain&&fullChain.length){
+    var idx=fullChain.findIndex(function(e){return e.strike===caseAnalysisForStrike.strike;});
+    if(idx>=0){
+      var sideKey=winner.isCall?"CE":"PE";
+      var below=idx>0?v5FinalizeConfidence(fullChain[idx-1][sideKey],sym,fullChain[idx-1].strike):null;
+      var above=idx<fullChain.length-1?v5FinalizeConfidence(fullChain[idx+1][sideKey],sym,fullChain[idx+1].strike):null;
+      winner.neighborBelow=below&&below.confidence!=null?below.confidence:null;
+      winner.neighborAbove=above&&above.confidence!=null?above.confidence:null;
+    }
+  }
+  return winner;
 }
 
 async function v5FetchOiForSymbol(sym,spotPrice){
@@ -2352,7 +2366,6 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
   var pctCls=pctChange>=0?"v5-up":"v5-down";
   var arrow=pctChange>=0?"▲":"▼";
   var glowCls=best?(best.isSqueeze?"v5-glow-med":"v5-glow-hi"):"";
-  var caseHtml=best?v5CasePillHtml(best.caseNum,best.confidence,best.isSqueeze):'<span class="v5-case-pill v5-no">--</span><span class="v5-conf v5-no">—</span>';
   var deleteBtn=isWatchlist?'<div class="v5-box-delete" onclick="event.stopPropagation();v5RemoveFromWatchlist(\''+sym+'\')">✕</div>':"";
   var lastViewHtml="";
   var prevSpot=V5.lastPrices[sym];
@@ -2368,12 +2381,28 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
     var rupeeChg=spotPrice-prevClose;
     rupeeHtml=(rupeeChg>=0?"+":"-")+"₹"+Math.abs(rupeeChg).toLocaleString("en-IN",{maximumFractionDigits:2})+" ";
   }
+  var strikeLabelHtml="";
+  var caseTopHtml='<span class="v5-case-pill v5-no">--</span>';
+  var confStripHtml="";
+  if(best&&best.strike!=null){
+    var optType=best.isCall?"CE":"PE";
+    strikeLabelHtml='<div class="v5-strikelabel">'+best.strike+' '+optType+'</div>';
+    var cls=best.isCall?(best.isSqueeze?"v5-call-med":"v5-call-hi"):(best.isSqueeze?"v5-put-med":"v5-put-hi");
+    var label=(best.isCall?"C":"P")+best.caseNum;
+    caseTopHtml='<span class="v5-case-pill '+cls+'">'+label+'</span>';
+    var belowTxt=best.neighborBelow!=null?best.neighborBelow+"%":"--";
+    var aboveTxt=best.neighborAbove!=null?best.neighborAbove+"%":"--";
+    confStripHtml='<div class="v5-confstrip">'+
+      '<div class="v5-confstrip-item v5-confstrip-side">'+belowTxt+'</div>'+
+      '<div class="v5-confstrip-item v5-confstrip-mid '+cls+'">'+best.confidence+'%</div>'+
+      '<div class="v5-confstrip-item v5-confstrip-side">'+aboveTxt+'</div>'+
+      '</div>';
+  }
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
-    '<div class="v5-box-top">'+v5LogoImg(sym,"v5-logo")+'<div class="v5-name">'+sym+'</div></div>'+
+    '<div class="v5-box-top"><div class="v5-box-topleft">'+v5LogoImg(sym,"v5-logo")+'<div><div class="v5-name">'+sym+'</div>'+strikeLabelHtml+'</div></div>'+caseTopHtml+'</div>'+
     '<div class="v5-spot v5-live-spot '+pctCls+'" data-sym="'+sym+'">₹'+(spotPrice?spotPrice.toLocaleString("en-IN",{maximumFractionDigits:2}):"--")+'</div>'+
     '<div class="v5-pct v5-live-pct '+pctCls+'" data-sym="'+sym+'">'+arrow+' '+rupeeHtml+'('+Math.abs(pctChange||0).toFixed(2)+'%)</div>'+
-    lastViewHtml+
-    '<div class="v5-case-row">'+caseHtml+'</div>'+reasonHtml+'</div>';
+    lastViewHtml+reasonHtml+confStripHtml+'</div>';
 }
 
 var V5_SECTION_TITLES={watchlist:"Stocks You're Interested In",gainers:"Top Gainers",losers:"Top Losers",dynamic:"Dynamic Watch"};
@@ -2484,7 +2513,7 @@ async function v5RenderRail(containerId,stocks,isWatchlist,sectionKey){
     var best=null,reason=s.reason||"";
     if(oi&&oi.caseAnalysis&&oi.caseAnalysis.length){
       var atmEntry=oi.caseAnalysis.reduce(function(a,b){return Math.abs(b.strike-(s.spotPrice||oi.spotPrice))<Math.abs(a.strike-(s.spotPrice||oi.spotPrice))?b:a;});
-      best=v5BestCase(atmEntry,s.sym);
+      best=v5BestCase(atmEntry,s.sym,oi.caseAnalysis);
     }
     var spot=(oi&&oi.spotPrice)||s.spotPrice||0;
     html+=v5BoxHtml(s.sym,spot,s.percentChange||0,best,reason,isWatchlist);
