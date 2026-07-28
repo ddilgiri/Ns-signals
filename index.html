@@ -2364,7 +2364,7 @@ function v5UpdateLiveBoxPrices(){
     });
   }catch(e){}
 }
-function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
+function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist,showOptionLtp){
   var pctCls=pctChange>=0?"v5-up":"v5-down";
   var arrow=pctChange>=0?"▲":"▼";
   var glowCls=best?(best.isSqueeze?"v5-glow-med":"v5-glow-hi"):"";
@@ -2400,7 +2400,7 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist){
       '<div class="v5-confstrip-item v5-confstrip-side">'+aboveTxt+'</div>'+
       '</div>';
   }
-  var optionLtp=best&&best.ltp!=null?best.ltp:null;
+  var optionLtp=showOptionLtp&&best&&best.ltp!=null?best.ltp:null;
   var priceToShow=optionLtp!=null?optionLtp:spotPrice;
   var hasOptFlag=optionLtp!=null?'1':'0';
   return '<div class="v5-box '+glowCls+'" onclick="v5OpenDetail(\''+sym+'\',this)">'+deleteBtn+
@@ -2496,7 +2496,7 @@ function v5RenderHiSig(){
     return;
   }
   listEl.innerHTML=hits.map(function(s){
-    return v5BoxHtml(s.sym,s.spotPrice,s.percentChange,s.best,"",false);
+    return v5BoxHtml(s.sym,s.spotPrice,s.percentChange,s.best,"",false,true);
   }).join("");
 }
 async function v5RenderRail(containerId,stocks,isWatchlist,sectionKey){
@@ -2521,7 +2521,7 @@ async function v5RenderRail(containerId,stocks,isWatchlist,sectionKey){
       best=v5BestCase(atmEntry,s.sym,oi.caseAnalysis);
     }
     var spot=(oi&&oi.spotPrice)||s.spotPrice||0;
-    html+=v5BoxHtml(s.sym,spot,s.percentChange||0,best,reason,isWatchlist);
+    html+=v5BoxHtml(s.sym,spot,s.percentChange||0,best,reason,isWatchlist,false);
     if(spot)V5.lastPrices[s.sym]=spot;
     snapshot.push({sym:s.sym,spotPrice:spot,percentChange:s.percentChange||0,best:best,reason:reason});
   }
