@@ -2889,33 +2889,41 @@ function v6CardHtml(r){
   var cls=r.type==="CE"?(r.isSqueeze?"v5-call-med":"v5-call-hi"):(r.isSqueeze?"v5-put-med":"v5-put-hi");
   var label=(r.type==="CE"?"C":"P")+r.caseNum;
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
-  // LTP mood color vs its own prevClose
-  var ltpHtml="";
-  if(r.ltp!=null){
-    var ltpCls="",ltpArrow="";
-    if(r.prevClose!=null&&r.prevClose>0){
-      var up=r.ltp>=r.prevClose;
-      ltpCls=up?"var(--green)":"var(--red)";
-      ltpArrow=up?"▲":"▼";
-    }
-    ltpHtml='<div style="font-size:15px;color:'+(ltpCls||"var(--text)")+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
+  var ts=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  // LTP block: color vs its own prevClose
+  var ltpCls="var(--text)",ltpArrow="",ltpChgHtml="";
+  if(r.ltp!=null&&r.prevClose!=null&&r.prevClose>0){
+    var ltpChg=r.ltp-r.prevClose,ltpPct=(ltpChg/r.prevClose)*100;
+    var ltpUp=ltpChg>=0;
+    ltpCls=ltpUp?"var(--green)":"var(--red)";
+    ltpArrow=ltpUp?"▲":"▼";
+    ltpChgHtml='<div style="font-size:11px;color:'+ltpCls+'">'+(ltpUp?"+":"-")+"₹"+Math.abs(ltpChg).toFixed(2)+' ('+(ltpUp?"+":"")+ltpPct.toFixed(2)+'%)</div>'+
+      '<div style="font-size:11px;color:var(--text3)">'+ts+'</div>';
   }
-  // Spot price: no label, color tied to option type (green for CE cards, red for PE cards)
+  var ltpBlockHtml=r.ltp!=null?'<div style="text-align:right;margin-top:5px"><span class="v5-case-pill '+cls+'" style="font-weight:700">'+label+'</span>'+
+    '<div style="font-size:15px;color:'+ltpCls+';margin-top:5px">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>'+ltpChgHtml+'</div>':'';
+  // Spot: color tied to option type (green for CE cards, red for PE cards)
   var spotHtml="";
-  var spotNow=LIVE_PRICES[r.sym];
+  var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
   if(spotNow){
     var spotCls=r.type==="CE"?"var(--green)":"var(--red)";
     var spotArrow=r.type==="CE"?"▲":"▼";
-    spotHtml='<div style="font-size:13px;color:'+spotCls+';margin-top:1px">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>';
+    var spotChgHtml="";
+    if(spotPrev){
+      var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
+      spotChgHtml='<div style="font-size:11px;color:'+spotCls+'">'+(spotChg>=0?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+' ('+(spotChg>=0?"+":"")+spotPct.toFixed(2)+'%)</div>';
+    }
+    spotHtml='<div style="margin-top:4px"><div style="font-size:15px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgHtml+'</div>';
   }
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
   var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
     '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
     '<div class="v5-hisig-right">'+
-      '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+r.sym+'</div><span class="v5-case-pill '+cls+'">'+label+'</span></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpHtml+'</div>'+
-      spotHtml+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="margin-top:2px"><div class="v5-hisig-name">'+r.sym+'</div><div style="font-size:13px;color:var(--text3)">'+r.strike+' '+r.type+stableTag+'</div>'+spotHtml+'</div>'+
+        ltpBlockHtml+
+      '</div>'+
     '</div></div>';
 }
 async function v5MonitorOpenTrades(){
