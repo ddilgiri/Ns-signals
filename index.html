@@ -412,32 +412,53 @@ e.innerHTML=(v5Html+v4Html)||'<div class="empty-state"><div class="empty-icon">�
 S.closedPaperTrades.length?t.innerHTML=S.closedPaperTrades.map(function(e){var t=e.pnl||0;return'<div class="trade-card '+(t>=0?"profit":"loss")+'"><div class="trade-top"><div><div class="t-name">'+e.sym.toUpperCase()+'</div><div class="t-sub">'+e.strike+" "+e.type+" · "+(e.exitDate||e.date)+'</div></div><div class="t-pnl '+(t>=0?"pos":"neg")+'">'+(t>=0?"+":"")+"₹"+Math.abs(t).toLocaleString("en-IN")+'</div></div><div class="trade-dets"><div class="td-item">Entry <span>₹'+(e.entryPremium||0).toFixed(2)+'</span></div><div class="td-item">Exit <span>₹'+(e.currentPremium||e.entryPremium||0).toFixed(2)+'</span></div><div class="td-item">Result <span style="color:'+(t>=0?"var(--green)":"var(--red)")+'">'+(t>=0?"WIN ✅":"LOSS ❌")+"</span></div></div></div>"}).join(""):t.innerHTML='<div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">No closed trades</div><div class="empty-sub">Closed history appears here</div></div>'}
 function v5TradeCardHtml(tr){
   var status=tr.tradeStatus||"HOLD";
-  var statusCls=status==="HOLD_STRONG"?"hold-strong":status==="EXIT"?"exit":status==="WATCH"?"watch":"hold";
   var statusLbl=status==="HOLD_STRONG"?"HOLD STRONG":status;
   var pnl=tr.pnl||0;
   var pnlCls=pnl>=0?"v5-up":"v5-down";
-  var confDrift=tr.entryConfidence!=null&&tr.lastConfidence!=null?(tr.lastConfidence-tr.entryConfidence):null;
-  var driftHtml=confDrift!=null?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Entry conf '+tr.entryConfidence+'% → Now '+tr.lastConfidence+'% ('+(confDrift>=0?"+":"")+confDrift+'pp)</div>':'';
-  var peakHtml="";
-  if(tr.peakConfidence!=null&&tr.lastConfidence!=null){
-    var decayNow=tr.peakConfidence-tr.lastConfidence;
-    if(decayNow>=10){
-      peakHtml='<div style="font-size:11px;color:var(--red);margin-top:3px;font-weight:600">⚠️ Peaked '+tr.peakConfidence+'% → now '+tr.lastConfidence+'% ('+decayNow+'pp fade — consider booking)</div>';
-    }else if(tr.peakConfidence>(tr.entryConfidence||0)){
-      peakHtml='<div style="font-size:11px;color:var(--text3);margin-top:3px">Peak so far: '+tr.peakConfidence+'%</div>';
-    }
+  var bar=v6TradeBar(tr);
+  var expectedProfitPct=tr.avgPremium?((tr.currentPremium-tr.avgPremium)/tr.avgPremium*100):0;
+  var targetPrice=tr.avgPremium?(tr.avgPremium*1.3):null; // simple 30%-above-avg target line, for display only
+  var targetHtml=targetPrice?'<div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--text3);margin-top:8px"><span>TARGET: ₹'+targetPrice.toFixed(2)+'</span><span style="color:'+(expectedProfitPct>=0?"var(--green)":"var(--red)")+'">P&amp;L: '+(expectedProfitPct>=0?"+":"")+expectedProfitPct.toFixed(1)+'%</span></div>':'';
+  var barHtml=targetHtml+'<div style="margin-top:6px">'+
+    '<div style="height:7px;border-radius:4px;overflow:hidden;display:flex;background:var(--card2)">'+
+      '<div style="width:'+bar.holdPct+'%;background:var(--green)"></div>'+
+      '<div style="width:'+bar.waitPct+'%;background:var(--amber)"></div>'+
+      '<div style="width:'+bar.panicPct+'%;background:var(--red)"></div>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px">'+
+      '<span style="color:var(--green)">HOLD '+bar.holdPct+'%</span>'+
+      '<span style="color:var(--amber)">WAIT '+bar.waitPct+'%</span>'+
+      '<span style="color:var(--red)">PANIC '+bar.panicPct+'%</span>'+
+    '</div></div>';
+  var avgSuggestHtml="";
+  if(tr.entryConfidence!=null&&tr.lastConfidence!=null&&tr.lastConfidence>=tr.entryConfidence+10&&status!=="PANIC"){
+    avgSuggestHtml='<div style="font-size:11px;color:var(--blue);margin-top:5px">💡 Confidence rising ('+tr.entryConfidence+'%→'+tr.lastConfidence+'%) — consider averaging up a lot</div>';
   }
+  var autoTagHtml=tr.v6Auto?'<span style="font-size:9.5px;color:var(--purple);margin-left:6px">🤖 V6 auto</span>':'';
   return '<div class="v5-hisig-card" style="cursor:default">'+
     v5LogoImg(tr.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
-      '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+tr.sym+'</div><div class="'+pnlCls+'" style="font-weight:400;font-size:16px;font-family:Roboto,sans-serif">'+(pnl>=0?"+":"")+"₹"+Math.abs(pnl).toLocaleString("en-IN",{maximumFractionDigits:0})+'</div></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+tr.strike+' '+tr.type+' · Avg ₹'+(tr.avgPremium||0).toFixed(2)+'</div><div style="font-size:13px;color:var(--text3)">LTP ₹'+(tr.currentPremium||0).toFixed(2)+'</div></div>'+
-      driftHtml+peakHtml+
+      '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+tr.sym+autoTagHtml+'</div><div class="'+pnlCls+'" style="font-weight:400;font-size:16px;font-family:Roboto,sans-serif">'+(pnl>=0?"+":"")+"₹"+Math.abs(pnl).toLocaleString("en-IN",{maximumFractionDigits:0})+'</div></div>'+
+      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+tr.strike+' '+tr.type+' · '+(tr.lots||1)+' lot'+((tr.lots||1)>1?"s":"")+' · Avg ₹'+(tr.avgPremium||0).toFixed(2)+'</div><div style="font-size:13px;color:var(--text3)">LTP ₹'+(tr.currentPremium||0).toFixed(2)+'</div></div>'+
+      barHtml+avgSuggestHtml+
       '<div class="v5-hisig-divider"></div>'+
-      '<div class="v5-hisig-row3"><span class="v5-trade-status '+statusCls+'">'+statusLbl+'</span>'+
-        '<div style="margin-left:auto;display:flex;gap:8px"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="v5ExitTrade(\''+tr.id+'\')">Close Trade</div></div>'+
+      '<div class="v5-hisig-row3"><span class="v5-trade-status '+(status==="HOLD_STRONG"?"hold-strong":status==="PANIC"?"exit":status==="WAIT"?"watch":"hold")+'">'+statusLbl+'</span>'+
+        '<div style="margin-left:auto;display:flex;gap:6px"><div class="v5-tf-add" style="padding:6px 12px;font-size:11.5px;background:var(--card2);color:var(--blue)" onclick="v5AddLotToTrade(\''+tr.id+'\')">+1 Lot</div><div class="v5-tf-add" style="padding:6px 12px;font-size:11.5px" onclick="v5ExitTrade(\''+tr.id+'\')">Close Trade</div></div>'+
       '</div>'+
     '</div></div>';
+}
+function v5AddLotToTrade(id){
+  var trade=(S.paperTrades||[]).find(function(t){return t.id===id;});
+  if(!trade)return;
+  var addPrice=trade.currentPremium||trade.avgPremium;
+  trade.lotPrices=trade.lotPrices||[trade.entryPremium||trade.avgPremium];
+  trade.lotPrices.push(addPrice);
+  trade.lots=trade.lotPrices.length;
+  trade.avgPremium=trade.lotPrices.reduce(function(a,b){return a+b;},0)/trade.lots;
+  trade.pnl=(trade.currentPremium-trade.avgPremium)*trade.lot*trade.lots;
+  savePaperTrades();
+  renderTrades();
+  toast("➕ Lot "+trade.lots+" @ ₹"+addPrice.toFixed(2)+" | New avg ₹"+trade.avgPremium.toFixed(2));
 }
 function v5ExitTrade(id){exitPaperTrade(id);}function updateAnalytics(){var e=S.closedPaperTrades,t=e.filter(function(e){return e.pnl>0}).length,o=e.length,n=e.reduce(function(e,t){return e+(t.pnl||0)},0),s=o>0?Math.round(t/o*100):0,a=document.getElementById("aWinRate");a.textContent=o>0?s+"%":"--%",a.className="sb-val "+(s>=55?"g":s>=40?"a":"r");var i=document.getElementById("aTotalPnl");i.textContent=(n>=0?"+":"")+"₹"+Math.abs(n).toLocaleString("en-IN"),i.style.color=n>=0?"var(--green)":"var(--red)",document.getElementById("aTotalTrades").textContent=o;var deployedCap=S.paperTrades.reduce(function(sum,pt){var avgP=pt.avgPremium||pt.entryPremium||0;var lots=pt.lots||1;return sum+(avgP*(pt.lot||1)*lots*1.2);},0);var elCap=document.getElementById("aDeployedCap");if(elCap)elCap.textContent=deployedCap>=1e5?"₹"+(deployedCap/1e5).toFixed(1)+"L":deployedCap>=1e3?"₹"+Math.round(deployedCap/1e3)+"K":"₹"+Math.round(deployedCap);var l=S.signals.reduce(function(e,t){return!e||t.score>e.score?t:e},null);document.getElementById("aBestSig").textContent=l?l.score+"%":"--";var ceCount=S.signals.filter(function(s){return s.type==="CE";}).length;var peCount=S.signals.filter(function(s){return s.type==="PE";}).length;var avgScore=S.signals.length?Math.round(S.signals.reduce(function(a,s){return a+s.score;},0)/S.signals.length):0;var elCE=document.getElementById("aCeCount");if(elCE)elCE.textContent=ceCount;var elPE=document.getElementById("aPeCount");if(elPE)elPE.textContent=peCount;var elAvg=document.getElementById("aAvgScore");if(elAvg)elAvg.textContent=S.signals.length?avgScore+"%":"--";var TIME_SLOTS=["09","10","11","12","13","14","15"];var timeSlots={};TIME_SLOTS.forEach(function(h){timeSlots[h]=0;});S.signals.forEach(function(sig){var ts=sig.ts?new Date(sig.ts):null;if(!ts)return;var h=String(ts.getHours()).padStart(2,"0");if(timeSlots[h]!==undefined)timeSlots[h]++;});var maxSlot=Math.max.apply(null,TIME_SLOTS.map(function(h){return timeSlots[h]||0;}))||1;var tcEl=document.getElementById("aTimeChart");var tlEl=document.getElementById("aTimeLabels");if(tcEl){var hasSignals=TIME_SLOTS.some(function(h){return timeSlots[h]>0;});if(!hasSignals){tcEl.innerHTML='<div style="color:var(--text3);font-size:10px;align-self:center;width:100%;text-align:center">No signals today yet</div>';}else{tcEl.innerHTML=TIME_SLOTS.map(function(h){var v=timeSlots[h]||0;var pct=Math.round(v/maxSlot*100);return'<div class="tc-bar" style="height:'+Math.max(pct,4)+'%;background:'+(v>0?"var(--blue)":"var(--border)")+';flex:1" title="'+h+":00–"+(parseInt(h)+1)+":00 · "+v+' signals"></div>';}).join("");}if(tlEl)tlEl.innerHTML=TIME_SLOTS.map(function(h){return'<span class="tc-lbl">'+h+'</span>';}).join("");}var r={};e.forEach(function(e){r[e.sym]||(r[e.sym]={pnl:0,wins:0,losses:0}),r[e.sym].pnl+=e.pnl||0,e.pnl>0?r[e.sym].wins++:r[e.sym].losses++;});var d=Object.entries(r).sort(function(e,t){return t[1].pnl-e[1].pnl;});var maxPnl=d.length?Math.max.apply(null,d.map(function(x){return Math.abs(x[1].pnl);})):1;var stockEl=document.getElementById("aStockChart");if(stockEl){d.length?stockEl.innerHTML=d.slice(0,8).map(function(en){var sym=en[0],st=en[1];var pct=maxPnl>0?Math.round(Math.abs(st.pnl)/maxPnl*100):0;var col=st.pnl>=0?"#22c55e":"#ef4444";var pnlStr=(st.pnl>=0?"+":"")+"₹"+Math.abs(Math.round(st.pnl)).toLocaleString("en-IN");return'<div class="bc-row"><span class="bc-label">'+sym+'</span><div class="bc-bar-wrap"><div class="bc-bar" style="width:'+pct+"%;background:"+col+'">'+( pct>25?st.wins+"W "+st.losses+"L":"")+'</div></div><span class="bc-val" style="color:'+col+'">'+pnlStr+'</span></div>';}).join(""):stockEl.innerHTML='<div style="color:var(--text3);font-size:11px">No closed trades yet</div>';}var c=document.getElementById("perfBox");d.length?c.innerHTML=d.map(function(e){var t=e[0],o=e[1];var cls='sr-p '+(o.pnl>=0?'pos':'neg');var pnlStr=(o.pnl>=0?'+':'')+'₹'+Math.abs(o.pnl).toLocaleString('en-IN');return'<div class="stk-row"><div><div class="sr-n">'+t+'</div><div class="sr-s">'+o.wins+'W · '+o.losses+'L</div></div><div class="'+cls+'">'+pnlStr+'</div></div>';}).join(""):c.innerHTML='<div class="stk-row"><div><div class="sr-n">No trades yet</div><div class="sr-s">Paper trade signals to see performance</div></div><div class="sr-p" style="color:var(--text3)">₹0</div></div>'}var NSE_STOCKS_FALLBACK=[{sym:"360ONE",token:"13061",lot:500},{sym:"ABB",token:"13",lot:125},{sym:"ABCAPITAL",token:"21614",lot:3100},{sym:"ADANIENSOL",token:"10217",lot:675},{sym:"ADANIENT",token:"25",lot:309},{sym:"ADANIGREEN",token:"3563",lot:600},{sym:"ADANIPORTS",token:"15083",lot:475},{sym:"ADANIPOWER",token:"17388",lot:3550},{sym:"ALKEM",token:"11703",lot:125},{sym:"AMBER",token:"1185",lot:100},{sym:"AMBUJACEM",token:"1270",lot:1050},{sym:"ANGELONE",token:"324",lot:2500},{sym:"APLAPOLLO",token:"25780",lot:350},{sym:"APOLLOHOSP",token:"157",lot:125},{sym:"ASHOKLEY",token:"212",lot:5000},{sym:"ASIANPAINT",token:"236",lot:250},{sym:"ASTRAL",token:"14418",lot:425},{sym:"AUBANK",token:"21238",lot:1000},{sym:"AUROPHARMA",token:"275",lot:550},{sym:"AXISBANK",token:"5900",lot:625},{sym:"BAJAJ-AUTO",token:"16669",lot:75},{sym:"BAJAJFINSV",token:"16675",lot:250},{sym:"BAJAJHLDNG",token:"305",lot:50},{sym:"BAJFINANCE",token:"317",lot:750},{sym:"BANDHANBNK",token:"2263",lot:3600},{sym:"BANKBARODA",token:"4668",lot:2925},{sym:"BANKINDIA",token:"4745",lot:5200},{sym:"BDL",token:"2144",lot:350},{sym:"BEL",token:"383",lot:1425},{sym:"BHARATFORG",token:"422",lot:500},{sym:"BHARTIARTL",token:"10604",lot:475},{sym:"BHEL",token:"438",lot:2625},{sym:"BIOCON",token:"11373",lot:2500},{sym:"BLUESTARCO",token:"8311",lot:325},{sym:"BOSCHLTD",token:"2181",lot:25},{sym:"BPCL",token:"526",lot:1975},{sym:"BRITANNIA",token:"547",lot:125},{sym:"BSE",token:"19585",lot:375},{sym:"CAMS",token:"342",lot:750},{sym:"CANBK",token:"10794",lot:6750},{sym:"CDSL",token:"21174",lot:475},{sym:"CGPOWER",token:"760",lot:850},{sym:"CHOLAFIN",token:"19257",lot:625},{sym:"CIPLA",token:"694",lot:375},{sym:"COALINDIA",token:"20374",lot:1350},{sym:"COCHINSHIP",token:"21508",lot:400},{sym:"COFORGE",token:"11543",lot:375},{sym:"COLPAL",token:"15141",lot:225},{sym:"CONCOR",token:"4749",lot:1250},{sym:"CROMPTON",token:"17094",lot:1800},{sym:"CUMMINSIND",token:"1901",lot:200},{sym:"DABUR",token:"772",lot:1250},{sym:"DALBHARAT",token:"8075",lot:325},{sym:"DELHIVERY",token:"9599",lot:2075},{sym:"DIVISLAB",token:"10940",lot:100},{sym:"DIXON",token:"21690",lot:50},{sym:"DLF",token:"14732",lot:825},{sym:"DMART",token:"19913",lot:150},{sym:"DRREDDY",token:"881",lot:625},{sym:"EICHERMOT",token:"910",lot:100},{sym:"ETERNAL",token:"5097",lot:2425},{sym:"EXIDEIND",token:"676",lot:1800},{sym:"FEDERALBNK",token:"1023",lot:2500},{sym:"FORCEMOT",token:"11573",lot:25},{sym:"FORTIS",token:"14592",lot:775},{sym:"GAIL",token:"4717",lot:3150},{sym:"GLENMARK",token:"7406",lot:375},{sym:"GMRAIRPORT",token:"13528",lot:6975},{sym:"GODFRYPHLP",token:"1181",lot:275},{sym:"GODREJCP",token:"10099",lot:500},{sym:"GODREJPROP",token:"17875",lot:275},{sym:"GRASIM",token:"1232",lot:250},{sym:"HAL",token:"2303",lot:150},{sym:"HAVELLS",token:"9819",lot:500},{sym:"HCLTECH",token:"7229",lot:350},{sym:"HDFCAMC",token:"4244",lot:300},{sym:"HDFCBANK",token:"1333",lot:550},{sym:"HDFCLIFE",token:"467",lot:1100},{sym:"HEROMOTOCO",token:"1348",lot:150},{sym:"HINDALCO",token:"1363",lot:700},{sym:"HINDPETRO",token:"1406",lot:2025},{sym:"HINDUNILVR",token:"1394",lot:300},{sym:"HINDZINC",token:"1424",lot:1225},{sym:"HYUNDAI",token:"25844",lot:275},{sym:"ICICIBANK",token:"4963",lot:700},{sym:"ICICIGI",token:"21770",lot:325},{sym:"ICICIPRULI",token:"18652",lot:925},{sym:"IDEA",token:"14366",lot:71475},{sym:"IDFCFIRSTB",token:"11184",lot:9275},{sym:"IEX",token:"220",lot:3750},{sym:"INDHOTEL",token:"1512",lot:1000},{sym:"INDIANB",token:"14309",lot:1000},{sym:"INDIGO",token:"11195",lot:150},{sym:"INDUSINDBK",token:"5258",lot:700},{sym:"INDUSTOWER",token:"29135",lot:1700},{sym:"INFY",token:"1594",lot:400},{sym:"INOXWIND",token:"7852",lot:3575},{sym:"IOC",token:"1624",lot:4875},{sym:"IREDA",token:"20261",lot:3450},{sym:"IRFC",token:"2029",lot:4250},{sym:"ITC",token:"1660",lot:1600},{sym:"JINDALSTEL",token:"6733",lot:625},{sym:"JIOFIN",token:"18143",lot:2350},{sym:"JSWENERGY",token:"17869",lot:1000},{sym:"JSWSTEEL",token:"11723",lot:675},{sym:"JUBLFOOD",token:"18096",lot:1250},{sym:"KALYANKJIL",token:"2955",lot:1175},{sym:"KAYNES",token:"12092",lot:100},{sym:"KEI",token:"13310",lot:175},{sym:"KFINTECH",token:"13359",lot:500},{sym:"KOTAKBANK",token:"1922",lot:2000},{sym:"KPITTECH",token:"9683",lot:425},{sym:"LAURUSLABS",token:"19234",lot:850},{sym:"LICHSGFIN",token:"1997",lot:1000},{sym:"LICI",token:"9480",lot:1400},{sym:"LODHA",token:"3220",lot:450},{sym:"LT",token:"11483",lot:175},{sym:"LTF",token:"24948",lot:2250},{sym:"LTM",token:"17818",lot:150},{sym:"LUPIN",token:"10440",lot:425},{sym:"M&M",token:"2031",lot:200},{sym:"MANAPPURAM",token:"19061",lot:3000},{sym:"MANKIND",token:"15380",lot:225},{sym:"MARICO",token:"4067",lot:1200},{sym:"MARUTI",token:"10999",lot:50},{sym:"MAXHEALTH",token:"22377",lot:525},{sym:"MAZDOCK",token:"509",lot:200},{sym:"MCX",token:"31181",lot:625},{sym:"MFSL",token:"2142",lot:400},{sym:"MOTHERSON",token:"25510",lot:6150},{sym:"MOTILALOFS",token:"14947",lot:775},{sym:"MPHASIS",token:"4503",lot:275},{sym:"MUTHOOTFIN",token:"23650",lot:275},{sym:"NAM-INDIA",token:"357",lot:625},{sym:"NATIONALUM",token:"6364",lot:1875},{sym:"NAUKRI",token:"13751",lot:375},{sym:"NBCC",token:"31415",lot:6500},{sym:"NESTLEIND",token:"17963",lot:500},{sym:"NHPC",token:"17400",lot:6400},{sym:"NMDC",token:"15332",lot:6750},{sym:"NTPC",token:"11630",lot:1500},{sym:"NYKAA",token:"6545",lot:3125},{sym:"OBEROIRLTY",token:"20242",lot:350},{sym:"OFSS",token:"10738",lot:75},{sym:"OIL",token:"17438",lot:1400},{sym:"ONGC",token:"2475",lot:2250},{sym:"PAGEIND",token:"14413",lot:15},{sym:"PATANJALI",token:"17029",lot:900},{sym:"PAYTM",token:"6705",lot:725},{sym:"PFC",token:"14299",lot:1300},{sym:"PERSISTENT",token:"18365",lot:100},{sym:"PETRONET",token:"11351",lot:1900},{sym:"PGEL",token:"25358",lot:950},{sym:"PHOENIXLTD",token:"14552",lot:350},{sym:"PIDILITIND",token:"2664",lot:500},{sym:"PIIND",token:"24184",lot:175},{sym:"PNB",token:"10666",lot:8000},{sym:"PNBHOUSING",token:"18908",lot:650},{sym:"POLICYBZR",token:"6656",lot:350},{sym:"POLYCAB",token:"9590",lot:125},{sym:"POWERGRID",token:"14977",lot:1900},{sym:"PREMIERENE",token:"25049",lot:575},{sym:"PRESTIGE",token:"20302",lot:450},{sym:"RADICO",token:"10990",lot:150},{sym:"RBLBANK",token:"18391",lot:3175},{sym:"RECLTD",token:"15355",lot:1400},{sym:"RELIANCE",token:"2885",lot:500},{sym:"RVNL",token:"9552",lot:1525},{sym:"SAIL",token:"2963",lot:4700},{sym:"SBICARD",token:"17971",lot:800},{sym:"SBILIFE",token:"21808",lot:375},{sym:"SBIN",token:"3045",lot:750},{sym:"SHREECEM",token:"3103",lot:25},{sym:"SHRIRAMFIN",token:"4306",lot:825},{sym:"SIEMENS",token:"3150",lot:175},{sym:"SOLARINDS",token:"13332",lot:50},{sym:"SONACOMS",token:"4684",lot:1225},{sym:"SRF",token:"3273",lot:200},{sym:"SUNPHARMA",token:"3351",lot:350},{sym:"SUPREMEIND",token:"3363",lot:175},{sym:"SUZLON",token:"12018",lot:9025},{sym:"SWIGGY",token:"27066",lot:1300},{sym:"TATACONSUM",token:"3432",lot:550},{sym:"TATAELXSI",token:"3411",lot:100},{sym:"TATAPOWER",token:"3426",lot:1450},{sym:"TATASTEEL",token:"3499",lot:2750},{sym:"TCS",token:"11536",lot:175},{sym:"TECHM",token:"13538",lot:600},{sym:"TIINDIA",token:"312",lot:200},{sym:"TITAN",token:"3506",lot:175},{sym:"TORNTPHARM",token:"3518",lot:125},{sym:"TRENT",token:"1964",lot:150},{sym:"TVSMOTOR",token:"8479",lot:175},{sym:"ULTRACEMCO",token:"11532",lot:50},{sym:"UNIONBANK",token:"10753",lot:4425},{sym:"UNITDSPR",token:"10447",lot:400},{sym:"UNOMINDA",token:"14154",lot:550},{sym:"UPL",token:"11287",lot:1355},{sym:"VBL",token:"18921",lot:1125},{sym:"VEDL",token:"3063",lot:1150},{sym:"VOLTAS",token:"3718",lot:375},{sym:"WIPRO",token:"3787",lot:3000},{sym:"YESBANK",token:"11915",lot:31100},{sym:"ZYDUSLIFE",token:"7929",lot:900}],IDX_LIST=[{sym:"NIFTY",token:"99926000",lot:65,isIndex:!0},{sym:"BANKNIFTY",token:"99926009",lot:30,isIndex:!0},{sym:"FINNIFTY",token:"99926037",lot:60,isIndex:!0},{sym:"MIDCPNIFTY",token:"99926074",lot:120,isIndex:!0}],scanOffset=0,SCAN_BATCH=30;
 var NSE_STOCKS=NSE_STOCKS_FALLBACK.slice();
@@ -2693,7 +2714,7 @@ function v5SubmitManualTrade(sym){
     id:String(Date.now()),sigId:null,sym:sym,strike:strike,type:type,lot:lotSize?lotSize.lot:1,lots:lot,
     lotPrices:[entry],avgPremium:entry,entryPremium:entry,currentPremium:entry,pnl:0,
     date:(new Date).toLocaleDateString("en-IN"),status:"OPEN",v5Source:true,
-    entryConfidence:null,entryCaseNum:null,lastConfidence:null,lastCaseNum:null,tradeStatus:"WATCH"
+    entryConfidence:null,entryCaseNum:null,lastConfidence:null,lastCaseNum:null,tradeStatus:"WAIT"
   };
   S.paperTrades.unshift(trade);
   savePaperTrades();
@@ -2702,6 +2723,8 @@ function v5SubmitManualTrade(sym){
   toast("📋 Manual trade added — "+sym+" "+strike+" "+type);
 }
 function v5AddTrade(sym,strike,type){
+  var lotsWanted=parseInt(prompt("How many lots for "+sym+" "+strike+" "+type+"?","1"),10);
+  if(!lotsWanted||lotsWanted<1)return;
   var oiEntry=V5.lastPrices[sym]||0;
   v5FetchOiForSymbol(sym,oiEntry).then(function(oi){
     if(!oi||!oi.caseAnalysis){toast("⚠️ Could not fetch entry data — try again");return;}
@@ -2713,16 +2736,16 @@ function v5AddTrade(sym,strike,type){
     if(!entryLtp){toast("⚠️ No LTP available for this strike");return;}
     var lotInfo=(NSE_STOCKS||[]).find(function(s){return s.sym===sym;});
     var trade={
-      id:String(Date.now()),sigId:null,sym:sym,strike:strike,type:type,lot:lotInfo?lotInfo.lot:1,lots:1,
-      lotPrices:[entryLtp],avgPremium:entryLtp,entryPremium:entryLtp,currentPremium:entryLtp,pnl:0,
+      id:String(Date.now()),sigId:null,sym:sym,strike:strike,type:type,lot:lotInfo?lotInfo.lot:1,lots:lotsWanted,
+      lotPrices:new Array(lotsWanted).fill(entryLtp),avgPremium:entryLtp,entryPremium:entryLtp,currentPremium:entryLtp,pnl:0,
       date:(new Date).toLocaleDateString("en-IN"),status:"OPEN",v5Source:true,
       entryConfidence:finalized?finalized.confidence:null,entryCaseNum:finalized?finalized.caseNum:null,
-      lastConfidence:finalized?finalized.confidence:null,lastCaseNum:finalized?finalized.caseNum:null,tradeStatus:"HOLD"
+      lastConfidence:finalized?finalized.confidence:null,lastCaseNum:finalized?finalized.caseNum:null,peakConfidence:finalized?finalized.confidence:null,tradeStatus:"HOLD"
     };
     S.paperTrades.unshift(trade);
     savePaperTrades();
     renderTrades();
-    toast("📋 Trade added — "+sym+" "+strike+" "+type+" @ ₹"+entryLtp.toFixed(2));
+    toast("📋 Trade added — "+sym+" "+strike+" "+type+" · "+lotsWanted+" lot(s) @ ₹"+entryLtp.toFixed(2));
   });
 }
 // ══════════════════════════════════════════════
@@ -2741,6 +2764,20 @@ function v6Start(){
 }
 function v6Stop(){
   if(V6_INTERVAL){clearInterval(V6_INTERVAL);V6_INTERVAL=null;}
+}
+function v6AutoExecute(r){
+  if(!r.ltp)return;
+  var trade={
+    id:String(Date.now())+"_"+r.sym,sigId:null,sym:r.sym,strike:r.strike,type:r.type,lot:r.lot||1,lots:1,
+    lotPrices:[r.ltp],avgPremium:r.ltp,entryPremium:r.ltp,currentPremium:r.ltp,pnl:0,
+    date:(new Date).toLocaleDateString("en-IN"),status:"OPEN",v5Source:true,v6Auto:true,
+    entryConfidence:r.confidence,entryCaseNum:r.caseNum,lastConfidence:r.confidence,lastCaseNum:r.caseNum,
+    peakConfidence:r.confidence,tradeStatus:"HOLD"
+  };
+  S.paperTrades.unshift(trade);
+  savePaperTrades();
+  renderTrades();
+  fxoNotify("🤖 V6 Auto — "+r.sym+" "+r.strike+" "+r.type,"1 lot @ ₹"+r.ltp.toFixed(2)+" · "+r.confidence+"% confidence","new");
 }
 async function v6RunScan(){
   var statusEl=document.getElementById("v6ScanStatus");
@@ -2776,6 +2813,15 @@ async function v6RunScan(){
   }
   results.sort(function(a,b){return b.confidence-a.confidence;});
   var top=results.slice(0,30);
+  // Auto-execute: every qualified hit becomes a 1-lot paper trade automatically
+  var autoAdded=0;
+  results.forEach(function(r){
+    var alreadyOpen=(S.paperTrades||[]).some(function(t){return t.v5Source&&t.sym===r.sym&&t.strike===r.strike&&t.type===r.type&&t.status==="OPEN";});
+    if(alreadyOpen)return;
+    v6AutoExecute(r);
+    autoAdded++;
+  });
+  if(autoAdded>0)addLog("V6 auto-executed "+autoAdded+" new trade(s)","ok");
   if(statusEl)statusEl.textContent="✅ V6 scan complete — "+results.length+" qualified (showing top "+top.length+"), VIX "+(vixVal!=null?vixVal.toFixed(1):"?")+" ("+vixRegime+")";
   addLog("V6 scan complete — "+results.length+" qualified out of "+stocks.length+" scanned","ok");
   if(!top.length){
@@ -2918,13 +2964,36 @@ async function v5MonitorOpenTrades(){
   renderTrades();
 }
 function v5DeriveTradeStatus(entryConf,entryCase,nowConf,nowCase){
-  // Case flipped to a different case number entirely (e.g. C2 -> C3, or CE side went no-entry) = Watch
-  if(nowConf==null||nowCase==null||nowCase!==entryCase)return "WATCH";
+  // Case flipped to a different case number entirely (e.g. C2 -> C3, or CE side went no-entry) = Wait
+  if(nowConf==null||nowCase==null||nowCase!==entryCase)return "WAIT";
   if(entryConf==null)return "HOLD";
   var delta=nowConf-entryConf;
-  if(delta<=-20)return "EXIT";
+  if(delta<=-20)return "PANIC";
   if(delta>=10)return "HOLD_STRONG";
   return "HOLD";
+}
+function v6TradeBar(trade){
+  // Converts a trade's confidence trajectory into a 3-way Hold/Wait/Panic percentage split for the bar.
+  var status=trade.tradeStatus||"HOLD";
+  var conf=trade.lastConfidence!=null?trade.lastConfidence:(trade.entryConfidence||50);
+  var peak=trade.peakConfidence!=null?trade.peakConfidence:conf;
+  var decayFromPeak=Math.max(0,peak-conf);
+  var holdPct,waitPct,panicPct;
+  if(status==="PANIC"){
+    panicPct=Math.min(80,40+decayFromPeak);
+    holdPct=Math.max(5,100-panicPct-15);
+    waitPct=100-holdPct-panicPct;
+  }else if(status==="WAIT"){
+    waitPct=Math.min(70,40+decayFromPeak);
+    holdPct=Math.max(10,100-waitPct-10);
+    panicPct=100-holdPct-waitPct;
+  }else{
+    // HOLD or HOLD_STRONG — mostly green, small wait/panic sliver based on any decay from peak
+    holdPct=Math.max(50,Math.min(95,conf));
+    panicPct=Math.min(15,decayFromPeak);
+    waitPct=100-holdPct-panicPct;
+  }
+  return {holdPct:Math.round(holdPct),waitPct:Math.round(waitPct),panicPct:Math.round(panicPct)};
 }
 function v5SearchInput(val){
   val=(val||"").trim().toUpperCase();
