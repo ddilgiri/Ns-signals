@@ -2880,7 +2880,7 @@ async function v6ScanOneStock(stk,vixVal,vixRegime){
     if(adjustedConfidence<20)return null;
     return {
       sym:stk.sym,strike:best.strike,type:isCallSide?"CE":"PE",confidence:Math.max(0,Math.round(adjustedConfidence)),
-      rawConfidence:best.confidence,caseNum:best.caseNum,isSqueeze:best.isSqueeze,ltp:best.ltp,
+      rawConfidence:best.confidence,caseNum:best.caseNum,isSqueeze:best.isSqueeze,ltp:best.ltp,prevClose:best.prevClose,
       lot:stk.lot,cautions:gates.cautions,isStable:best.isStable||false
     };
   }catch(e){return null;}
@@ -2898,13 +2898,38 @@ function v6CardHtml(r){
     return {lots:maxLots,budget:perTradeBudget,lotValue:lotValue};
   })();
   var cautionHtml=r.cautions.length?'<div style="font-size:10.5px;color:var(--amber);margin-top:4px">⚠ '+r.cautions.join(" · ")+'</div>':'';
-  var stakeHtml=stakeCap?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Suggested: '+stakeCap.lots+' lot'+(stakeCap.lots>1?"s":"")+' (₹'+Math.round(stakeCap.lotValue*stakeCap.lots).toLocaleString("en-IN")+', within 8% cap)</div>':'';
+  var stakeHtml=stakeCap?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Suggested: '+stakeCap.lots+' lot'+(stakeCap.lots>1?"s":"")+' (₹'+Math.round(stakeCap.lotValue*stakeCap.lots).toLocaleString("en-IN")+')</div>':'';
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
+  // LTP mood color vs its own prevClose
+  var ltpHtml="";
+  if(r.ltp!=null){
+    var ltpCls="",ltpArrow="";
+    if(r.prevClose!=null&&r.prevClose>0){
+      var up=r.ltp>=r.prevClose;
+      ltpCls=up?"var(--green)":"var(--red)";
+      ltpArrow=up?"▲":"▼";
+    }
+    ltpHtml='<div style="font-size:15px;color:'+(ltpCls||"var(--text)")+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
+  }
+  // Spot price mood color vs stock's prevClose
+  var spotHtml="";
+  var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
+  if(spotNow){
+    var spotCls="",spotArrow="";
+    if(spotPrev){
+      var spotUp=spotNow>=spotPrev;
+      spotCls=spotUp?"var(--green)":"var(--red)";
+      spotArrow=spotUp?"▲":"▼";
+    }
+    spotHtml='<div style="font-size:11px;color:'+(spotCls||"var(--text3)")+';margin-top:2px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>';
+  }
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
     v5LogoImg(r.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+r.sym+'</div><span class="v5-case-pill '+cls+'">'+label+'</span></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div><div style="font-size:15px;color:var(--text)">'+r.confidence+'%</div></div>'+
+      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpHtml+'</div>'+
+      spotHtml+
+      '<div style="font-size:11px;color:var(--text3);margin-top:3px">Confidence '+r.confidence+'%</div>'+
       cautionHtml+stakeHtml+
       '<div class="v5-hisig-divider"></div>'+
       '<div class="v5-hisig-row3"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="event.stopPropagation();v5AddTrade(\''+r.sym+'\','+r.strike+',\''+r.type+'\')">Add to Trade</div></div>'+
