@@ -2902,19 +2902,19 @@ function v6CardHtml(r){
     }
     ltpHtml='<div style="text-align:right"><div style="font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>'+ltpPctHtml+'</div>';
   }
-  // Spot price mood color + rupee change + % change vs stock's prevClose
+  // Spot price: color tied to option type (green for CE cards, red for PE cards), not stock's own direction.
+  // Two-line block matching LTP's style, no "Spot" label, placed as its own row under strike/LTP.
   var spotHtml="";
   var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
   if(spotNow){
-    var spotCls="var(--text3)",spotArrow="",spotChgStr="";
+    var spotCls=r.type==="CE"?"var(--green)":"var(--red)";
+    var spotArrow=r.type==="CE"?"▲":"▼";
+    var spotChgStr="";
     if(spotPrev){
       var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
-      var spotUp=spotChg>=0;
-      spotCls=spotUp?"var(--green)":"var(--red)";
-      spotArrow=spotUp?"▲":"▼";
-      spotChgStr=" "+(spotUp?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+" ("+(spotUp?"+":"")+spotPct.toFixed(2)+"%)";
+      spotChgStr='<div style="font-size:11px;color:'+spotCls+'">'+(spotChg>=0?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+" ("+(spotChg>=0?"+":"")+spotPct.toFixed(2)+"%)</div>";
     }
-    spotHtml='<div style="font-size:12.5px;color:'+spotCls+';margin-top:9px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+spotChgStr+'</div>';
+    spotHtml='<div style="margin-top:8px"><div style="font-size:14px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgStr+'</div>';
   }
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
   var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
