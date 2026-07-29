@@ -412,12 +412,21 @@ function v5TradeCardHtml(tr){
   var pnlCls=pnl>=0?"v5-up":"v5-down";
   var confDrift=tr.entryConfidence!=null&&tr.lastConfidence!=null?(tr.lastConfidence-tr.entryConfidence):null;
   var driftHtml=confDrift!=null?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Entry conf '+tr.entryConfidence+'% → Now '+tr.lastConfidence+'% ('+(confDrift>=0?"+":"")+confDrift+'pp)</div>':'';
+  var peakHtml="";
+  if(tr.peakConfidence!=null&&tr.lastConfidence!=null){
+    var decayNow=tr.peakConfidence-tr.lastConfidence;
+    if(decayNow>=10){
+      peakHtml='<div style="font-size:11px;color:var(--red);margin-top:3px;font-weight:600">⚠️ Peaked '+tr.peakConfidence+'% → now '+tr.lastConfidence+'% ('+decayNow+'pp fade — consider booking)</div>';
+    }else if(tr.peakConfidence>(tr.entryConfidence||0)){
+      peakHtml='<div style="font-size:11px;color:var(--text3);margin-top:3px">Peak so far: '+tr.peakConfidence+'%</div>';
+    }
+  }
   return '<div class="v5-hisig-card" style="cursor:default">'+
     v5LogoImg(tr.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+tr.sym+'</div><div class="'+pnlCls+'" style="font-weight:400;font-size:16px;font-family:Roboto,sans-serif">'+(pnl>=0?"+":"")+"₹"+Math.abs(pnl).toLocaleString("en-IN",{maximumFractionDigits:0})+'</div></div>'+
       '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+tr.strike+' '+tr.type+' · Avg ₹'+(tr.avgPremium||0).toFixed(2)+'</div><div style="font-size:13px;color:var(--text3)">LTP ₹'+(tr.currentPremium||0).toFixed(2)+'</div></div>'+
-      driftHtml+
+      driftHtml+peakHtml+
       '<div class="v5-hisig-divider"></div>'+
       '<div class="v5-hisig-row3"><span class="v5-trade-status '+statusCls+'">'+statusLbl+'</span>'+
         '<div style="margin-left:auto;display:flex;gap:8px"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="v5ExitTrade(\''+tr.id+'\')">Close Trade</div></div>'+
@@ -2724,6 +2733,21 @@ async function v5MonitorOpenTrades(){
           // Manual trade with no entry baseline yet — set it now from the first live read
           trade.entryConfidence=newConf;
           trade.entryCaseNum=newCase;
+        }
+        // Track the highest confidence seen so far for this trade — this is what BEL-style losses need:
+        // catching decay from the PEAK, not waiting for a drop from entry or a full case flip.
+        if(newConf!=null&&(trade.peakConfidence==null||newConf>trade.peakConfidence)){
+          trade.peakConfidence=newConf;
+        }
+        if(trade.peakConfidence!=null&&newConf!=null&&newCase===trade.entryCaseNum){
+          var decayFromPeak=trade.peakConfidence-newConf;
+          if(decayFromPeak>=10&&!trade.decayAlerted){
+            trade.decayAlerted=true;
+            fxoNotify("⚠️ "+trade.sym+" "+trade.strike+" "+trade.type+" — momentum fading",
+              "Confidence peaked "+trade.peakConfidence+"% → now "+newConf+"% ("+decayFromPeak+"pp drop). Consider booking before it flips.","hold");
+          }else if(decayFromPeak<5){
+            trade.decayAlerted=false; // reset if it recovers, so a fresh decay can re-alert
+          }
         }
         trade.tradeStatus=v5DeriveTradeStatus(trade.entryConfidence,trade.entryCaseNum,newConf,newCase);
       }catch(e){}
