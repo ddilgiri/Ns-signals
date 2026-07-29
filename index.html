@@ -2888,49 +2888,41 @@ async function v6ScanOneStock(stk,vixVal,vixRegime){
 function v6CardHtml(r){
   var cls=r.type==="CE"?(r.isSqueeze?"v5-call-med":"v5-call-hi"):(r.isSqueeze?"v5-put-med":"v5-put-hi");
   var label=(r.type==="CE"?"C":"P")+r.caseNum;
-  var stakeCap=(function(){
-    var maxCapEl=document.getElementById("cfgMaxCap");
-    var maxCap=maxCapEl?parseFloat(maxCapEl.value)||50000:50000;
-    var perTradeBudget=maxCap*(V6_THRESHOLDS.stakePct/100);
-    var lotValue=(r.ltp||0)*(r.lot||1);
-    if(!lotValue)return null;
-    var maxLots=Math.max(1,Math.floor(perTradeBudget/lotValue));
-    return {lots:maxLots,budget:perTradeBudget,lotValue:lotValue};
-  })();
-  var cautionHtml=r.cautions.length?'<div style="font-size:10.5px;color:var(--amber);margin-top:4px">⚠ '+r.cautions.join(" · ")+'</div>':'';
-  var stakeHtml=stakeCap?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Suggested: '+stakeCap.lots+' lot'+(stakeCap.lots>1?"s":"")+' (₹'+Math.round(stakeCap.lotValue*stakeCap.lots).toLocaleString("en-IN")+')</div>':'';
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
-  // LTP mood color vs its own prevClose
+  // LTP mood color + % change vs its own prevClose
   var ltpHtml="";
   if(r.ltp!=null){
-    var ltpCls="",ltpArrow="";
+    var ltpCls="var(--text)",ltpArrow="",ltpPctHtml="";
     if(r.prevClose!=null&&r.prevClose>0){
-      var up=r.ltp>=r.prevClose;
+      var ltpChg=r.ltp-r.prevClose,ltpPct=(ltpChg/r.prevClose)*100;
+      var up=ltpChg>=0;
       ltpCls=up?"var(--green)":"var(--red)";
       ltpArrow=up?"▲":"▼";
+      ltpPctHtml='<div style="font-size:11px;color:'+ltpCls+'">'+(up?"+":"")+ltpPct.toFixed(2)+'%</div>';
     }
-    ltpHtml='<div style="font-size:15px;color:'+(ltpCls||"var(--text)")+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
+    ltpHtml='<div style="text-align:right"><div style="font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>'+ltpPctHtml+'</div>';
   }
-  // Spot price mood color vs stock's prevClose
+  // Spot price mood color + % change vs stock's prevClose
   var spotHtml="";
   var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
   if(spotNow){
-    var spotCls="",spotArrow="";
+    var spotCls="var(--text3)",spotArrow="",spotPctStr="";
     if(spotPrev){
-      var spotUp=spotNow>=spotPrev;
+      var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
+      var spotUp=spotChg>=0;
       spotCls=spotUp?"var(--green)":"var(--red)";
       spotArrow=spotUp?"▲":"▼";
+      spotPctStr=" ("+(spotUp?"+":"")+spotPct.toFixed(2)+"%)";
     }
-    spotHtml='<div style="font-size:11px;color:'+(spotCls||"var(--text3)")+';margin-top:2px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>';
+    spotHtml='<div style="font-size:12.5px;color:'+spotCls+';margin-top:2px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+spotPctStr+'</div>';
   }
+  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:var(--text)">'+r.confidence+'%</div>';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
-    v5LogoImg(r.sym,"v5-hisig-logo")+
+    '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+r.sym+'</div><span class="v5-case-pill '+cls+'">'+label+'</span></div>'+
       '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpHtml+'</div>'+
       spotHtml+
-      '<div style="font-size:11px;color:var(--text3);margin-top:3px">Confidence '+r.confidence+'%</div>'+
-      cautionHtml+stakeHtml+
       '<div class="v5-hisig-divider"></div>'+
       '<div class="v5-hisig-row3"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="event.stopPropagation();v5AddTrade(\''+r.sym+'\','+r.strike+',\''+r.type+'\')">Add to Trade</div></div>'+
     '</div></div>';
