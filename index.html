@@ -2889,53 +2889,44 @@ function v6CardHtml(r){
   var cls=r.type==="CE"?(r.isSqueeze?"v5-call-med":"v5-call-hi"):(r.isSqueeze?"v5-put-med":"v5-put-hi");
   var label=(r.type==="CE"?"C":"P")+r.caseNum;
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
-  var ts=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
-  // Line 2: strike + LTP price
-  var ltpPriceHtml="",ltpCls="var(--text)";
+  // LTP mood color vs its own prevClose
+  var ltpHtml="";
   if(r.ltp!=null){
-    var ltpArrow="";
+    var ltpCls="",ltpArrow="";
     if(r.prevClose!=null&&r.prevClose>0){
       var up=r.ltp>=r.prevClose;
       ltpCls=up?"var(--green)":"var(--red)";
       ltpArrow=up?"▲":"▼";
     }
-    ltpPriceHtml='<div style="text-align:right;font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
+    ltpHtml='<div style="font-size:15px;color:'+(ltpCls||"var(--text)")+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
   }
-  // Line 3: LTP's own rupee+percent change, with timestamp
-  var ltpChgLineHtml="";
-  if(r.ltp!=null&&r.prevClose!=null&&r.prevClose>0){
-    var ltpChg=r.ltp-r.prevClose,ltpPct=(ltpChg/r.prevClose)*100;
-    var ltpUp=ltpChg>=0;
-    ltpChgLineHtml='<div style="display:flex;justify-content:space-between;font-size:11px;color:'+(ltpUp?"var(--green)":"var(--red)")+'"><span>'+(ltpUp?"+":"-")+"₹"+Math.abs(ltpChg).toFixed(2)+' ('+(ltpUp?"+":"")+ltpPct.toFixed(2)+'%)</span><span style="color:var(--text3)">'+ts+'</span></div>';
-  }
-  // Line 4: spot price (color tied to option type — green CE, red PE)
-  var spotPriceHtml="";
-  var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
+  // Spot price: color tied to option type (green for CE cards, red for PE cards)
+  var spotHtml="";
+  var spotNow=LIVE_PRICES[r.sym];
   if(spotNow){
     var spotCls=r.type==="CE"?"var(--green)":"var(--red)";
     var spotArrow=r.type==="CE"?"▲":"▼";
-    spotPriceHtml='<div style="text-align:right;font-size:14px;color:'+spotCls+';margin-top:6px">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>';
-  }
-  // Line 5: spot's own rupee+percent change, with timestamp
-  var spotChgLineHtml="";
-  if(spotNow&&spotPrev){
-    var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
-    var spotUp=spotChg>=0;
-    var spotChgCls=r.type==="CE"?"var(--green)":"var(--red)";
-    spotChgLineHtml='<div style="display:flex;justify-content:space-between;font-size:11px;color:'+spotChgCls+'"><span>'+(spotUp?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+' ('+(spotUp?"+":"")+spotPct.toFixed(2)+'%)</span><span style="color:var(--text3)">'+ts+'</span></div>';
+    spotHtml='<div style="font-size:11px;color:'+spotCls+';margin-top:2px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>';
   }
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
-  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
+  var confHtml='<div style="font-size:11px;color:'+confColor+';margin-top:3px">Confidence '+r.confidence+'%</div>';
+  var cautionHtml=r.cautions&&r.cautions.length?'<div style="font-size:10.5px;color:var(--amber);margin-top:4px">⚠ '+r.cautions.join(" · ")+'</div>':'';
+  var stakeCap=(function(){
+    var maxCapEl=document.getElementById("cfgMaxCap");
+    var maxCap=maxCapEl?parseFloat(maxCapEl.value)||50000:50000;
+    var perTradeBudget=maxCap*(V6_THRESHOLDS.stakePct/100);
+    var lotValue=(r.ltp||0)*(r.lot||1);
+    if(!lotValue)return null;
+    var maxLots=Math.max(1,Math.floor(perTradeBudget/lotValue));
+    return {lots:maxLots,lotValue:lotValue};
+  })();
+  var stakeHtml=stakeCap?'<div style="font-size:11px;color:var(--text3);margin-top:4px">Suggested: '+stakeCap.lots+' lot'+(stakeCap.lots>1?"s":"")+' (₹'+Math.round(stakeCap.lotValue*stakeCap.lots).toLocaleString("en-IN")+')</div>':'';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
-    '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
+    v5LogoImg(r.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+r.sym+'</div><span class="v5-case-pill '+cls+'">'+label+'</span></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpPriceHtml+'</div>'+
-      ltpChgLineHtml+
-      spotPriceHtml+
-      spotChgLineHtml+
-      '<div class="v5-hisig-divider"></div>'+
-      '<div class="v5-hisig-row3"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="event.stopPropagation();v5AddTrade(\''+r.sym+'\','+r.strike+',\''+r.type+'\')">Add to Trade</div></div>'+
+      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpHtml+'</div>'+
+      spotHtml+confHtml+cautionHtml+stakeHtml+
     '</div></div>';
 }
 async function v5MonitorOpenTrades(){
