@@ -2840,6 +2840,23 @@ async function v6ScanOneStock(stk,vixVal,vixRegime){
     var best=v5BestCase(atmEntry,stk.sym,oi.caseAnalysis);
     if(!best||!(best.caseNum===2||best.caseNum===4||best.caseNum===6||best.caseNum===8))return null;
     if(best.confidence==null||best.confidence<25)return null;
+    // Price Structure Confirmation (6th check, V6-only, only runs on stocks that already cleared the case+confidence bar above)
+    var structureBoost=0,earlyReversal=false;
+    try{
+      var structRes=await fetch(getServer()+"/price-structure",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:stk.token,exchange:"NSE"})});
+      var struct=await structRes.json();
+      if(struct&&struct.status&&struct.structure&&struct.structure!=="INSUFFICIENT_DATA"&&struct.structure!=="UNKNOWN"){
+        var wantsUp=best.isCall; // Case 2/4 (calls) expect uptrend, Case 6/8 (puts) expect downtrend
+        var structureAgrees=(wantsUp&&struct.structure==="UPTREND")||(!wantsUp&&struct.structure==="DOWNTREND");
+        if(structureAgrees){
+          structureBoost=10;
+        }
+        // Early reversal: price just broke the OPPOSITE way from what the case expects — a warning, not a score change
+        if(wantsUp&&struct.justBrokeLow)earlyReversal=true;
+        if(!wantsUp&&struct.justBrokeHigh)earlyReversal=true;
+      }
+    }catch(e){}
+    best.confidence=Math.min(100,best.confidence+structureBoost);
     // Pull V4's technical read for this stock
     var bias=null;
     try{
@@ -2881,7 +2898,7 @@ async function v6ScanOneStock(stk,vixVal,vixRegime){
     return {
       sym:stk.sym,strike:best.strike,type:isCallSide?"CE":"PE",confidence:Math.max(0,Math.round(adjustedConfidence)),
       rawConfidence:best.confidence,caseNum:best.caseNum,isSqueeze:best.isSqueeze,ltp:best.ltp,prevClose:best.prevClose,
-      lot:stk.lot,cautions:gates.cautions,isStable:best.isStable||false
+      lot:stk.lot,cautions:gates.cautions,isStable:best.isStable||false,earlyReversal:earlyReversal,structureBoost:structureBoost
     };
   }catch(e){return null;}
 }
@@ -2916,7 +2933,9 @@ function v6CardHtml(r){
     spotHtml='<div style="margin-top:4px"><div style="font-size:15px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgHtml+'</div>';
   }
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
-  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
+  var structTag=r.structureBoost>0?'<div style="font-size:9px;color:var(--green)">✓ trend</div>':'';
+  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>'+structTag;
+  var reversalHtml=r.earlyReversal?'<div style="margin-top:6px;background:var(--red-bg);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:5px 8px;font-size:10.5px;color:var(--red)">⚠ Early Reversal — price structure already turned against this case</div>':'';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
     '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
     '<div class="v5-hisig-right">'+
@@ -2924,6 +2943,7 @@ function v6CardHtml(r){
         '<div style="margin-top:2px"><div class="v5-hisig-name">'+r.sym+'</div><div style="font-size:13px;color:var(--text3)">'+r.strike+' '+r.type+stableTag+'</div>'+spotHtml+'</div>'+
         ltpBlockHtml+
       '</div>'+
+      reversalHtml+
     '</div></div>';
 }
 async function v5MonitorOpenTrades(){

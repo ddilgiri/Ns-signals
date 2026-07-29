@@ -519,6 +519,73 @@ const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseF
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
 const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
 
+const STRUCT_CACHE={},STRUCT_TTL=180000; // 3 min cache — structure doesn't need to be as fresh as ticks
+app.post("/price-structure",async(e,t)=>{
+  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
+  const{symbolToken:a,exchange:s="NSE"}=e.body;
+  if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
+  const cached=STRUCT_CACHE[a];
+  if(cached&&Date.now()-cached.fetchTime<STRUCT_TTL)return t.json(cached.data);
+  try{
+    const now=new Date,ist=new Date(now.toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+    const today=ist.toISOString().slice(0,10);
+    const fromDate=today+" 09:15",toDate=today+" 15:30";
+    let candleRes;
+    try{
+      candleRes=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIVE_MINUTE",fromdate:fromDate,todate:toDate},s);
+    }catch(err){
+      const status=err.response?.status;
+      if(status!==403&&status!==429)throw err;
+      log(`Candle 403/429 for ${a} (price-structure) — waiting 2s then retrying`,"WARN");
+      await new Promise(r=>setTimeout(r,2000));
+      _lastCandleCall=Date.now();
+      candleRes=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIVE_MINUTE",fromdate:fromDate,todate:toDate});
+    }
+    const candles=candleRes.data?.data||[];
+    if(candles.length<6){
+      const result={status:!0,structure:"INSUFFICIENT_DATA",candleCount:candles.length};
+      STRUCT_CACHE[a]={data:result,fetchTime:Date.now()};
+      return t.json(result);
+    }
+    // Use last 10 candles (or fewer if not available)
+    const recent=candles.slice(-10);
+    const highs=recent.map(c=>parseFloat(c[2]));
+    const lows=recent.map(c=>parseFloat(c[3]));
+    // Simple swing detection: split into two halves, compare max/min of each half
+    const mid=Math.floor(recent.length/2);
+    const firstHighs=highs.slice(0,mid),secondHighs=highs.slice(mid);
+    const firstLows=lows.slice(0,mid),secondLows=lows.slice(mid);
+    const maxFirstHigh=Math.max(...firstHighs),maxSecondHigh=Math.max(...secondHighs);
+    const minFirstLow=Math.min(...firstLows),minSecondLow=Math.min(...secondLows);
+    const higherHigh=maxSecondHigh>maxFirstHigh;
+    const higherLow=minSecondLow>minFirstLow;
+    const lowerHigh=maxSecondHigh<maxFirstHigh;
+    const lowerLow=minSecondLow<minFirstLow;
+    let structure="CHOPPY";
+    if(higherHigh&&higherLow)structure="UPTREND";
+    else if(lowerHigh&&lowerLow)structure="DOWNTREND";
+    // Recent swing high/low break detection (for early reversal warning)
+    const lastCandle=recent[recent.length-1];
+    const lastClose=parseFloat(lastCandle[4]);
+    const priorSwingHigh=Math.max(...highs.slice(0,-1));
+    const priorSwingLow=Math.min(...lows.slice(0,-1));
+    const justBrokeHigh=lastClose>priorSwingHigh;
+    const justBrokeLow=lastClose<priorSwingLow;
+    const result={
+      status:!0,structure,higherHigh,higherLow,lowerHigh,lowerLow,
+      justBrokeHigh,justBrokeLow,lastClose,priorSwingHigh,priorSwingLow,
+      candleCount:candles.length
+    };
+    STRUCT_CACHE[a]={data:result,fetchTime:Date.now()};
+    log(`Structure ${a}: ${structure} justBrokeHigh=${justBrokeHigh} justBrokeLow=${justBrokeLow}`,"INFO");
+    t.json(result);
+  }catch(err){
+    const status=err.response?.status,msg=err.response?.data?.message||err.message;
+    log(`price-structure error [${status||"?"}] token=${a}: ${msg}`,"WARN");
+    t.json({status:!0,structure:"UNKNOWN",candleCount:0,error:msg});
+  }
+});
+
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
 async function getNSECookie(){if(NSE_COOKIE)return NSE_COOKIE;try{const e=(await axios.get("https://www.nseindia.com/",{headers:{"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",Accept:"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8","Accept-Language":"en-US,en;q=0.9","Accept-Encoding":"gzip, deflate, br",Connection:"keep-alive"},timeout:12e3})).headers["set-cookie"];return e&&(NSE_COOKIE=e.map(e=>e.split(";")[0]).join("; "),log("NSE session established","INFO")),NSE_COOKIE}catch(e){return log(`NSE session failed: ${e.message}`,"WARN"),""}}
