@@ -2890,40 +2890,36 @@ function v6CardHtml(r){
   var label=(r.type==="CE"?"C":"P")+r.caseNum;
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
   // LTP mood color + rupee change + % change vs its own prevClose
-  var ltpHtml="";
+  var ltpPriceHtml="",ltpChgText="",ltpCls="var(--text)";
   if(r.ltp!=null){
-    var ltpCls="var(--text)",ltpArrow="",ltpPctHtml="";
+    var ltpArrow="";
     if(r.prevClose!=null&&r.prevClose>0){
       var ltpChg=r.ltp-r.prevClose,ltpPct=(ltpChg/r.prevClose)*100;
       var up=ltpChg>=0;
       ltpCls=up?"var(--green)":"var(--red)";
       ltpArrow=up?"▲":"▼";
-      ltpPctHtml='<div style="font-size:11px;color:'+ltpCls+'">'+(up?"+":"-")+"₹"+Math.abs(ltpChg).toFixed(2)+' ('+(up?"+":"")+ltpPct.toFixed(2)+'%)</div>';
+      ltpChgText=(up?"+":"-")+"₹"+Math.abs(ltpChg).toFixed(2)+' ('+(up?"+":"")+ltpPct.toFixed(2)+'%)';
     }
-    ltpHtml='<div style="text-align:right"><div style="font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>'+ltpPctHtml+'</div>';
+    ltpPriceHtml='<div style="text-align:right;font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>';
   }
   // Spot price: color tied to option type (green for CE cards, red for PE cards), not stock's own direction.
-  // Two-line block matching LTP's style, no "Spot" label, placed as its own row under strike/LTP.
-  var spotHtml="";
+  // Sits on the same line as the LTP's rupee/percent change, right-aligned together.
+  var spotOnLtpLineHtml="";
   var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
   if(spotNow){
     var spotCls=r.type==="CE"?"var(--green)":"var(--red)";
     var spotArrow=r.type==="CE"?"▲":"▼";
-    var spotChgStr="";
-    if(spotPrev){
-      var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
-      spotChgStr='<div style="font-size:11px;color:'+spotCls+'">'+(spotChg>=0?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+" ("+(spotChg>=0?"+":"")+spotPct.toFixed(2)+"%)</div>";
-    }
-    spotHtml='<div style="margin-top:3px"><div style="font-size:14px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgStr+'</div>';
+    spotOnLtpLineHtml='<span style="color:'+spotCls+';margin-left:8px">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</span>';
   }
+  var combinedLineHtml=(ltpChgText||spotOnLtpLineHtml)?'<div style="text-align:right;font-size:11px;color:'+ltpCls+'">'+ltpChgText+spotOnLtpLineHtml+'</div>':'';
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
   var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
     '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+r.sym+'</div><span class="v5-case-pill '+cls+'">'+label+'</span></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpHtml+'</div>'+
-      spotHtml+
+      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+r.strike+' '+r.type+stableTag+'</div>'+ltpPriceHtml+'</div>'+
+      combinedLineHtml+
       '<div class="v5-hisig-divider"></div>'+
       '<div class="v5-hisig-row3"><div class="v5-tf-add" style="padding:6px 14px;font-size:11.5px" onclick="event.stopPropagation();v5AddTrade(\''+r.sym+'\','+r.strike+',\''+r.type+'\')">Add to Trade</div></div>'+
     '</div></div>';
