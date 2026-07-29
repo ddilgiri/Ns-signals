@@ -2889,7 +2889,7 @@ function v6CardHtml(r){
   var cls=r.type==="CE"?(r.isSqueeze?"v5-call-med":"v5-call-hi"):(r.isSqueeze?"v5-put-med":"v5-put-hi");
   var label=(r.type==="CE"?"C":"P")+r.caseNum;
   var stableTag=r.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new</span>';
-  // LTP mood color + % change vs its own prevClose
+  // LTP mood color + rupee change + % change vs its own prevClose
   var ltpHtml="";
   if(r.ltp!=null){
     var ltpCls="var(--text)",ltpArrow="",ltpPctHtml="";
@@ -2898,25 +2898,26 @@ function v6CardHtml(r){
       var up=ltpChg>=0;
       ltpCls=up?"var(--green)":"var(--red)";
       ltpArrow=up?"▲":"▼";
-      ltpPctHtml='<div style="font-size:11px;color:'+ltpCls+'">'+(up?"+":"")+ltpPct.toFixed(2)+'%</div>';
+      ltpPctHtml='<div style="font-size:11px;color:'+ltpCls+'">'+(up?"+":"-")+"₹"+Math.abs(ltpChg).toFixed(2)+' ('+(up?"+":"")+ltpPct.toFixed(2)+'%)</div>';
     }
     ltpHtml='<div style="text-align:right"><div style="font-size:15px;color:'+ltpCls+'">'+ltpArrow+' ₹'+r.ltp.toFixed(2)+'</div>'+ltpPctHtml+'</div>';
   }
-  // Spot price mood color + % change vs stock's prevClose
+  // Spot price mood color + rupee change + % change vs stock's prevClose
   var spotHtml="";
   var spotNow=LIVE_PRICES[r.sym],spotPrev=LIVE_PREV[r.sym];
   if(spotNow){
-    var spotCls="var(--text3)",spotArrow="",spotPctStr="";
+    var spotCls="var(--text3)",spotArrow="",spotChgStr="";
     if(spotPrev){
       var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
       var spotUp=spotChg>=0;
       spotCls=spotUp?"var(--green)":"var(--red)";
       spotArrow=spotUp?"▲":"▼";
-      spotPctStr=" ("+(spotUp?"+":"")+spotPct.toFixed(2)+"%)";
+      spotChgStr=" "+(spotUp?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+" ("+(spotUp?"+":"")+spotPct.toFixed(2)+"%)";
     }
-    spotHtml='<div style="font-size:12.5px;color:'+spotCls+';margin-top:2px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+spotPctStr+'</div>';
+    spotHtml='<div style="font-size:12.5px;color:'+spotCls+';margin-top:9px">Spot '+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+spotChgStr+'</div>';
   }
-  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:var(--text)">'+r.confidence+'%</div>';
+  var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
+  var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
   return '<div class="v5-hisig-card" onclick="v5OpenDetail(\''+r.sym+'\',null)">'+
     '<div style="display:flex;flex-direction:column;align-items:center">'+v5LogoImg(r.sym,"v5-hisig-logo")+confBelowLogo+'</div>'+
     '<div class="v5-hisig-right">'+
