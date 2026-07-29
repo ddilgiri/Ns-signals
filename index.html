@@ -2698,6 +2698,26 @@ function v5SeedOiHistoryBatch(gainersTop,losersTop){
     });
   }catch(e){}
 }
+async function v5FilterDynamicByNeighborSupport(candidates){
+  // Dynamic Watch only: keep a stock only if its best strike has at least one neighboring strike
+  // confirming the same case (breadth > 0) — i.e. the OI+LTP move isn't a single isolated strike spike.
+  var confirmed=[];
+  var BATCH=5;
+  for(var b=0;b<candidates.length;b+=BATCH){
+    var chunk=candidates.slice(b,b+BATCH);
+    var chunkResults=await Promise.all(chunk.map(function(c){return v5FetchOiForSymbol(c.sym,c.spotPrice);}));
+    for(var j=0;j<chunk.length;j++){
+      var c=chunk[j],oi=chunkResults[j];
+      if(!oi||!oi.caseAnalysis||!oi.caseAnalysis.length)continue;
+      var atmEntry=oi.caseAnalysis.reduce(function(a,x){return Math.abs(x.strike-(c.spotPrice||oi.spotPrice))<Math.abs(a.strike-(c.spotPrice||oi.spotPrice))?x:a;});
+      var best=v5BestCase(atmEntry,c.sym,oi.caseAnalysis);
+      if(best&&best.breadth>0){
+        confirmed.push(c);
+      }
+    }
+  }
+  return confirmed;
+}
 async function v5RefreshAll(){
   var btn=document.getElementById("v5RefreshBtn");
   if(!S.connected){toast("⚠️ Login first (Setup tab)");return;}
@@ -2741,6 +2761,7 @@ async function v5RefreshAll(){
     }else{
       await v5RenderRail("v5GainersRail",gainersTop,false,"gainers");
       await v5RenderRail("v5LosersRail",losersTop,false,"losers");
+      dynamicTop=await v5FilterDynamicByNeighborSupport(dynamicTop);
       await v5RenderRail("v5DynamicRail",dynamicTop,false,"dynamic");
       toast("✅ Shortlist refreshed");
       addLog("V5 scan complete — "+gainersTop.length+" gainers, "+losersTop.length+" losers, "+dynamicTop.length+" dynamic (computed from live prices)","ok");
