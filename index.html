@@ -2030,7 +2030,9 @@ console.log('✅ DILIP FXO V4 Auto-Trade Engine loaded');
 })();
 
 // ── 2. INJECT ADD BUTTON INTO TRADE TAB ─────────────
+// DISABLED: "+ My Trade" button removed per user request — search bar above (v5TradeSearchInput) remains the manual entry point.
 (function injectAddBtn(){
+  return; // no-op
   setTimeout(function(){
     var subTabs = document.querySelector('.sub-tabs');
     if(!subTabs || document.getElementById('v42-add-btn')) return;
