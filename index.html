@@ -426,9 +426,9 @@ function v5TradeCardHtml(tr){
       '<div style="width:'+bar.panicPct+'%;background:var(--red)"></div>'+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px">'+
-      '<span style="color:var(--green)">HOLD '+bar.holdPct+'%</span>'+
-      '<span style="color:var(--amber)">WAIT '+bar.waitPct+'%</span>'+
-      '<span style="color:var(--red)">PANIC '+bar.panicPct+'%</span>'+
+      '<span style="color:var(--green)">'+bar.holdPct+'%</span>'+
+      '<span style="color:var(--amber)">'+bar.waitPct+'%</span>'+
+      '<span style="color:var(--red)">'+bar.panicPct+'%</span>'+
     '</div></div>';
   var avgSuggestHtml="";
   if(tr.entryConfidence!=null&&tr.lastConfidence!=null&&tr.lastConfidence>=tr.entryConfidence+10&&status!=="PANIC"){
@@ -2914,7 +2914,7 @@ function v6CardHtml(r){
       var spotChg=spotNow-spotPrev,spotPct=(spotChg/spotPrev)*100;
       spotChgStr='<div style="font-size:11px;color:'+spotCls+'">'+(spotChg>=0?"+":"-")+"₹"+Math.abs(spotChg).toFixed(2)+" ("+(spotChg>=0?"+":"")+spotPct.toFixed(2)+"%)</div>";
     }
-    spotHtml='<div style="margin-top:8px"><div style="font-size:14px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgStr+'</div>';
+    spotHtml='<div style="margin-top:3px"><div style="font-size:14px;color:'+spotCls+'">'+spotArrow+' ₹'+spotNow.toLocaleString("en-IN",{maximumFractionDigits:2})+'</div>'+spotChgStr+'</div>';
   }
   var confColor=r.confidence>=70?"var(--green)":r.confidence>=45?"var(--amber)":"var(--red)";
   var confBelowLogo='<div style="text-align:center;margin-top:6px;font-size:13px;color:'+confColor+'">'+r.confidence+'%</div>';
