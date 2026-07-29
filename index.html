@@ -2342,6 +2342,18 @@ function v5FinalizeConfidence(sideResult,sym,strike){
   return sideResult;
 }
 
+function v5StabilityKey(sym,strike,side){return "v5stab_"+sym+"_"+strike+"_"+side;}
+function v5CheckCaseStability(sym,strike,side,currentCaseNum){
+  // Returns true only if this exact case number also showed on the previous refresh for this
+  // strike+side. Updates localStorage with the current case for next time's comparison.
+  try{
+    var key=v5StabilityKey(sym,strike,side);
+    var prevCaseNum=localStorage.getItem(key);
+    var isStable=prevCaseNum!==null&&parseInt(prevCaseNum,10)===currentCaseNum;
+    localStorage.setItem(key,String(currentCaseNum));
+    return isStable;
+  }catch(e){return false;}
+}
 function v5BestCase(caseAnalysisForStrike,sym,fullChain){
   // pick whichever side (CE/PE) has a real entry case with highest confidence, at the ATM-ish strike
   if(!caseAnalysisForStrike)return null;
@@ -2355,6 +2367,9 @@ function v5BestCase(caseAnalysisForStrike,sym,fullChain){
   var winner=candidates[0];
   winner.strike=caseAnalysisForStrike.strike;
   winner.isCall=winner.caseNum<=4;
+  // Case stability: only trust a signal if it showed the SAME case on the last refresh too —
+  // a case that's flip-flopping (2 -> 3 -> 2 -> 4...) is a "dilemma trade", never worth entering.
+  winner.isStable=v5CheckCaseStability(sym,winner.strike,winner.isCall?"CE":"PE",winner.caseNum);
   // Neighboring confidence: same side (CE/PE) at the strike below and above, if available
   if(fullChain&&fullChain.length){
     var idx=fullChain.findIndex(function(e){return e.strike===caseAnalysisForStrike.strike;});
@@ -2429,7 +2444,8 @@ function v5BoxHtml(sym,spotPrice,pctChange,best,reason,isWatchlist,showOptionLtp
   var confStripHtml="";
   if(best&&best.strike!=null){
     var optType=best.isCall?"CE":"PE";
-    strikeLabelHtml='<div class="v5-strikelabel">'+best.strike+' '+optType+'</div>';
+    var stableTag=best.isStable?'<span style="color:var(--green);font-size:9.5px;margin-left:5px">● stable</span>':'<span style="color:var(--amber);font-size:9.5px;margin-left:5px">◐ new/shifting</span>';
+    strikeLabelHtml='<div class="v5-strikelabel">'+best.strike+' '+optType+stableTag+'</div>';
     var cls=best.isCall?(best.isSqueeze?"v5-call-med":"v5-call-hi"):(best.isSqueeze?"v5-put-med":"v5-put-hi");
     var label=(best.isCall?"C":"P")+best.caseNum;
     caseTopHtml='<span class="v5-case-pill '+cls+'">'+label+'</span>';
@@ -2887,11 +2903,12 @@ async function v5FilterDynamicByNeighborSupport(candidates){
       if(isRealConviction&&best.confidence!=null&&best.confidence>=MIN_CONFIDENCE_FLOOR){
         // Directional velocity: whichever side (CE/PE) the confirmed case is on, use that side's own OI change magnitude
         var dirVelocity=best.isCall?Math.abs(c.ceChange||0):Math.abs(c.peChange||0);
-        confirmed.push(Object.assign({},c,{breadth:best.breadth||0,dirVelocity:dirVelocity,confirmedConfidence:best.confidence}));
+        confirmed.push(Object.assign({},c,{breadth:best.breadth||0,dirVelocity:dirVelocity,confirmedConfidence:best.confidence,isStable:best.isStable||false}));
       }
     }
   }
   confirmed.sort(function(a,b){
+    if(b.isStable!==a.isStable)return (b.isStable?1:0)-(a.isStable?1:0);
     if(b.breadth!==a.breadth)return b.breadth-a.breadth;
     return b.dirVelocity-a.dirVelocity;
   });
