@@ -584,6 +584,155 @@ function getExpiryType(e){
 
 app.get("/india-vix",async(e,t)=>{if(VIX_CACHE.data&&Date.now()-VIX_CACHE.fetchTime<3e5)return t.json(VIX_CACHE.data);try{const e=await getNSECookie(),a={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",Accept:"application/json, text/plain, */*",Referer:"https://www.nseindia.com/",Origin:"https://www.nseindia.com","sec-ch-ua-platform":'"Windows"',"Sec-Fetch-Dest":"empty","Sec-Fetch-Mode":"cors","Sec-Fetch-Site":"same-origin"};e&&(a.Cookie=e);const s=await axios.get("https://www.nseindia.com/api/allIndices",{headers:a,timeout:12e3}),n=(s.data?.data||[]).find(e=>"INDIA VIX"===e.index);if(!n){const e=await axios.get("https://www.nseindia.com/api/quote-derivative?symbol=INDIAVIX",{headers:a,timeout:12e3}),s=e.data?.underlyingValue||null;if(s){const e=buildVixResult(parseFloat(s),null,null,null);return VIX_CACHE.data=e,VIX_CACHE.fetchTime=Date.now(),t.json(e)}return t.json({status:!1,message:"India VIX not found in NSE indices"})}const o=buildVixResult(parseFloat(n.last||0),parseFloat(n.change||0),parseFloat(n.percentChange||0),parseFloat(n.previousClose||0));VIX_CACHE.data=o,VIX_CACHE.fetchTime=Date.now(),log(`India VIX: ${o.vix} (${o.regime}) chg=${o.changePct}%`,"INFO"),t.json(o)}catch(e){if(log(`India VIX fetch failed: ${e.message}`,"WARN"),VIX_CACHE.data)return t.json({...VIX_CACHE.data,stale:!0});t.json({status:!0,vix:null,regime:"UNKNOWN",premiumBuyable:!0,message:"VIX unavailable"})}})
 
+// ===== Case-transition flag engine (additive, does not touch existing OI_HISTORY/getOITrend) =====
+const STRIKE_HISTORY={};
+const STRIKE_HISTORY_MAX=6;
+const STRIKE_HISTORY_FILE=path.join(__dirname,"strike_history.json");
+const STRIKE_FLAG_LOG=[];
+const STRIKE_FLAG_LOG_FILE=path.join(__dirname,"strike_flag_log.json");
+const STRIKE_FLAG_LOG_MAX=500;
+function loadStrikeHistory(){
+  try{
+    if(fs.existsSync(STRIKE_HISTORY_FILE)){
+      const raw=JSON.parse(fs.readFileSync(STRIKE_HISTORY_FILE,"utf8"));
+      const cutoff=Date.now()-4*60*60*1000;
+      Object.keys(raw).forEach(sym=>{
+        const fresh=(raw[sym]||[]).filter(s=>s.ts&&s.ts>cutoff);
+        if(fresh.length)STRIKE_HISTORY[sym]=fresh.slice(-STRIKE_HISTORY_MAX);
+      });
+      log(`Strike history loaded — ${Object.keys(STRIKE_HISTORY).length} symbols`,"OK");
+    }
+    if(fs.existsSync(STRIKE_FLAG_LOG_FILE)){
+      const rawLog=JSON.parse(fs.readFileSync(STRIKE_FLAG_LOG_FILE,"utf8"));
+      if(Array.isArray(rawLog))STRIKE_FLAG_LOG.push(...rawLog.slice(-STRIKE_FLAG_LOG_MAX));
+    }
+  }catch(e){log(`Strike history load failed: ${e.message}`,"WARN");}
+}
+function saveStrikeHistory(){
+  try{fs.writeFileSync(STRIKE_HISTORY_FILE,JSON.stringify(STRIKE_HISTORY),"utf8");}
+  catch(e){log(`Strike history save failed: ${e.message}`,"WARN");}
+}
+function saveStrikeFlagLog(){
+  try{fs.writeFileSync(STRIKE_FLAG_LOG_FILE,JSON.stringify(STRIKE_FLAG_LOG.slice(-STRIKE_FLAG_LOG_MAX)),"utf8");}
+  catch(e){log(`Strike flag log save failed: ${e.message}`,"WARN");}
+}
+loadStrikeHistory();
+
+// Classify one side (CE or PE) at one strike into Case 1-8, mirrors Ramesh/Suresh manual logic
+function classifyCase(oiChangePct,ltpChangePct){
+  if(oiChangePct==null||ltpChangePct==null)return null;
+  const oiUp=oiChangePct>2, oiDown=oiChangePct<-2;
+  const ltpUp=ltpChangePct>2, ltpDownSharp=ltpChangePct<-8, ltpDownMild=ltpChangePct<=-2&&ltpChangePct>=-8, ltpFlat=Math.abs(ltpChangePct)<=2;
+  if(oiUp&&ltpDownSharp)return 1;
+  if(oiUp&&ltpUp)return 6;
+  if(oiUp&&ltpDownMild)return 3;
+  if(oiUp&&ltpFlat)return 4;
+  if(oiDown&&ltpDownMild)return 5;
+  if(oiDown&&ltpFlat)return 7;
+  if(oiDown&&ltpUp)return 8;
+  return null;
+}
+
+function urgencyScore(oiChangePct,ltpChangePct){
+  if(oiChangePct==null||ltpChangePct==null)return 0;
+  const magnitude=Math.min(100,Math.abs(oiChangePct)*0.6+Math.abs(ltpChangePct)*0.8);
+  return Math.round(magnitude);
+}
+
+function pctChange(curr,prev){
+  if(prev==null||prev===0||curr==null)return null;
+  return ((curr-prev)/Math.abs(prev))*100;
+}
+
+// Compares current chain snapshot against the last stored one for this symbol, returns flags per strike
+function computeStrikeFlags(symbol,chain){
+  const now=Date.now();
+  const history=STRIKE_HISTORY[symbol]||[];
+  const prevSnap=history.length?history[history.length-1]:null;
+  const flags=[];
+  const currentByStrike={};
+
+  chain.forEach(row=>{
+    const prevRow=prevSnap?(prevSnap.rows||[]).find(r=>r.strike===row.strike):null;
+    const ceOiPct=prevRow?pctChange(row.CE_oi,prevRow.CE_oi):null;
+    const ceLtpPct=prevRow&&prevRow.CE_ltp?pctChange(row.CE_ltp,prevRow.CE_ltp):null;
+    const peOiPct=prevRow?pctChange(row.PE_oi,prevRow.PE_oi):null;
+    const peLtpPct=prevRow&&prevRow.PE_ltp?pctChange(row.PE_ltp,prevRow.PE_ltp):null;
+    const ceCase=classifyCase(ceOiPct,ceLtpPct);
+    const peCase=classifyCase(peOiPct,peLtpPct);
+    const ceUrgency=urgencyScore(ceOiPct,ceLtpPct);
+    const peUrgency=urgencyScore(peOiPct,peLtpPct);
+
+    currentByStrike[row.strike]={ceCase,peCase,ceUrgency,peUrgency};
+
+    const prevCe=prevRow?prevRow.ceCase:null;
+    const prevPe=prevRow?prevRow.peCase:null;
+    const prevCeUrgency=prevRow?prevRow.ceUrgency:null;
+    const prevPeUrgency=prevRow?prevRow.peUrgency:null;
+
+    const recentPeCases=history.slice(-2).map(h=>{const r=(h.rows||[]).find(rr=>rr.strike===row.strike);return r?r.peCase:null;}).concat([peCase]);
+    const recentCeCases=history.slice(-2).map(h=>{const r=(h.rows||[]).find(rr=>rr.strike===row.strike);return r?r.ceCase:null;}).concat([ceCase]);
+    const peFlipping=new Set(recentPeCases.filter(c=>c!=null)).size>=2 && recentPeCases.filter(c=>c!=null).length>=2 && recentPeCases.some((c,idx)=>idx>0&&c!==recentPeCases[idx-1]&&recentPeCases[idx-1]!=null);
+    const ceFlipping=new Set(recentCeCases.filter(c=>c!=null)).size>=2 && recentCeCases.filter(c=>c!=null).length>=2 && recentCeCases.some((c,idx)=>idx>0&&c!==recentCeCases[idx-1]&&recentCeCases[idx-1]!=null);
+
+    const strikeFlags=[];
+    if(peCase!=null){
+      if(prevPe==null&&peCase===6)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing`});
+      if(prevPe===6&&peCase===8)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case 6→8 — short covering replacing fresh buying`});
+      if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
+      if(peCase===6&&peUrgency>=60)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
+      if(prevPe===6&&peCase===6&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-15)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
+    }
+    if(prevPe===1&&(peCase===3||peCase===4))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE Case 1→${peCase} — seller wall losing strength`});
+    if(ceCase!=null){
+      if(prevCe==null&&ceCase===6)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing`});
+      if(prevCe===6&&ceCase===8)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case 6→8 — short covering replacing fresh buying`});
+      if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
+      if(ceCase===6&&ceUrgency>=60)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
+      if(prevCe===6&&ceCase===6&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-15)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
+    }
+    if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
+
+    if(strikeFlags.length){
+      flags.push({strike:row.strike,flags:strikeFlags});
+      strikeFlags.forEach(f=>{
+        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,outcome:null});
+      });
+    }
+  });
+
+  if(!STRIKE_HISTORY[symbol])STRIKE_HISTORY[symbol]=[];
+  STRIKE_HISTORY[symbol].push({
+    ts:now,
+    rows:chain.map(row=>({strike:row.strike,CE_oi:row.CE_oi,CE_ltp:row.CE_ltp,PE_oi:row.PE_oi,PE_ltp:row.PE_ltp,ceCase:currentByStrike[row.strike]?.ceCase??null,peCase:currentByStrike[row.strike]?.peCase??null,ceUrgency:currentByStrike[row.strike]?.ceUrgency??null,peUrgency:currentByStrike[row.strike]?.peUrgency??null}))
+  });
+  if(STRIKE_HISTORY[symbol].length>STRIKE_HISTORY_MAX)STRIKE_HISTORY[symbol].shift();
+  saveStrikeHistory();
+  if(flags.length)saveStrikeFlagLog();
+
+  return flags;
+}
+
+app.post("/flag-outcome",(req,res)=>{
+  const{symbol:sym,strike:strk,type:typ,ts:tsVal,outcome:out}=req.body;
+  if(!sym||!strk||!typ||!tsVal||!out)return res.status(400).json({status:false,message:"symbol, strike, type, ts, outcome required"});
+  const entry=STRIKE_FLAG_LOG.find(f=>f.symbol===sym&&f.strike===strk&&f.type===typ&&f.ts===tsVal);
+  if(!entry)return res.status(404).json({status:false,message:"Flag entry not found"});
+  entry.outcome=out;
+  saveStrikeFlagLog();
+  log(`Flag outcome tagged: ${sym} ${strk} ${typ} = ${out}`,"INFO");
+  res.json({status:true,message:"Outcome saved"});
+});
+
+app.get("/flag-log",(req,res)=>{
+  const{symbol:sym,limit:lim}=req.query;
+  let entries=STRIKE_FLAG_LOG;
+  if(sym)entries=entries.filter(f=>f.symbol===String(sym).toUpperCase());
+  const n=lim?parseInt(lim):100;
+  res.json({status:true,count:entries.length,entries:entries.slice(-n).reverse()});
+});
+// ===== End Case-transition flag engine =====
+
 app.post("/oi-analysis",async(e,t)=>{
   if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
   // MARKET HOURS GATE for OI
@@ -653,6 +802,15 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   }catch(maheshErr){ log(`Mahesh check skipped: ${maheshErr.message}`,"WARN"); }
 
   saveOISnapshot(i, oiResult);
+
+  // Case-transition flags (additive) — isolated so any failure here never breaks the main scan
+  try{
+    oiResult.strikeFlags=computeStrikeFlags(i,O);
+  }catch(flagErr){
+    log(`Strike flag computation skipped: ${flagErr.message}`,"WARN");
+    oiResult.strikeFlags=[];
+  }
+
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
