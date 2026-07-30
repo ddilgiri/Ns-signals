@@ -431,7 +431,7 @@ function v5TradeCardHtml(tr){
   if(tr.entryConfidence!=null&&tr.lastConfidence!=null&&tr.lastConfidence>=tr.entryConfidence+10&&status!=="PANIC"){
     avgSuggestHtml='<div style="font-size:11px;color:var(--blue);margin-top:5px">💡 Confidence rising ('+tr.entryConfidence+'%→'+tr.lastConfidence+'%) — consider averaging up a lot</div>';
   }
-  var autoTagHtml=tr.caughtByMoverCheck?'<span style="font-size:9.5px;color:var(--amber);margin-left:6px">⚡ Mover Check</span>':(tr.v6Auto?'<span style="font-size:9.5px;color:var(--purple);margin-left:6px">🤖 V6 auto</span>':'');
+  var autoTagHtml=tr.caughtByMoverCheck?'<span style="font-size:9.5px;color:var(--amber);margin-left:6px">⚡ Mover Check</span>':(tr.caughtByWatchPass?'<span style="font-size:9.5px;color:var(--blue);margin-left:6px">👁 Watch Pass</span>':(tr.v6Auto?'<span style="font-size:9.5px;color:var(--purple);margin-left:6px">🤖 V6 auto</span>':''));
   return '<div class="v5-hisig-card" style="cursor:default">'+
     v5LogoImg(tr.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
@@ -2753,6 +2753,8 @@ function v5AddTrade(sym,strike,type){
 var V6_INTERVAL=null;
 var V6_MOVER_INTERVAL=null;
 var V6_MOVER_THRESHOLD=1.5; // percent change in the 2-min window to qualify as a "mover"
+var V6_WATCH_INTERVAL=null;
+var V6_LAST_RESULTS=[]; // last full-scan qualifying hits, used by the watch pass to know what to re-check
 var V6_THRESHOLDS={rsiOverbought:75,rsiOversold:25,volRatioMin:0.8,vixCaution:20,vixBlock:28,stakePct:8};
 function v6Start(){
   if(V6_INTERVAL)return;
@@ -2768,6 +2770,13 @@ function v6Start(){
       if(!getMarketStatus().nseOpen)return;
       v6MoverCheck();
     },120000); // 2 min — cheap local price scan, real API calls only for actual movers
+  }
+  if(!V6_WATCH_INTERVAL){
+    V6_WATCH_INTERVAL=setInterval(function(){
+      if(!S.connected)return;
+      if(!getMarketStatus().nseOpen)return;
+      v6WatchPass();
+    },120000); // 2 min — re-checks only stocks with an active signal or open trade, not the full 211
   }
 }
 function v6Stop(){
@@ -2809,19 +2818,64 @@ async function v6MoverCheck(){
     }
   }catch(e){addLog("V6 mover check error: "+e.message,"warn");}
 }
+async function v6WatchPass(){
+  try{
+    var watchSyms={};
+    V6_LAST_RESULTS.forEach(function(r){watchSyms[r.sym]=true;});
+    (S.paperTrades||[]).forEach(function(t){if(t.status==="OPEN"&&t.v5Source)watchSyms[t.sym]=true;});
+    var watchList=Object.keys(watchSyms);
+    if(!watchList.length)return;
+    var stocksToCheck=watchList.map(function(sym){return NSE_STOCKS.find(function(s){return s.sym===sym;});}).filter(Boolean);
+    if(!stocksToCheck.length)return;
+    addLog("V6 watch pass: re-checking "+stocksToCheck.length+" active signal/trade stock(s)","");
+    var vixData=null;
+    try{
+      var vixRes=await fetch(getServer()+"/india-vix");
+      vixData=await vixRes.json();
+    }catch(e){}
+    var vixRegime=vixData&&vixData.regime?vixData.regime:"UNKNOWN";
+    var vixVal=vixData&&vixData.vix!=null?vixData.vix:null;
+    if(vixVal!=null&&vixVal>=V6_THRESHOLDS.vixBlock)return; // same VIX safety pause as the full scan
+    var BATCH=5;
+    var freshResults=[];
+    for(var b=0;b<stocksToCheck.length;b+=BATCH){
+      var chunk=stocksToCheck.slice(b,b+BATCH);
+      var chunkResults=await Promise.all(chunk.map(function(stk){return v6ScanOneStock(stk,vixVal,vixRegime);}));
+      chunkResults.forEach(function(r){
+        if(!r)return;
+        freshResults.push(r);
+        var alreadyOpen=(S.paperTrades||[]).some(function(t){return t.v5Source&&t.sym===r.sym&&t.strike===r.strike&&t.type===r.type&&t.status==="OPEN";});
+        if(alreadyOpen)return; // existing trade on this exact strike keeps being monitored by v5MonitorOpenTrades, not re-entered here
+        r.caughtByMoverCheck=false;
+        r.caughtByWatchPass=true;
+        v6AutoExecute(r);
+        addLog("👁 Watch pass caught new strike on "+r.sym+" "+r.strike+" "+r.type+" — "+r.confidence+"%","ok");
+      });
+    }
+    // Refresh V6_LAST_RESULTS with what's still active, so the next watch pass and the V6 tab stay in sync
+    if(freshResults.length){
+      V6_LAST_RESULTS=freshResults;
+      var listEl=document.getElementById("v6ScanList");
+      if(listEl&&document.getElementById("pg-v6scan")&&document.getElementById("pg-v6scan").classList.contains("active")){
+        freshResults.sort(function(a,b){return b.confidence-a.confidence;});
+        listEl.innerHTML=freshResults.slice(0,30).map(function(r){return v6CardHtml(r);}).join("");
+      }
+    }
+  }catch(e){addLog("V6 watch pass error: "+e.message,"warn");}
+}
 function v6AutoExecute(r){
   if(!r.ltp)return;
   var trade={
     id:String(Date.now())+"_"+r.sym,sigId:null,sym:r.sym,strike:r.strike,type:r.type,lot:r.lot||1,lots:1,
     lotPrices:[r.ltp],avgPremium:r.ltp,entryPremium:r.ltp,currentPremium:r.ltp,pnl:0,
-    date:(new Date).toLocaleDateString("en-IN"),status:"OPEN",v5Source:true,v6Auto:true,caughtByMoverCheck:r.caughtByMoverCheck||false,
+    date:(new Date).toLocaleDateString("en-IN"),status:"OPEN",v5Source:true,v6Auto:true,caughtByMoverCheck:r.caughtByMoverCheck||false,caughtByWatchPass:r.caughtByWatchPass||false,
     entryConfidence:r.confidence,entryCaseNum:r.caseNum,lastConfidence:r.confidence,lastCaseNum:r.caseNum,
     peakConfidence:r.confidence,tradeStatus:"HOLD"
   };
   S.paperTrades.unshift(trade);
   savePaperTrades();
   renderTrades();
-  var tag=r.caughtByMoverCheck?"⚡ Mover Check":"🤖 V6 Auto";
+  var tag=r.caughtByMoverCheck?"⚡ Mover Check":(r.caughtByWatchPass?"👁 Watch Pass":"🤖 V6 Auto");
   fxoNotify(tag+" — "+r.sym+" "+r.strike+" "+r.type,"1 lot @ ₹"+r.ltp.toFixed(2)+" · "+r.confidence+"% confidence","new");
 }
 async function v6RunScan(){
@@ -2857,6 +2911,7 @@ async function v6RunScan(){
     if(statusEl)statusEl.textContent="Scanning… "+(b+chunk.length)+"/"+stocks.length+" checked, "+results.length+" qualified";
   }
   results.sort(function(a,b){return b.confidence-a.confidence;});
+  V6_LAST_RESULTS=results;
   var top=results.slice(0,30);
   // Auto-execute: every qualified hit becomes a 1-lot paper trade automatically
   var autoAdded=0;
