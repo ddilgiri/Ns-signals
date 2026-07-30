@@ -261,7 +261,7 @@ function updateAllCards(){
     for(var e=0;e<S.signals.length;e++){
       var t=S.signals[e];
       try{
-        var o=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:t.sym,spotPrice:t.spotPrice||0})});
+        var o=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:t.sym,spotPrice:t.spotPrice||0,rsi:typeof t.rsi==="number"?t.rsi:undefined,aboveVwap:typeof t.aboveVwap==="boolean"?t.aboveVwap:undefined})});
         var n=await o.json();
         if(!n.status)continue;
         n.ceWalls&&n.ceWalls.length&&(t.ceWalls=n.ceWalls);
