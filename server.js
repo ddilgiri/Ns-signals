@@ -1,5 +1,4 @@
 const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
-const {computeChainCases}=require("./case-confidence-logic.js");
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -489,7 +488,7 @@ const BIAS_CACHE={},BIAS_TTL=3e5;
 let _lastAngelCall=0;
 async function angelRateLimit(){const e=Date.now()-_lastAngelCall;e<300&&await new Promise(t=>setTimeout(t,300-e)),_lastAngelCall=Date.now()}
 let _lastCandleCall=0;
-async function throttledCandleRequest(e,t){const a=Date.now()-_lastCandleCall;return a<800&&await new Promise(e=>setTimeout(e,800-a)),_lastCandleCall=Date.now(),angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e)}
+async function throttledCandleRequest(e,t){const a=Date.now()-_lastCandleCall;return a<600&&await new Promise(e=>setTimeout(e,600-a)),_lastCandleCall=Date.now(),angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e)}
 
 function calcEMA(e,t){if(e.length<t)return null;const a=2/(t+1);let s=e.slice(0,t).reduce((e,t)=>e+t,0)/t;for(let n=t;n<e.length;n++)s=e[n]*a+s*(1-a);return parseFloat(s.toFixed(2))}
 function calcRSI14(e){if(e.length<15)return 50;let t=0,a=0;for(let s=1;s<=14;s++){const n=e[s]-e[s-1];n>0?t+=n:a-=n}let s=t/14,n=a/14;for(let t=15;t<e.length;t++){const a=e[t]-e[t-1];s=(13*s+Math.max(a,0))/14,n=(13*n+Math.max(-a,0))/14}return 0===n?100:parseFloat((100-100/(1+s/n)).toFixed(2))}
@@ -518,73 +517,6 @@ const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseF
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
 const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
-
-const STRUCT_CACHE={},STRUCT_TTL=180000; // 3 min cache — structure doesn't need to be as fresh as ticks
-app.post("/price-structure",async(e,t)=>{
-  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
-  const{symbolToken:a,exchange:s="NSE"}=e.body;
-  if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
-  const cached=STRUCT_CACHE[a];
-  if(cached&&Date.now()-cached.fetchTime<STRUCT_TTL)return t.json(cached.data);
-  try{
-    const now=new Date,ist=new Date(now.toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
-    const today=ist.toISOString().slice(0,10);
-    const fromDate=today+" 09:15",toDate=today+" 15:30";
-    let candleRes;
-    try{
-      candleRes=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIVE_MINUTE",fromdate:fromDate,todate:toDate},s);
-    }catch(err){
-      const status=err.response?.status;
-      if(status!==403&&status!==429)throw err;
-      log(`Candle 403/429 for ${a} (price-structure) — waiting 2s then retrying`,"WARN");
-      await new Promise(r=>setTimeout(r,2000));
-      _lastCandleCall=Date.now();
-      candleRes=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIVE_MINUTE",fromdate:fromDate,todate:toDate});
-    }
-    const candles=candleRes.data?.data||[];
-    if(candles.length<6){
-      const result={status:!0,structure:"INSUFFICIENT_DATA",candleCount:candles.length};
-      STRUCT_CACHE[a]={data:result,fetchTime:Date.now()};
-      return t.json(result);
-    }
-    // Use last 10 candles (or fewer if not available)
-    const recent=candles.slice(-10);
-    const highs=recent.map(c=>parseFloat(c[2]));
-    const lows=recent.map(c=>parseFloat(c[3]));
-    // Simple swing detection: split into two halves, compare max/min of each half
-    const mid=Math.floor(recent.length/2);
-    const firstHighs=highs.slice(0,mid),secondHighs=highs.slice(mid);
-    const firstLows=lows.slice(0,mid),secondLows=lows.slice(mid);
-    const maxFirstHigh=Math.max(...firstHighs),maxSecondHigh=Math.max(...secondHighs);
-    const minFirstLow=Math.min(...firstLows),minSecondLow=Math.min(...secondLows);
-    const higherHigh=maxSecondHigh>maxFirstHigh;
-    const higherLow=minSecondLow>minFirstLow;
-    const lowerHigh=maxSecondHigh<maxFirstHigh;
-    const lowerLow=minSecondLow<minFirstLow;
-    let structure="CHOPPY";
-    if(higherHigh&&higherLow)structure="UPTREND";
-    else if(lowerHigh&&lowerLow)structure="DOWNTREND";
-    // Recent swing high/low break detection (for early reversal warning)
-    const lastCandle=recent[recent.length-1];
-    const lastClose=parseFloat(lastCandle[4]);
-    const priorSwingHigh=Math.max(...highs.slice(0,-1));
-    const priorSwingLow=Math.min(...lows.slice(0,-1));
-    const justBrokeHigh=lastClose>priorSwingHigh;
-    const justBrokeLow=lastClose<priorSwingLow;
-    const result={
-      status:!0,structure,higherHigh,higherLow,lowerHigh,lowerLow,
-      justBrokeHigh,justBrokeLow,lastClose,priorSwingHigh,priorSwingLow,
-      candleCount:candles.length
-    };
-    STRUCT_CACHE[a]={data:result,fetchTime:Date.now()};
-    log(`Structure ${a}: ${structure} justBrokeHigh=${justBrokeHigh} justBrokeLow=${justBrokeLow}`,"INFO");
-    t.json(result);
-  }catch(err){
-    const status=err.response?.status,msg=err.response?.data?.message||err.message;
-    log(`price-structure error [${status||"?"}] token=${a}: ${msg}`,"WARN");
-    t.json({status:!0,structure:"UNKNOWN",candleCount:0,error:msg});
-  }
-});
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -699,8 +631,7 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
   const _vixForGamma=VIX_CACHE.data&&VIX_CACHE.data.vix?VIX_CACHE.data.vix:null;
   const _isIndexSym=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"].includes(i);
 const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,totalCeOI:T,totalPeOI:y},exInfoForGamma,_vixForGamma,_isIndexSym);
-  const caseAnalysis=computeChainCases(O,i,l);
-  const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,caseAnalysis,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
+  const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
   // Save OI snapshot for trend tracking
   // Mahesh confirmation: OI direction + LTP direction at Ramesh wall / Suresh floor
   try{
@@ -997,86 +928,6 @@ app.post("/signal-analysis",async(e,t)=>{
   (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
-
-// V5: 75-stock dynamic shortlist — top gainers, top losers, plus a dynamic pool
-// (high OI change, high volume) filling remaining slots. Falls back to
-// NSE_STOCKS_FALLBACK-derived symbols if Angel One's gainersAndLosers call fails.
-async function fetchGainersLosersType(datatype){
-  try{
-    const r=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,
-      {datatype,expirytype:"NEAR"});
-    log(`##GAINLOSE-DEBUG## ${datatype}: httpStatus=${r.status} dataType=${typeof r.data} rawData=${JSON.stringify(r.data).slice(0,400)}`,"ERR");
-    if(Array.isArray(r.data))return r.data;
-    if(r.data&&Array.isArray(r.data.data))return r.data.data;
-    if(r.data&&r.data.data&&Array.isArray(r.data.data.data))return r.data.data.data;
-    return [];
-  }catch(e){
-    log(`gainersAndLosers ${datatype} failed: ${e.message} | response: ${JSON.stringify(e.response?.data||{})}`,"WARN");
-    return [];
-  }
-}
-function futSymToStock(tradingSymbol){
-  // e.g. "HDFCBANK25JAN24FUT" -> "HDFCBANK"
-  if(!tradingSymbol)return null;
-  const m=String(tradingSymbol).match(/^([A-Z&-]+?)\d{2}[A-Z]{3}\d{2,4}FUT$/);
-  return m?m[1]:null;
-}
-app.get("/dynamic-shortlist",async(e,t)=>{
-  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
-  try{
-    const [priceGainersRaw,priceLosersRaw,oiGainersRaw]=await Promise.all([
-      fetchGainersLosersType("PercPriceGainers"),
-      fetchGainersLosersType("PercPriceLosers"),
-      fetchGainersLosersType("PercOIGainers")
-    ]);
-    const toEntry=(row,changeField)=>({
-      sym:futSymToStock(row.tradingSymbol),
-      percentChange:row.percentChange||0,
-      oi:row.opnInterest||0,
-      oiChange:row.netChangeOpnInterest||0
-    });
-    const gainers=priceGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,15);
-    const losers=priceLosersRaw.map(r=>toEntry(r)).filter(x=>x.sym).slice(0,15);
-    const usedSyms=new Set([...gainers,...losers].map(x=>x.sym));
-    const dynamic=oiGainersRaw.map(r=>toEntry(r)).filter(x=>x.sym&&!usedSyms.has(x.sym)).slice(0,25);
-    const usedAll=gainers.length+losers.length+dynamic.length;
-    t.json({status:!0,gainers,losers,dynamic,total:usedAll,source:"angelone-gainersLosers"});
-  }catch(e){
-    log(`/dynamic-shortlist error: ${e.message}`,"ERR");
-    t.status(500).json({status:!1,message:e.message,gainers:[],losers:[],dynamic:[]});
-  }
-});
-
-app.get("/oi-velocity-shortlist",async(e,t)=>{
-  if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
-  try{
-    const results=[];
-    for(const sym of Object.keys(OI_HISTORY)){
-      const trend=getOITrend(sym);
-      if(trend.trend==="INSUFFICIENT_DATA")continue;
-      const velocity=Math.abs(trend.ceChange||0)+Math.abs(trend.peChange||0);
-      if(velocity<=0)continue;
-      results.push({
-        sym,
-        velocity,
-        ceChange:trend.ceChange,
-        peChange:trend.peChange,
-        trend:trend.trend,
-        reason:trend.trend==="BULLISH_MOMENTUM"?"OI: Ramesh unwinding, Suresh building":
-               trend.trend==="BEARISH_MOMENTUM"?"OI: Ramesh building, Suresh unwinding":
-               trend.trend==="BOTH_ADDING_TRAPPED"?"OI: both sides adding — trapped":
-               trend.trend==="BOTH_RUNNING_UNCERTAIN"?"OI: both unwinding — uncertain":"OI: mixed activity"
-      });
-    }
-    results.sort((a,b)=>b.velocity-a.velocity);
-    const top=results.slice(0,25);
-    log(`OI velocity shortlist: ${Object.keys(OI_HISTORY).length} symbols with history, ${results.length} with movement, top ${top.length} returned`,"INFO");
-    t.json({status:!0,dynamic:top,totalTracked:Object.keys(OI_HISTORY).length,source:"oi-history-velocity"});
-  }catch(e){
-    log(`/oi-velocity-shortlist error: ${e.message}`,"ERR");
-    t.status(500).json({status:!1,message:e.message,dynamic:[]});
-  }
-});
 
 const MCX_SYMBOLS=["GOLD","SILVER","CRUDEOIL","NATURALGAS","COPPER","ALUMINIUM","ZINC","LEAD","NICKEL"];
 async function getMCXTokens(){try{await ensureInstruments("MCX tokens");}catch(e){return log("Instrument master download failed: "+e.message,"WARN"),{}}const e=new Date,t={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function a(e){if(!e)return null;const a=String(e).trim().toUpperCase(),s=a.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(s){const e=t[s[2]];if(void 0!==e)return new Date(+s[3],e,+s[1])}const n=a.match(/^(\d{4})(\d{2})(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=a.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(o)return new Date(+o[1],+o[2]-1,+o[3]);const r=new Date(e);return isNaN(r)?null:r}const s={};for(const t of MCX_SYMBOLS){const n=SESSION._instruments.filter(s=>{if("MCX"!==s.exch_seg)return!1;if(!s.name||s.name.toUpperCase()!==t)return!1;if("FUTCOM"!==s.instrumenttype)return!1;const n=a(s.expiry);return n&&n>=e}).sort((e,t)=>a(e.expiry)-a(t.expiry));n.length>0&&(s[t]=n[0].token,log(`MCX ${t}: token ${n[0].token} exp ${n[0].expiry}`,"INFO"))}return s}
