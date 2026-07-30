@@ -645,7 +645,10 @@ function pctChange(curr,prev){
 }
 
 // Compares current chain snapshot against the last stored one for this symbol, returns flags per strike
-function computeStrikeFlags(symbol,chain){
+function computeStrikeFlags(symbol,chain,confluence){
+  confluence=confluence||{};
+  const hasRsi=typeof confluence.rsi==="number";
+  const hasVwap=confluence.aboveVwap===true||confluence.aboveVwap===false;
   const now=Date.now();
   const history=STRIKE_HISTORY[symbol]||[];
   const prevSnap=history.length?history[history.length-1]:null;
@@ -676,17 +679,31 @@ function computeStrikeFlags(symbol,chain){
     const ceFlipping=new Set(recentCeCases.filter(c=>c!=null)).size>=2 && recentCeCases.filter(c=>c!=null).length>=2 && recentCeCases.some((c,idx)=>idx>0&&c!==recentCeCases[idx-1]&&recentCeCases[idx-1]!=null);
 
     const strikeFlags=[];
+    // Confluence note (PE=bearish direction check: RSI high/overbought + below VWAP agrees with fresh PE buying)
+    function confluenceNote(side){
+      if(!hasRsi&&!hasVwap)return"";
+      const bits=[];
+      if(hasRsi){
+        const rsiAgrees=side==="PE"?confluence.rsi>=55:confluence.rsi<=45;
+        bits.push(rsiAgrees?"RSI agrees":"RSI conflicts");
+      }
+      if(hasVwap){
+        const vwapAgrees=side==="PE"?confluence.aboveVwap===false:confluence.aboveVwap===true;
+        bits.push(vwapAgrees?"VWAP agrees":"VWAP conflicts");
+      }
+      return bits.length?" ("+bits.join(", ")+")":"";
+    }
     if(peCase!=null){
-      if(prevPe==null&&peCase===6)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing`});
-      if(prevPe===6&&peCase===8)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case 6→8 — short covering replacing fresh buying`});
+      if(prevPe==null&&peCase===6)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
+      if(prevPe===6&&peCase===8)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case 6→8 — short covering replacing fresh buying${confluenceNote("PE")}`});
       if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
       if(peCase===6&&peUrgency>=60)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
       if(prevPe===6&&peCase===6&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-15)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
     }
     if(prevPe===1&&(peCase===3||peCase===4))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE Case 1→${peCase} — seller wall losing strength`});
     if(ceCase!=null){
-      if(prevCe==null&&ceCase===6)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing`});
-      if(prevCe===6&&ceCase===8)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case 6→8 — short covering replacing fresh buying`});
+      if(prevCe==null&&ceCase===6)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
+      if(prevCe===6&&ceCase===8)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case 6→8 — short covering replacing fresh buying${confluenceNote("CE")}`});
       if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
       if(ceCase===6&&ceUrgency>=60)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
       if(prevCe===6&&ceCase===6&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-15)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
@@ -741,7 +758,7 @@ app.post("/oi-analysis",async(e,t)=>{
     log(`OI analysis blocked — market ${ms.code}`,"WARN");
     return t.status(400).json({status:!1,message:`Market is ${ms.label} — OI data will be stale. Scan only between 9:15 AM and 3:30 PM IST.`,marketStatus:ms});
   }
-  const{symbol:a,spotPrice:s,expiry:n}=e.body;
+  const{symbol:a,spotPrice:s,expiry:n,rsi:rsiVal,aboveVwap:aboveVwapVal}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
   try{await ensureInstruments("OI analysis");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
@@ -805,7 +822,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 
   // Case-transition flags (additive) — isolated so any failure here never breaks the main scan
   try{
-    oiResult.strikeFlags=computeStrikeFlags(i,O);
+    oiResult.strikeFlags=computeStrikeFlags(i,O,{rsi:rsiVal,aboveVwap:aboveVwapVal});
   }catch(flagErr){
     log(`Strike flag computation skipped: ${flagErr.message}`,"WARN");
     oiResult.strikeFlags=[];
