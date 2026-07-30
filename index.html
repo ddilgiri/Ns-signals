@@ -436,7 +436,7 @@ function v5TradeCardHtml(tr){
     v5LogoImg(tr.sym,"v5-hisig-logo")+
     '<div class="v5-hisig-right">'+
       '<div class="v5-hisig-row1"><div class="v5-hisig-name">'+tr.sym+autoTagHtml+'</div><div class="'+pnlCls+'" style="font-weight:400;font-size:16px;font-family:Roboto,sans-serif">'+(pnl>=0?"+":"")+"₹"+Math.abs(pnl).toLocaleString("en-IN",{maximumFractionDigits:0})+'</div></div>'+
-      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+tr.strike+' '+tr.type+' · '+(tr.lots||1)+' lot'+((tr.lots||1)>1?"s":"")+' · Avg ₹'+(tr.avgPremium||0).toFixed(2)+'</div><div style="font-size:13px;color:var(--text3)">LTP ₹'+(tr.currentPremium||0).toFixed(2)+'</div></div>'+
+      '<div class="v5-hisig-row2"><div class="v5-hisig-strike">'+tr.strike+' <span style="color:'+(tr.type==="CE"?"var(--green)":"var(--red)")+'">'+tr.type+'</span> · '+(tr.lots||1)+' lot'+((tr.lots||1)>1?"s":"")+' · Avg ₹'+(tr.avgPremium||0).toFixed(2)+'</div><div style="font-size:13px;color:var(--text3)">LTP ₹'+(tr.currentPremium||0).toFixed(2)+'</div></div>'+
       barHtml+avgSuggestHtml+
       '<div class="v5-hisig-divider"></div>'+
       '<div class="v5-hisig-row3"><span class="v5-trade-status '+(status==="HOLD_STRONG"?"hold-strong":status==="PANIC"?"exit":status==="WAIT"?"watch":"hold")+'">'+statusLbl+'</span>'+
@@ -2752,6 +2752,7 @@ function v5AddTrade(sym,strike,type){
 // ══════════════════════════════════════════════
 var V6_INTERVAL=null;
 var V6_MOVER_INTERVAL=null;
+var V6_PRICE_SNAPSHOT={}; // symbol -> price as of the last mover-check cycle (a real "2 min ago", not the session's fixed prevClose)
 var V6_MOVER_THRESHOLD=1.5; // percent change in the 2-min window to qualify as a "mover"
 var V6_WATCH_INTERVAL=null;
 var V6_LAST_RESULTS=[]; // last full-scan qualifying hits, used by the watch pass to know what to re-check
@@ -2787,12 +2788,17 @@ function v6Stop(){
 async function v6MoverCheck(){
   try{
     var movers=[];
+    var hadPriorSnapshot=Object.keys(V6_PRICE_SNAPSHOT).length>0;
     NSE_STOCKS.forEach(function(stk){
-      var lp=LIVE_PRICES[stk.sym],pv=LIVE_PREV[stk.sym];
-      if(!lp||!pv||pv<=0)return;
-      var pctChg=(lp-pv)/pv*100;
-      if(Math.abs(pctChg)>=V6_MOVER_THRESHOLD)movers.push({stk:stk,pctChg:pctChg});
+      var lp=LIVE_PRICES[stk.sym],snap=V6_PRICE_SNAPSHOT[stk.sym];
+      if(!lp)return;
+      if(hadPriorSnapshot&&snap&&snap>0){
+        var pctChg=(lp-snap)/snap*100;
+        if(Math.abs(pctChg)>=V6_MOVER_THRESHOLD)movers.push({stk:stk,pctChg:pctChg});
+      }
+      V6_PRICE_SNAPSHOT[stk.sym]=lp; // always refresh the snapshot for next cycle's comparison
     });
+    if(!hadPriorSnapshot)return; // first cycle has nothing to compare against yet — just seeds the snapshot
     if(!movers.length)return;
     addLog("V6 mover check: "+movers.length+" stock(s) moved "+V6_MOVER_THRESHOLD+"%+ in 2 min — running case engine on them","");
     var vixData=null;
