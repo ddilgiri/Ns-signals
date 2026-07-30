@@ -710,6 +710,17 @@ function computeStrikeFlags(symbol,chain,confluence){
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
+    // Mahesh cross-check: does a PE-side bearish-supporting flag line up with a CE-side flag confirming the same direction, same strike, same scan?
+    const peBearishFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
+    const ceWeakFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
+    const ceBullishFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
+    const peWeakFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
+    if(peBearishFlags.length&&ceWeakFlags.length){
+      strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`PE strength + CE weakness agree at ${row.strike} — bearish cross-check confirmed`});
+    }else if(ceBullishFlags.length&&peWeakFlags.length){
+      strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`CE strength + PE weakness agree at ${row.strike} — bullish cross-check confirmed`});
+    }
+
     if(strikeFlags.length){
       flags.push({strike:row.strike,flags:strikeFlags});
       strikeFlags.forEach(f=>{
