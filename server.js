@@ -619,10 +619,11 @@ function saveStrikeFlagLog(){
 loadStrikeHistory();
 
 // Classify one side (CE or PE) at one strike into Case 1-8, mirrors Ramesh/Suresh manual logic
+// Thresholds tuned for ~45s scan-to-scan comparison (much smaller moves than manual multi-minute checks)
 function classifyCase(oiChangePct,ltpChangePct){
   if(oiChangePct==null||ltpChangePct==null)return null;
-  const oiUp=oiChangePct>2, oiDown=oiChangePct<-2;
-  const ltpUp=ltpChangePct>2, ltpDownSharp=ltpChangePct<-8, ltpDownMild=ltpChangePct<=-2&&ltpChangePct>=-8, ltpFlat=Math.abs(ltpChangePct)<=2;
+  const oiUp=oiChangePct>0.5, oiDown=oiChangePct<-0.5;
+  const ltpUp=ltpChangePct>0.5, ltpDownSharp=ltpChangePct<-3, ltpDownMild=ltpChangePct<=-0.5&&ltpChangePct>=-3, ltpFlat=Math.abs(ltpChangePct)<=0.5;
   if(oiUp&&ltpDownSharp)return 1;
   if(oiUp&&ltpUp)return 6;
   if(oiUp&&ltpDownMild)return 3;
@@ -697,16 +698,16 @@ function computeStrikeFlags(symbol,chain,confluence){
       if(prevPe==null&&peCase===6)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
       if(prevPe===6&&peCase===8)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case 6→8 — short covering replacing fresh buying${confluenceNote("PE")}`});
       if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
-      if(peCase===6&&peUrgency>=60)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
-      if(prevPe===6&&peCase===6&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-15)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
+      if(peCase===6&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
+      if(prevPe===6&&peCase===6&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
     }
     if(prevPe===1&&(peCase===3||peCase===4))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE Case 1→${peCase} — seller wall losing strength`});
     if(ceCase!=null){
       if(prevCe==null&&ceCase===6)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
       if(prevCe===6&&ceCase===8)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case 6→8 — short covering replacing fresh buying${confluenceNote("CE")}`});
       if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
-      if(ceCase===6&&ceUrgency>=60)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
-      if(prevCe===6&&ceCase===6&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-15)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
+      if(ceCase===6&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
+      if(prevCe===6&&ceCase===6&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
