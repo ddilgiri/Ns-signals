@@ -695,19 +695,25 @@ function computeStrikeFlags(symbol,chain,confluence){
       return bits.length?" ("+bits.join(", ")+")":"";
     }
     if(peCase!=null){
-      if(prevPe==null&&peCase===6)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
-      if(prevPe===6&&peCase===8)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case 6→8 — short covering replacing fresh buying${confluenceNote("PE")}`});
+      const peBuying=peCase===6||peCase===2;
+      const peWasBuying=prevPe===6||prevPe===2;
+      const peSellingOrFading=peCase===8||peCase===5||peCase===7;
+      if(!peWasBuying&&peBuying)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
+      if(peWasBuying&&peSellingOrFading)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case ${prevPe}→${peCase} — buying conviction fading`});
       if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
-      if(peCase===6&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
-      if(prevPe===6&&peCase===6&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
+      if(peBuying&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
+      if(peWasBuying&&peBuying&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
     }
-    if(prevPe===1&&(peCase===3||peCase===4))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE Case 1→${peCase} — seller wall losing strength`});
+    if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
     if(ceCase!=null){
-      if(prevCe==null&&ceCase===6)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
-      if(prevCe===6&&ceCase===8)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case 6→8 — short covering replacing fresh buying${confluenceNote("CE")}`});
+      const ceBuying=ceCase===6||ceCase===2;
+      const ceWasBuying=prevCe===6||prevCe===2;
+      const ceSellingOrFading=ceCase===8||ceCase===5||ceCase===7;
+      if(!ceWasBuying&&ceBuying)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
+      if(ceWasBuying&&ceSellingOrFading)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case ${prevCe}→${ceCase} — buying conviction fading`});
       if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
-      if(ceCase===6&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
-      if(prevCe===6&&ceCase===6&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
+      if(ceBuying&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
+      if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
