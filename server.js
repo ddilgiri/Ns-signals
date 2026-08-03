@@ -847,7 +847,7 @@ app.post("/oi-analysis",async(e,t)=>{
     log(`OI analysis blocked — market ${ms.code}`,"WARN");
     return t.status(400).json({status:!1,message:`Market is ${ms.label} — OI data will be stale. Scan only between 9:15 AM and 3:30 PM IST.`,marketStatus:ms});
   }
-  const{symbol:a,spotPrice:s,expiry:n,rsi:rsiVal,aboveVwap:aboveVwapVal}=e.body;
+  const{symbol:a,spotPrice:s,expiry:n,rsi:rsiVal,aboveVwap:aboveVwapVal,clientPriorChain}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
   try{await ensureInstruments("OI analysis");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
@@ -911,6 +911,16 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 
   // Case-transition flags (additive) — isolated so any failure here never breaks the main scan
   try{
+    // If the server has no memory of this symbol (fresh restart/redeploy wiped STRIKE_HISTORY) but the
+    // client sent its own last-known scan (browser-cached, survives server restarts), seed history from
+    // that instead of falling back to day-baseline — bridges exactly the Render free-tier disk-wipe gap.
+    if((!STRIKE_HISTORY[i]||!STRIKE_HISTORY[i].length)&&clientPriorChain&&Array.isArray(clientPriorChain)&&clientPriorChain.length){
+      const seedRows=clientPriorChain.filter(r=>r&&typeof r.strike==="number").map(r=>({strike:r.strike,CE_oi:r.CE_oi??0,CE_ltp:r.CE_ltp??null,PE_oi:r.PE_oi??0,PE_ltp:r.PE_ltp??null,ceCase:null,peCase:null,ceUrgency:null,peUrgency:null}));
+      if(seedRows.length){
+        STRIKE_HISTORY[i]=[{ts:Date.now()-6e4,rows:seedRows}];
+        log(`Seeded ${i} history from client cache — ${seedRows.length} strikes (server memory was empty)`,"INFO");
+      }
+    }
     oiResult.strikeFlags=computeStrikeFlags(i,O,{rsi:rsiVal,aboveVwap:aboveVwapVal},S);
   }catch(flagErr){
     log(`Strike flag computation skipped: ${flagErr.message}`,"WARN");
