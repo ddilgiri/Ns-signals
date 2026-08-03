@@ -675,10 +675,19 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
 
   chain.forEach(row=>{
     const prevRow=prevSnap?(prevSnap.rows||[]).find(r=>r.strike===row.strike):null;
-    const ceOiPct=prevRow?pctChange(row.CE_oi,prevRow.CE_oi):null;
-    const ceLtpPct=prevRow&&prevRow.CE_ltp?pctChange(row.CE_ltp,prevRow.CE_ltp):null;
-    const peOiPct=prevRow?pctChange(row.PE_oi,prevRow.PE_oi):null;
-    const peLtpPct=prevRow&&prevRow.PE_ltp?pctChange(row.PE_ltp,prevRow.PE_ltp):null;
+    // Day-baseline fallback: on the true first scan for a strike (no prior in-app snapshot yet), derive
+    // oiPct/ltpPct from Angel One's own oiChange field (today's OI delta vs yesterday, already fetched
+    // live every scan) and prevClose, instead of returning null and showing zero flags until scan #2.
+    const ceOiBaseline=row.CE_oi&&row.CE_oiChange!=null&&(row.CE_oi-row.CE_oiChange)!==0?(row.CE_oiChange/(row.CE_oi-row.CE_oiChange))*100:null;
+    const peOiBaseline=row.PE_oi&&row.PE_oiChange!=null&&(row.PE_oi-row.PE_oiChange)!==0?(row.PE_oiChange/(row.PE_oi-row.PE_oiChange))*100:null;
+    const ceLtpBaseline=row.CE_ltp!=null&&row.CE_prevClose?pctChange(row.CE_ltp,row.CE_prevClose):null;
+    const peLtpBaseline=row.PE_ltp!=null&&row.PE_prevClose?pctChange(row.PE_ltp,row.PE_prevClose):null;
+    const usingBaseline=!prevRow;
+
+    const ceOiPct=prevRow?pctChange(row.CE_oi,prevRow.CE_oi):ceOiBaseline;
+    const ceLtpPct=prevRow&&prevRow.CE_ltp?pctChange(row.CE_ltp,prevRow.CE_ltp):ceLtpBaseline;
+    const peOiPct=prevRow?pctChange(row.PE_oi,prevRow.PE_oi):peOiBaseline;
+    const peLtpPct=prevRow&&prevRow.PE_ltp?pctChange(row.PE_ltp,prevRow.PE_ltp):peLtpBaseline;
     const ceCase=classifyCase(ceOiPct,ceLtpPct);
     const peCase=classifyCase(peOiPct,peLtpPct);
     const ceUrgency=urgencyScore(ceOiPct,ceLtpPct);
@@ -790,10 +799,10 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
     if(strikeFlags.length){
       const weight=proximityWeight(row.strike);
       const away=strikesAway(row.strike);
-      strikeFlags.forEach(f=>{f.proximity=weight;f.strikesAway=away;});
-      flags.push({strike:row.strike,proximity:weight,strikesAway:away,flags:strikeFlags});
+      strikeFlags.forEach(f=>{f.proximity=weight;f.strikesAway=away;f.usingBaseline=usingBaseline;if(usingBaseline)f.detail+=" [day-baseline, first scan]";});
+      flags.push({strike:row.strike,proximity:weight,strikesAway:away,usingBaseline,flags:strikeFlags});
       strikeFlags.forEach(f=>{
-        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,proximity:weight,strikesAway:away,outcome:null});
+        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,proximity:weight,strikesAway:away,usingBaseline,outcome:null});
       });
     }
   });
