@@ -646,10 +646,27 @@ function pctChange(curr,prev){
 }
 
 // Compares current chain snapshot against the last stored one for this symbol, returns flags per strike
-function computeStrikeFlags(symbol,chain,confluence){
+function computeStrikeFlags(symbol,chain,confluence,atmStrike){
   confluence=confluence||{};
   const hasRsi=typeof confluence.rsi==="number";
   const hasVwap=confluence.aboveVwap===true||confluence.aboveVwap===false;
+  // Strike-proximity weighting: count actual array position distance from ATM in the sorted chain
+  // (this respects each stock's own real strike gap — e.g. PAYTM's ₹20 gaps vs a ₹5-gap stock — since
+  // it's counting chain positions, not a fixed rupee distance)
+  const sortedStrikes=chain.map(r=>r.strike).slice().sort((a,b)=>a-b);
+  const atmIdx=atmStrike?sortedStrikes.reduce((best,s,idx)=>Math.abs(s-atmStrike)<Math.abs(sortedStrikes[best]-atmStrike)?idx:best,0):null;
+  function strikesAway(strike){
+    if(atmIdx==null)return null;
+    const idx=sortedStrikes.indexOf(strike);
+    return idx<0?null:Math.abs(idx-atmIdx);
+  }
+  function proximityWeight(strike){
+    const away=strikesAway(strike);
+    if(away==null)return"UNKNOWN";
+    if(away<=3)return"HIGH";      // 0-3 strikes from ATM — directly tradeable range, full relevance
+    if(away<=6)return"MEDIUM";    // 4-6 strikes — worth noting, secondary relevance
+    return"LOW";                 // far OTM — informational only, not actionable near-term
+  }
   const now=Date.now();
   const history=STRIKE_HISTORY[symbol]||[];
   const prevSnap=history.length?history[history.length-1]:null;
@@ -758,9 +775,12 @@ function computeStrikeFlags(symbol,chain,confluence){
     if(ceTier)strikeFlags.push({side:"CE",type:"TIER_"+ceTier.replace("+",""),label:tierMeta[ceTier].label,detail:`CE confidence: ${tierMeta[ceTier].note}`});
 
     if(strikeFlags.length){
-      flags.push({strike:row.strike,flags:strikeFlags});
+      const weight=proximityWeight(row.strike);
+      const away=strikesAway(row.strike);
+      strikeFlags.forEach(f=>{f.proximity=weight;f.strikesAway=away;});
+      flags.push({strike:row.strike,proximity:weight,strikesAway:away,flags:strikeFlags});
       strikeFlags.forEach(f=>{
-        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,outcome:null});
+        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,proximity:weight,strikesAway:away,outcome:null});
       });
     }
   });
@@ -869,7 +889,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 
   // Case-transition flags (additive) — isolated so any failure here never breaks the main scan
   try{
-    oiResult.strikeFlags=computeStrikeFlags(i,O,{rsi:rsiVal,aboveVwap:aboveVwapVal});
+    oiResult.strikeFlags=computeStrikeFlags(i,O,{rsi:rsiVal,aboveVwap:aboveVwapVal},S);
   }catch(flagErr){
     log(`Strike flag computation skipped: ${flagErr.message}`,"WARN");
     oiResult.strikeFlags=[];
@@ -1147,7 +1167,7 @@ app.post("/signal-analysis",async(e,t)=>{
   // Naresh urgency check: if this side's tier is STALE (sustained buying case but urgency has been fading across real scans), don't let a raw score alone call it STRONG — that's exactly the late-entry trap
   let naresStaleDowngrade=!1;
   if("STRONG"===C&&S.strikeFlags&&S.strikeFlags.length){
-    const relevantTiers=S.strikeFlags.flatMap(sf=>sf.flags).filter(fl=>fl.side===i&&fl.type&&fl.type.indexOf("TIER_")===0);
+    const relevantTiers=S.strikeFlags.flatMap(sf=>sf.flags).filter(fl=>fl.side===i&&fl.type&&fl.type.indexOf("TIER_")===0&&fl.proximity==="HIGH");
     if(relevantTiers.some(fl=>fl.type==="TIER_STALE")){
       C="MODERATE";
       O="High score, but Naresh urgency has faded (STALE) — likely late entry, sized down to MODERATE";
