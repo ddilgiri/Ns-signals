@@ -509,7 +509,24 @@ if(g.score<l){
       // score check alone can miss a fast-forming setup that OI transition logic already caught.
       if(wf.strikeFlags&&wf.strikeFlags.length){
         var _strongHit=wf.strikeFlags.some(function(sf){return sf.proximity==="HIGH"&&sf.flags.some(function(fl){return fl.type==="MAHESH_CONFIRMED"||fl.type==="TIER_CLEAR";});});
-        if(_strongHit)addLog("👀 Near-miss: "+e+" score "+g.score+"% (below threshold) but OI flags show CLEAR/Mahesh near spot — worth a manual look","warn");
+        var _nmKey="nearmiss_"+e+"_"+v;
+        window._nearMissLogged=window._nearMissLogged||{};
+        if(_strongHit&&!window._nearMissLogged[_nmKey]){
+          addLog("👀 Near-miss: "+e+" score "+g.score+"% (below threshold) but OI flags show CLEAR/Mahesh near spot — worth a manual look","warn");
+          window._nearMissLogged[_nmKey]=Date.now();
+        }else if(!_strongHit&&window._nearMissLogged[_nmKey]){
+          delete window._nearMissLogged[_nmKey]; // reset so it can re-fire if it happens again later
+        }
+      }else if(_wrc&&_wrc.length){
+        // Had prior cached data but this scan shows zero flags at all — fuel/momentum has gone quiet on
+        // a stock that was at least being watched. Worth knowing "nothing happening" is itself a state,
+        // not silence — but only log once per quiet period, not every scan, to avoid spam.
+        var _qKey="quiet_"+e;
+        window._quietLogged=window._quietLogged||{};
+        if(!window._quietLogged[_qKey]){
+          addLog("💤 "+e+" — OI/LTP movement has gone quiet (no flags this scan), fuel low","");
+          window._quietLogged[_qKey]=Date.now();
+        }
       }
     }).catch(function(){});
   }catch(_wce){}
