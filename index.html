@@ -282,7 +282,15 @@ function startTradeOnlyOIRefresh(){
               var sideFlags=ownStrikeFlags.flags.filter(function(fl){return fl.side===tx.type;});
               var hasWeakOrStaleOrUnwind=sideFlags.some(function(fl){return fl.type==="WEAKENING"||fl.type==="TIER_STALE"||fl.type==="UNWIND_RISK";});
               var hasFreshOrClear=sideFlags.some(function(fl){return fl.type==="FRESH_SIGNAL"||fl.type==="TIER_CLEAR"||fl.type==="HIGH_URGENCY";});
-              tx.liveFlagWarning=hasWeakOrStaleOrUnwind?"decay":(hasFreshOrClear?"strength":null);
+              var _prevWarning=tx.liveFlagWarning;
+              var _newWarning=hasWeakOrStaleOrUnwind?"decay":(hasFreshOrClear?"strength":null);
+              tx.liveFlagWarning=_newWarning;
+              // Active alert only on the actual transition INTO decay — not every 45s tick while already
+              // decaying, so it interrupts you once at the moment it matters instead of becoming noise.
+              if(_newWarning==="decay"&&_prevWarning!=="decay"){
+                toast("🔴 "+tx.sym+" "+tx.strike+" "+tx.type+" — flags turned against you, consider exit",4000);
+                addLog("🔴 EXIT SIGNAL: "+tx.sym+" "+tx.strike+" "+tx.type+" — flag flipped to decay (was "+(_prevWarning||"neutral")+")","err");
+              }
             }
           });
         }catch(err){}
