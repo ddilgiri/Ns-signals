@@ -717,16 +717,45 @@ function computeStrikeFlags(symbol,chain,confluence){
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
+    // Confidence tier: CLEAR / MIXED / STALE — answers "how much should I trust this right now", not just "what case is it"
+    function computeTier(side,caseNow,urgencyNow,wasBuying,flipping,confirmedByMahesh){
+      const buyingNow=caseNow===6||caseNow===2;
+      if(!buyingNow)return null;
+      // STALE: this side has been in a buying case for 3+ consecutive snapshots with urgency trending down each time — the early move is over
+      const recentAll=history.map(h=>{
+        const r=(h.rows||[]).find(rr=>rr.strike===row.strike);
+        return r?{c:side==="PE"?r.peCase:r.ceCase,u:side==="PE"?r.peUrgency:r.ceUrgency}:null;
+      }).filter(x=>x&&x.c!=null);
+      const recent=recentAll.slice(-3);
+      const allBuying=recent.length>=3&&recent.every(x=>x.c===6||x.c===2);
+      const urgencyDeclining=recent.length>=3&&recent[0].u!=null&&recent[2].u!=null&&recent[2].u<recent[0].u;
+      if(allBuying&&urgencyDeclining)return"STALE";
+      // MIXED: buying but internally contradicting itself — chop, or buying with negligible urgency (no real conviction behind it)
+      if(flipping)return"MIXED";
+      if(buyingNow&&urgencyNow<5)return"MIXED";
+      // CLEAR: buying, real urgency, no chop — best case, extra credibility if Mahesh also agrees
+      if(buyingNow&&urgencyNow>=8)return confirmedByMahesh?"CLEAR+":"CLEAR";
+      return"MIXED";
+    }
+
     // Mahesh cross-check: does a PE-side bearish-supporting flag line up with a CE-side flag confirming the same direction, same strike, same scan?
     const peBearishFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
     const ceWeakFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
     const ceBullishFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
     const peWeakFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
-    if(peBearishFlags.length&&ceWeakFlags.length){
+    const peMaheshOk=peBearishFlags.length&&ceWeakFlags.length;
+    const ceMaheshOk=ceBullishFlags.length&&peWeakFlags.length;
+    if(peMaheshOk){
       strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`PE strength + CE weakness agree at ${row.strike} — bearish cross-check confirmed`});
-    }else if(ceBullishFlags.length&&peWeakFlags.length){
+    }else if(ceMaheshOk){
       strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`CE strength + PE weakness agree at ${row.strike} — bullish cross-check confirmed`});
     }
+
+    const peTier=computeTier("PE",peCase,peUrgency,prevPe===6||prevPe===2,peFlipping,!!peMaheshOk);
+    const ceTier=computeTier("CE",ceCase,ceUrgency,prevCe===6||prevCe===2,ceFlipping,!!ceMaheshOk);
+    const tierMeta={CLEAR:{label:"🟢 CLEAR",note:"fresh, confirmed, act on it"},"CLEAR+":{label:"🟢🤝 CLEAR+",note:"fresh, confirmed, Mahesh agrees — highest conviction"},MIXED:{label:"🟡 MIXED",note:"signal fighting itself — size down, tighter stop"},STALE:{label:"🔴 STALE",note:"move likely already happened — late entry risk"}};
+    if(peTier)strikeFlags.push({side:"PE",type:"TIER_"+peTier.replace("+",""),label:tierMeta[peTier].label,detail:`PE confidence: ${tierMeta[peTier].note}`});
+    if(ceTier)strikeFlags.push({side:"CE",type:"TIER_"+ceTier.replace("+",""),label:tierMeta[ceTier].label,detail:`CE confidence: ${tierMeta[ceTier].note}`});
 
     if(strikeFlags.length){
       flags.push({strike:row.strike,flags:strikeFlags});
