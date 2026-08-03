@@ -311,9 +311,11 @@ async function refreshSignalOI(forceDuringScan){
     for(var e=0;e<S.signals.length;e++){
       var t=S.signals[e];
       try{
-        var o=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:t.sym,spotPrice:t.spotPrice||0,rsi:typeof t.rsi==="number"?t.rsi:undefined,aboveVwap:typeof t.aboveVwap==="boolean"?t.aboveVwap:undefined})});
+        var _drc=null;try{var _draw=localStorage.getItem("fxo_scan_cache_"+t.sym);if(_draw){var _dp=JSON.parse(_draw);if(_dp&&_dp.chain&&_dp.chain.length)_drc=_dp.chain;}}catch(_de){}
+        var o=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:t.sym,spotPrice:t.spotPrice||0,rsi:typeof t.rsi==="number"?t.rsi:undefined,aboveVwap:typeof t.aboveVwap==="boolean"?t.aboveVwap:undefined,clientPriorChain:_drc})});
         var n=await o.json();
         if(!n.status)continue;
+        if(n.chain&&n.chain.length)localStorage.setItem("fxo_scan_cache_"+t.sym,JSON.stringify({ts:Date.now(),chain:n.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));
         n.ceWalls&&n.ceWalls.length&&(t.ceWalls=n.ceWalls);
         n.peFloors&&n.peFloors.length&&(t.peFloors=n.peFloors);
         n.ceSignal&&(t.ceSignal=n.ceSignal);
