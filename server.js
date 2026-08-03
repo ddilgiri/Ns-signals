@@ -696,6 +696,15 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
     const peFlipping=new Set(recentPeCases.filter(c=>c!=null)).size>=2 && recentPeCases.filter(c=>c!=null).length>=2 && recentPeCases.some((c,idx)=>idx>0&&c!==recentPeCases[idx-1]&&recentPeCases[idx-1]!=null);
     const ceFlipping=new Set(recentCeCases.filter(c=>c!=null)).size>=2 && recentCeCases.filter(c=>c!=null).length>=2 && recentCeCases.some((c,idx)=>idx>0&&c!==recentCeCases[idx-1]&&recentCeCases[idx-1]!=null);
 
+    // UNWIND_RISK: OI rate-of-change negative (writers/holders actively covering) while LTP still trends the same
+    // direction as before — the move is continuing on momentum alone, not fresh position-building. Checked only
+    // when this side WAS the confirmed dominant/buying side last scan (a trade you'd already be trusting),
+    // and is now showing OI unwinding while price hasn't reversed yet — the early warning before Case flips to 8.
+    const peWasBuyingPrior=prevPe===6||prevPe===2;
+    const ceWasBuyingPrior=prevCe===6||prevCe===2;
+    const peUnwindRisk=peWasBuyingPrior&&peOiPct!=null&&peOiPct<0&&peLtpPct!=null&&peLtpPct>0;
+    const ceUnwindRisk=ceWasBuyingPrior&&ceOiPct!=null&&ceOiPct<0&&ceLtpPct!=null&&ceLtpPct>0;
+
     const strikeFlags=[];
     // Confluence note (PE=bearish direction check: RSI high/overbought + below VWAP agrees with fresh PE buying)
     function confluenceNote(side){
@@ -720,6 +729,7 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
       if(peBuying&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
       if(peWasBuying&&peBuying&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
+      if(peUnwindRisk)strikeFlags.push({side:"PE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`PE OI falling (${peOiPct.toFixed(1)}%) while LTP still rising (${peLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
     }
     if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
     if(ceCase!=null){
@@ -731,6 +741,7 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
       if(ceBuying&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
       if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
+      if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
@@ -745,7 +756,9 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       }).filter(x=>x&&x.c!=null);
       const recent=recentAll.slice(-3);
       const allBuying=recent.length>=3&&recent.every(x=>x.c===6||x.c===2);
-      const urgencyDeclining=recent.length>=3&&recent[0].u!=null&&recent[2].u!=null&&recent[2].u<recent[0].u;
+      // Strict monotonic deceleration: each successive urgency reading smaller than the one before it,
+      // not just first-vs-last — catches a fade-recover-fade pattern the old first-vs-last check missed
+      const urgencyDeclining=recent.length>=3&&recent.every((x,idx)=>idx===0||(x.u!=null&&recent[idx-1].u!=null&&x.u<recent[idx-1].u));
       if(allBuying&&urgencyDeclining)return"STALE";
       // MIXED: buying but internally contradicting itself — chop, or buying with negligible urgency (no real conviction behind it)
       if(flipping)return"MIXED";
