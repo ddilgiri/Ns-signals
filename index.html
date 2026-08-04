@@ -466,6 +466,20 @@ async function loadFnoStockList(forceRefresh){
 // respect Angel One rate limits), saves each into the existing fxo_scan_cache_<symbol> system, with
 // NO scoring/judging during this pass -- just building a real same-day starting point so the very first
 // comparison scan has genuine data to compare against, instead of the day-baseline approximation.
+// Clears the OI scan cache after market close so it never silently accumulates across days.
+// isCacheFromToday() already ignores stale cache the next morning, but this actually removes it from
+// storage rather than just leaving it there unused — keeps localStorage from growing indefinitely.
+var _cacheCleared=false;
+function clearScanCache(){
+  if(_cacheCleared)return; // only once per day, even if this stop path fires more than once
+  try{
+    var keys=Object.keys(localStorage).filter(function(k){return k.indexOf("fxo_scan_cache_")===0;});
+    keys.forEach(function(k){localStorage.removeItem(k);});
+    addLog("🧹 Cleared "+keys.length+" cached stock snapshots — market closed for the day","ok");
+    _cacheCleared=true;
+    _bulkDownloadDone=false; // next day's first scan should download a fresh baseline again
+  }catch(e){addLog("⚠️ Cache clear failed: "+e.message,"warn");}
+}
 var _bulkDownloadDone=false;
 async function bulkDownload(){
   var panel=document.getElementById("bulkDownloadPanel");
@@ -524,7 +538,7 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   }
   S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(runScan,25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
-  if(!getMarketStatus().nseOpen)return clearInterval(S.scanInt),S.scanning=!1,document.getElementById("scanBtn").textContent="▶ SCAN",document.getElementById("scanBtn").className="scan-btn go",void addLog("NSE closed — scanner stopped","warn");
+  if(!getMarketStatus().nseOpen){clearInterval(S.scanInt);S.scanning=!1;document.getElementById("scanBtn").textContent="▶ SCAN";document.getElementById("scanBtn").className="scan-btn go";addLog("NSE closed — scanner stopped","warn");clearScanCache();return;}
   addLog("Scanning cycle...","");
   // Indices removed from auto-scan loop — not traded, was wasting a full round of API calls (4 indices x
   // internal signal-analysis + oi-analysis + market-bias each) every single 25s cycle before any stock got touched
