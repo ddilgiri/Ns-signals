@@ -465,8 +465,8 @@ async function loadFnoStockList(forceRefresh){
   if(!S.scanning)return;
   if(!getMarketStatus().nseOpen)return clearInterval(S.scanInt),S.scanning=!1,document.getElementById("scanBtn").textContent="▶ SCAN",document.getElementById("scanBtn").className="scan-btn go",void addLog("NSE closed — scanner stopped","warn");
   addLog("Scanning cycle...","");
-  // Indices first (sequential, only 4 — fast)
-  for(var e=0;e<IDX_LIST.length&&S.scanning;e++)await scanSymbol(IDX_LIST[e].sym,IDX_LIST[e].token,IDX_LIST[e].lot,!0);
+  // Indices removed from auto-scan loop — not traded, was wasting a full round of API calls (4 indices x
+  // internal signal-analysis + oi-analysis + market-bias each) every single 25s cycle before any stock got touched
   // Priority movers: THREE signals merged — price move, OI velocity (server-tracked), volume spike (from last scan).
   // Any stock triggering ANY of these jumps the queue, since each can precede the others.
   var PRIORITY_MOVE_PCT_UP=1.5, PRIORITY_MOVE_PCT_DOWN=1.2, PRIORITY_MAX=10;
