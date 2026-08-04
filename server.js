@@ -795,6 +795,16 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
     const tierMeta={CLEAR:{label:"🟢 CLEAR",note:"fresh, confirmed, act on it"},"CLEAR+":{label:"🟢🤝 CLEAR+",note:"fresh, confirmed, Mahesh agrees — highest conviction"},MIXED:{label:"🟡 MIXED",note:"signal fighting itself — size down, tighter stop"},STALE:{label:"🔴 STALE",note:"move likely already happened — late entry risk"}};
     if(peTier)strikeFlags.push({side:"PE",type:"TIER_"+peTier.replace("+",""),label:tierMeta[peTier].label,detail:`PE confidence: ${tierMeta[peTier].note}`});
     if(ceTier)strikeFlags.push({side:"CE",type:"TIER_"+ceTier.replace("+",""),label:tierMeta[ceTier].label,detail:`CE confidence: ${tierMeta[ceTier].note}`});
+    // KEI 6000 CE pattern: a strong standalone CLEAR/CLEAR+ tier at a LOW-proximity (far-OTM) strike is
+    // genuine framework support — real fresh conviction, not a blind gamble — but it needs distinct
+    // distance-risk treatment given how far price still has to travel. Doesn't require same-strike Mahesh
+    // agreement, since the confirmed zone is often a different, closer strike (as it was for KEI: 5400).
+    const _weight=proximityWeight(row.strike);
+    const _awayNow=strikesAway(row.strike);
+    if(_weight==="LOW"){
+      if(peTier==="CLEAR"||peTier==="CLEAR+")strikeFlags.push({side:"PE",type:"FAR_OTM_SUPPORTED",label:"🎯 Far OTM — Supported",detail:`PE Case ${peCase} genuinely fresh at ${row.strike}, ${_awayNow} strikes from spot — real setup, not a gamble, but needs tighter partial-profit discipline given the distance`});
+      if(ceTier==="CLEAR"||ceTier==="CLEAR+")strikeFlags.push({side:"CE",type:"FAR_OTM_SUPPORTED",label:"🎯 Far OTM — Supported",detail:`CE Case ${ceCase} genuinely fresh at ${row.strike}, ${_awayNow} strikes from spot — real setup, not a gamble, but needs tighter partial-profit discipline given the distance`});
+    }
 
     if(strikeFlags.length){
       const weight=proximityWeight(row.strike);
