@@ -479,9 +479,20 @@ function clearScanCache(){
     addLog("🧹 Cleared "+keys.length+" cached stock snapshots — market closed for the day","ok");
     _cacheCleared=true;
     _bulkDownloadDone=false; // next day's first scan should download a fresh baseline again
+    try{localStorage.removeItem("fxo_baseline_done_ts");}catch(e){}
   }catch(e){addLog("⚠️ Cache clear failed: "+e.message,"warn");}
 }
-var _bulkDownloadDone=false;
+// Was resetting to false on EVERY page load/refresh (plain in-memory variable, never persisted),
+// causing the ~10min bulk download to re-run every single time the app was opened -- fixed by
+// checking localStorage for a same-day completion timestamp instead.
+var _bulkDownloadDone=(function(){
+  try{
+    var ts=localStorage.getItem("fxo_baseline_done_ts");
+    if(!ts)return false;
+    var d1=new Date(parseInt(ts)),d2=new Date();
+    return d1.getFullYear()===d2.getFullYear()&&d1.getMonth()===d2.getMonth()&&d1.getDate()===d2.getDate();
+  }catch(e){return false;}
+})();
 var _lastFailedStocks=[];
 async function retryFailedBaseline(){
   if(!_lastFailedStocks.length)return;
@@ -594,6 +605,7 @@ async function bulkDownload(){
   }
   if(etaEl)etaEl.textContent="";
   _bulkDownloadDone=true;
+  try{localStorage.setItem("fxo_baseline_done_ts",String(Date.now()));}catch(e){}
   setTimeout(function(){panel.style.display="none";},3000);
 }
 async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanning)return clearInterval(S.scanInt),S.scanInt=null,S.scanning=!1,e.textContent="▶ SCAN",e.className="scan-btn go",void addLog("Scanner stopped","warn");if(S.connected){if(!getMarketStatus().nseOpen)return toast("⏰ NSE Market is closed"),void addLog("Scan blocked — NSE closed","warn");
