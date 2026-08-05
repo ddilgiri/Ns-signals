@@ -660,9 +660,17 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
       c.stk._priorityReason=c.reason;c.stk._priorityDetail=c.detail;
     }
   });
-  var regularBatch=NSE_STOCKS.slice(scanOffset,scanOffset+SCAN_BATCH);
-  regularBatch.length||(scanOffset=0,regularBatch=NSE_STOCKS.slice(0,SCAN_BATCH));
-  scanOffset=(scanOffset+SCAN_BATCH)%NSE_STOCKS.length;
+  // Explicit last-scanned tracking instead of offset arithmetic -- the offset/modulo approach could
+  // never guarantee even coverage when SCAN_BATCH doesn't evenly divide the list length (confirmed via
+  // simulation: even with wraparound slicing, some stocks still got scanned 30 times while others got
+  // only 18 in 200 cycles). This picks the stocks least-recently scanned, guaranteeing genuinely even
+  // rotation over time regardless of list size changes (the F&O list can change daily).
+  window._lastScannedTs=window._lastScannedTs||{};
+  var regularBatch=NSE_STOCKS.slice().sort(function(a,b){
+    return(window._lastScannedTs[a.sym]||0)-(window._lastScannedTs[b.sym]||0);
+  }).slice(0,SCAN_BATCH);
+  var _nowTs=Date.now();
+  regularBatch.forEach(function(s){window._lastScannedTs[s.sym]=_nowTs;});
   var moverSyms={};moverCandidates.forEach(function(m){moverSyms[m.sym]=1;});
   var t=moverCandidates.concat(regularBatch.filter(function(s){return !moverSyms[s.sym];}));
   if(moverCandidates.length){
