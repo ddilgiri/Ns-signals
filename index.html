@@ -427,7 +427,39 @@ function updateCardLevels(e){var t=document.getElementById("card-"+e.id);if(t&&t
       ringFill.setAttribute("stroke-dashoffset",offset2.toFixed(1));
     }
   }
-}var _keepAliveInt=null;function startKeepAlive(){_keepAliveInt||(_keepAliveInt=setInterval(async function(){try{var e=await fetch(getServer()+"/health",{method:"GET"});await e.json()}catch(e){addLog("⚠️ Server ping failed — may have slept","warn")}},6e5))}async function resolveTokensFromServer(){try{var e=NSE_STOCKS.map(function(e){return e.sym}),t=await fetch(getServer()+"/resolve-tokens",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:e})}),o=await t.json();if(!o.status||!o.tokens)return;var n=0;NSE_STOCKS.forEach(function(e){var t=o.tokens[e.sym];t&&t!==String(e.token)&&(addLog("Token fix: "+e.sym+" "+e.token+" → "+t,""),e.token=t,n++)}),addLog(n>0?"✅ "+n+" tokens corrected from scrip master":"✅ All tokens verified OK","ok")}catch(e){addLog("Token resolve skipped: "+e.message,"")}}function startPriceUpdates(){liveUpdateInt||(batchUpdatePrices(),liveUpdateInt=setInterval(batchUpdatePrices,5e3),addLog("Live price updates started — every 5s","ok"))}function stopPriceUpdates(){liveUpdateInt&&(clearInterval(liveUpdateInt),liveUpdateInt=null)}function toggleCard(e){e.classList.toggle("open")}function startLiveSpot(e){}function stopLiveSpot(e){}function updateLiveSpot(e){}function renderSignals(){var e=document.getElementById("sigList"),t=S.signals,o=t.filter(function(e){return"PE"===e.type}).length,n=t.filter(function(e){return"CE"===e.type}).length,s=t.filter(function(e){return"STRONG"===e.verdict}).length;document.getElementById("sBear").textContent=o,document.getElementById("sBull").textContent=n,document.getElementById("sStrong").textContent=s,document.getElementById("sScanned").textContent=S.scannedCount;var a=document.getElementById("sigBadge");if(a.textContent=t.length,a.classList.toggle("show",t.length>0),t.length){var minConf=parseInt((document.getElementById("cfgMinConf")||{}).value||"60");
+}var _keepAliveInt=null;function startKeepAlive(){_keepAliveInt||(_keepAliveInt=setInterval(async function(){try{var e=await fetch(getServer()+"/health",{method:"GET"});await e.json()}catch(e){addLog("⚠️ Server ping failed — may have slept","warn")}},6e5))}async function resolveTokensFromServer(){try{var e=NSE_STOCKS.map(function(e){return e.sym}),t=await fetch(getServer()+"/resolve-tokens",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbols:e})}),o=await t.json();if(!o.status||!o.tokens)return;var n=0;NSE_STOCKS.forEach(function(e){var t=o.tokens[e.sym];t&&t!==String(e.token)&&(addLog("Token fix: "+e.sym+" "+e.token+" → "+t,""),e.token=t,n++)}),addLog(n>0?"✅ "+n+" tokens corrected from scrip master":"✅ All tokens verified OK","ok")}catch(e){addLog("Token resolve skipped: "+e.message,"")}}function startPriceUpdates(){liveUpdateInt||(batchUpdatePrices(),liveUpdateInt=setInterval(batchUpdatePrices,5e3),addLog("Live price updates started — every 5s","ok"))}function stopPriceUpdates(){liveUpdateInt&&(clearInterval(liveUpdateInt),liveUpdateInt=null)}function toggleCard(e){
+  e.classList.toggle("open");
+  if(!e.classList.contains("open"))return;
+  // Re-render flag row + debug badge from current in-memory data on every open, not just
+  // whenever the 45s refresh cycle happened to catch it already expanded -- this was the
+  // actual root cause of flags appearing correct in logs but never on the card itself.
+  var cardId=e.id||"";
+  var wrap=e.querySelector(".flag-row-wrap");
+  var dbg;
+  if(cardId.indexOf("tcard-")===0){
+    var tradeId=cardId.substring(6);
+    var tx=S.paperTrades.find(function(t){return t.id===tradeId;});
+    if(tx){
+      if(wrap)wrap.innerHTML=buildFlagRow(tx.strikeFlags);
+      dbg=document.getElementById("flagdebug-t"+tx.id);
+      if(dbg){
+        var tState=tx.strikeFlags===undefined?"undefined":tx.strikeFlags===null?"null":Array.isArray(tx.strikeFlags)?("array len "+tx.strikeFlags.length):("not array: "+typeof tx.strikeFlags);
+        dbg.textContent="🔴 TRADE DEBUG [on-open] strikeFlags: "+tState+" | liveFlagWarning: "+(tx.liveFlagWarning||"null");
+      }
+    }
+  }else if(cardId.indexOf("card-")===0){
+    var sigId=cardId.substring(5);
+    var sig=S.signals.find(function(s){return s.id===sigId;});
+    if(sig){
+      if(wrap)wrap.innerHTML=buildFlagRow(sig.strikeFlags);
+      dbg=document.getElementById("flagdebug-"+sig.id);
+      if(dbg){
+        var sState=sig.strikeFlags===undefined?"undefined":sig.strikeFlags===null?"null":Array.isArray(sig.strikeFlags)?("array len "+sig.strikeFlags.length):("not array: "+typeof sig.strikeFlags);
+        dbg.textContent="🔴 DEBUG [on-open] strikeFlags: "+sState;
+      }
+    }
+  }
+}function startLiveSpot(e){}function stopLiveSpot(e){}function updateLiveSpot(e){}function renderSignals(){var e=document.getElementById("sigList"),t=S.signals,o=t.filter(function(e){return"PE"===e.type}).length,n=t.filter(function(e){return"CE"===e.type}).length,s=t.filter(function(e){return"STRONG"===e.verdict}).length;document.getElementById("sBear").textContent=o,document.getElementById("sBull").textContent=n,document.getElementById("sStrong").textContent=s,document.getElementById("sScanned").textContent=S.scannedCount;var a=document.getElementById("sigBadge");if(a.textContent=t.length,a.classList.toggle("show",t.length>0),t.length){var minConf=parseInt((document.getElementById("cfgMinConf")||{}).value||"60");
 // Signals already passed minConf check at SCAN time (in scanSymbol).
 // Re-filtering here with a possibly-changed minConf value can silently hide
 // valid signals if user adjusts the slider after scanning. Show all scanned signals by default.
