@@ -262,6 +262,14 @@ function startTradeOnlyOIRefresh(){
   _tradeOnlyRefreshInt=setInterval(async function(){
     if(!S.connected||!S.paperTrades.length)return;
     if(_oiRefreshLock)return; // let the main refresh finish first, skip this tick
+    // Skip entirely while baseline download is in progress -- this loop was firing every 45s
+    // regardless of anything else (by design, to keep open-trade flags live), which meant it
+    // competed with bulkDownload() for the same throttled Angel One connection for the loop's
+    // full duration (confirmed: 27 open trades x /oi-analysis calls every 45s stacked directly
+    // on top of baseline's own 209-stock download, turning a ~3min pace into an 89min wait).
+    // Trades still show their last-known flags during download; they resume live updates the
+    // moment baseline finishes.
+    if(typeof _bulkDownloadDone!=="undefined"&&!_bulkDownloadDone)return;
     _oiRefreshLock=!0;
     try{
       var seen={};
