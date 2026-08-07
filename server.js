@@ -407,7 +407,26 @@ function getHeaders(e=!1){const t={"Content-Type":"application/json",Accept:"app
 let _lastRefreshAttempt=0,_refreshInProgress=!1;
 async function refreshToken(){if(!SESSION.refreshToken||!SESSION.apiKey||!SESSION.clientCode)return!1;const e=Date.now();if(_refreshInProgress)return!1;if(e-_lastRefreshAttempt<3e4)return log("Token refresh skipped — cooldown active","INFO"),!1;_refreshInProgress=!0,_lastRefreshAttempt=e;try{log("Refreshing expired Angel One token...","INFO");const e=await axios.post(`${ANGEL_API}/rest/auth/angelbroking/jwt/v1/generateTokens`,{refreshToken:SESSION.refreshToken},{headers:getHeaders(!1),timeout:15e3});return e.data?.status&&e.data?.data?.jwtToken?(SESSION.jwtToken=e.data.data.jwtToken,SESSION.refreshToken=e.data.data.refreshToken||SESSION.refreshToken,SESSION.expiresAt=Date.now()+288e5,log("Token refreshed successfully","OK"),_refreshInProgress=!1,!0):(_refreshInProgress=!1,!1)}catch(e){return log(`Token refresh failed: ${e.message}`,"WARN"),_refreshInProgress=!1,!1}}
 
-async function angelRequest(e,t,a,s={}){try{const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}catch(n){const o=n.response?.status;if(401===o&&SESSION.refreshToken){if(await refreshToken()){const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}}throw 403===o&&await new Promise(e=>setTimeout(e,2e3)),n}}
+// GLOBAL ANGEL ONE REQUEST GATE — every angelRequest() call (quote, candle, OI, bias, option-chain,
+// option-ltp, live-trade-prices) funnels through this single choke point, so concurrent callers
+// (auto-scan + live-trade-price refresh + baseline download all running at once, as confirmed in
+// production logs showing bursts of 6 simultaneous 403s at 04:52:45 and 04:53:06) get serialized
+// with a shared minimum spacing instead of racing Angel One's rate limit independently. Previously
+// only /candles had its own throttle (_lastCandleCall, 600ms) — /quote and OI-batch calls had none,
+// which is exactly what produced the simultaneous-burst 403 pattern seen in the logs.
+let _angelGateChain=Promise.resolve();
+const ANGEL_MIN_GAP_MS=350;
+let _angelLastCall=0;
+function angelGate(){
+  const runNext=_angelGateChain.then(async()=>{
+    const wait=ANGEL_MIN_GAP_MS-(Date.now()-_angelLastCall);
+    if(wait>0)await new Promise(r=>setTimeout(r,wait));
+    _angelLastCall=Date.now();
+  });
+  _angelGateChain=runNext.catch(()=>{}); // never let one caller's rejection break the chain for the next
+  return runNext;
+}
+async function angelRequest(e,t,a,s={}){await angelGate();try{const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}catch(n){const o=n.response?.status;if(401===o&&SESSION.refreshToken){if(await refreshToken()){await angelGate();const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}}throw 403===o&&await new Promise(e=>setTimeout(e,2e3)),n}}
 
 // ═══════════════════════════════════════════════════════
 // UPGRADE 5: NEW ROUTES
@@ -1515,4 +1534,5 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
