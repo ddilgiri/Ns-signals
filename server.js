@@ -794,7 +794,19 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       // PSYCHOLOGY/DISCIPLINE LAYER: Exhaustion flag -- extreme one-sided OI crowding on an
       // already-buying Case often precedes reversal rather than confirming more room to run.
       // Additive only, does not change Case classification or any existing flag.
-      if(peOiPct!=null&&peOiPct>300)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
+      // FIXED (2026-08-08, real PGEL transcript): the actual PGEL loss showed a 22700%+ OI%
+      // reading on 660 PE that was mathematically meaningless -- it came from a near-zero prior
+      // base OI, not genuine crowding. A percentage alone cannot distinguish "real exhaustion"
+      // from "tiny base inflated the ratio." Now requires the PRIOR scan's base OI to already
+      // be above this stock's own relative liquidity floor (chainMinOi, same threshold used for
+      // THIN_SIGNAL) before the percentage is trusted at all -- genuine exhaustion needs real
+      // OI behind it, not just an extreme ratio.
+      {
+        const peBaseOi=prevRow?prevRow.PE_oi:null;
+        const peBaseIsReal=peBaseOi!=null&&peBaseOi>=chainMinOi;
+        if(peOiPct!=null&&peOiPct>300&&peBaseIsReal)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% off a real base of ${peBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
+        else if(peOiPct!=null&&peOiPct>300&&!peBaseIsReal)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI change ${peOiPct.toFixed(0)}% looks extreme but prior base was only ${(peBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
+      }
     }
     if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi>=chainMinOi)strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
     else if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi<chainMinOi)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI only ${row.PE_oi.toLocaleString("en-IN")} contracts (this stock's threshold: ${Math.round(chainMinOi).toLocaleString("en-IN")}) — too thin to trust as a real wall, excluded from Wall Cracking`});
@@ -814,7 +826,12 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       }
       if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
       if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
-      if(ceOiPct!=null&&ceOiPct>300)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
+      {
+        const ceBaseOi=prevRow?prevRow.CE_oi:null;
+        const ceBaseIsReal=ceBaseOi!=null&&ceBaseOi>=chainMinOi;
+        if(ceOiPct!=null&&ceOiPct>300&&ceBaseIsReal)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% off a real base of ${ceBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
+        else if(ceOiPct!=null&&ceOiPct>300&&!ceBaseIsReal)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI change ${ceOiPct.toFixed(0)}% looks extreme but prior base was only ${(ceBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
+      }
     }
     if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi>=chainMinOi)strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
     else if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi<chainMinOi)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI only ${row.CE_oi.toLocaleString("en-IN")} contracts (this stock's threshold: ${Math.round(chainMinOi).toLocaleString("en-IN")}) — too thin to trust as a real wall, excluded from Wall Cracking`});
@@ -1633,6 +1650,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
