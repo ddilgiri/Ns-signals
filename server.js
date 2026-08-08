@@ -1058,7 +1058,11 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
-const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+// gammaBlast removed from stock scoring per user request (2026-08-08) -- it's an index/expiry-week
+// specific setup, not meaningful for general individual-stock signal scoring. Weight set to 0
+// rather than deleting the block, so gammaBlast data can still be computed/displayed elsewhere
+// without contributing to the score or shifting MAX_SCORE's meaning for any other component.
+const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:0,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);
   // PGEL-DERIVED HARD BLOCK (2026-08-08): the earlier SQUEEZE_URGENCY flag was display-only --
   // it labelled a squeeze-driven urgency spike but did nothing to stop the signal from still
@@ -1226,7 +1230,7 @@ try{
 s.pcrDelta={earned:pcrDeltaEarned,max:PCR_DELTA_MAX,pass:pcrDeltaEarned>=PCR_DELTA_MAX*0.4,note:pcrDeltaNote};
 }{
 // GAMMA BLAST scoring
-const t=SIGNAL_WEIGHTS.gammaBlast||15;
+const t=SIGNAL_WEIGHTS.gammaBlast||0;
 const gb=e.gammaBlast||null;
 if(!gb||!gb.isGammaBlast){
   // Not a gamma blast setup — neutral score
@@ -1650,6 +1654,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
