@@ -758,6 +758,10 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(peBuying&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
       if(peWasBuying&&peBuying&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
       if(peUnwindRisk)strikeFlags.push({side:"PE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`PE OI falling (${peOiPct.toFixed(1)}%) while LTP still rising (${peLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
+      // PSYCHOLOGY/DISCIPLINE LAYER: Exhaustion flag -- extreme one-sided OI crowding on an
+      // already-buying Case often precedes reversal rather than confirming more room to run.
+      // Additive only, does not change Case classification or any existing flag.
+      if(peOiPct!=null&&peOiPct>300)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
     }
     if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
     if(ceCase!=null){
@@ -770,6 +774,7 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(ceBuying&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
       if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
       if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
+      if(ceOiPct!=null&&ceOiPct>300)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
     }
     if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
 
@@ -834,6 +839,29 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
         STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,proximity:weight,strikesAway:away,usingBaseline,outcome:null});
       });
     }
+  });
+
+  // PSYCHOLOGY/DISCIPLINE LAYER: Strike-rank check -- when multiple strikes in the same chain
+  // show a buying Case (2 or 6) on the same side, rank them by LTP% momentum so the strongest
+  // is clearly distinguished from weaker/laggard strikes on the same side, instead of every
+  // Case-2/6 strike looking equally actionable. Additive only -- does not change any Case
+  // classification or existing flag; UI can dim/de-emphasize rank > 2 per the original spec.
+  ["PE","CE"].forEach(side=>{
+    const candidates=[];
+    flags.forEach(entry=>{
+      const sideFlags=(entry.flags||[]).filter(f=>f.side===side);
+      const hasBuyingCase=currentByStrike[entry.strike]&&(side==="PE"?currentByStrike[entry.strike].peCase:currentByStrike[entry.strike].ceCase);
+      const caseVal=side==="PE"?currentByStrike[entry.strike]?.peCase:currentByStrike[entry.strike]?.ceCase;
+      if(caseVal===2||caseVal===6){
+        const row=chain.find(r=>r.strike===entry.strike);
+        const ltpPct=row?(side==="PE"?pctChange(row.PE_ltp,(STRIKE_HISTORY[symbol]||[]).slice(-1)[0]?.rows?.find(rr=>rr.strike===entry.strike)?.PE_ltp||row.PE_ltp):pctChange(row.CE_ltp,(STRIKE_HISTORY[symbol]||[]).slice(-1)[0]?.rows?.find(rr=>rr.strike===entry.strike)?.CE_ltp||row.CE_ltp)):0;
+        candidates.push({entry,ltpPct:ltpPct||0});
+      }
+    });
+    candidates.sort((a,b)=>b.ltpPct-a.ltpPct);
+    candidates.forEach((c,i)=>{
+      c.entry.flags.forEach(f=>{if(f.side===side)f.strikeRank=i+1;});
+    });
   });
 
   if(!STRIKE_HISTORY[symbol])STRIKE_HISTORY[symbol]=[];
@@ -1534,5 +1562,6 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
