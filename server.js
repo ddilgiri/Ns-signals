@@ -755,7 +755,19 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(!peWasBuying&&peBuying)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
       if(peWasBuying&&peSellingOrFading)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case ${prevPe}→${peCase} — buying conviction fading`});
       if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
-      if(peBuying&&peUrgency>=8)strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
+      if(peBuying&&peUrgency>=8){
+        if(peFlipping){
+          // Squeeze-vs-buildup distinction: urgency is a pure magnitude score (|OI%|*0.6 + |LTP%|*0.8)
+          // with no sense of WHY the move is large. A genuine squeeze (writers panic-covering) produces
+          // the exact same sharp OI/LTP spike as real fresh conviction -- the only tell is that the case
+          // itself has been flipping/unstable across recent scans rather than building steadily. Flag
+          // these separately so a spike on a choppy case reads as "likely to fade fast" rather than the
+          // same confidence as urgency built on a stable, already-confirmed case.
+          strikeFlags.push({side:"PE",type:"SQUEEZE_URGENCY",label:"🌪️ Squeeze Urgency — case unstable",detail:`PE urgency ${peUrgency} but case has been flipping — likely a short-covering spike, not steady conviction; treat as fast in/out only`});
+        }else{
+          strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
+        }
+      }
       if(peWasBuying&&peBuying&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
       if(peUnwindRisk)strikeFlags.push({side:"PE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`PE OI falling (${peOiPct.toFixed(1)}%) while LTP still rising (${peLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
       // PSYCHOLOGY/DISCIPLINE LAYER: Exhaustion flag -- extreme one-sided OI crowding on an
@@ -771,7 +783,13 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(!ceWasBuying&&ceBuying)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
       if(ceWasBuying&&ceSellingOrFading)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case ${prevCe}→${ceCase} — buying conviction fading`});
       if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
-      if(ceBuying&&ceUrgency>=8)strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
+      if(ceBuying&&ceUrgency>=8){
+        if(ceFlipping){
+          strikeFlags.push({side:"CE",type:"SQUEEZE_URGENCY",label:"🌪️ Squeeze Urgency — case unstable",detail:`CE urgency ${ceUrgency} but case has been flipping — likely a short-covering spike, not steady conviction; treat as fast in/out only`});
+        }else{
+          strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
+        }
+      }
       if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
       if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
       if(ceOiPct!=null&&ceOiPct>300)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
@@ -1562,6 +1580,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
