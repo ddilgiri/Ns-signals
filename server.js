@@ -1055,6 +1055,19 @@ function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&
   if(!n&&Array.isArray(e.strikeFlags)){
     const squeezeHit=e.strikeFlags.some(sf=>sf.proximity==="HIGH"&&Array.isArray(sf.flags)&&sf.flags.some(f=>f.type==="SQUEEZE_URGENCY"&&f.side===t));
     if(squeezeHit){n=!0;o=`Squeeze urgency detected near ATM on ${t} side — likely short-covering spike on an unstable case, not real conviction; signal blocked to prevent auto-entry into a fast reversal`;}
+  }
+  // EXTENDED PER USER CORRECTION (2026-08-08): PGEL's actual OI change was extreme (user cites
+  // ~22000%) -- squarely what the Exhaustion check exists to catch, not just squeeze/chop. The
+  // squeeze-only block above still let an Exhaustion-level or genuinely-thin-OI signal through
+  // to auto-qualify. Same fix, same reasoning, extended to the other two conditions that can
+  // make an urgency reading untrustworthy near the money.
+  if(!n&&Array.isArray(e.strikeFlags)){
+    const exhaustionHit=e.strikeFlags.some(sf=>sf.proximity==="HIGH"&&Array.isArray(sf.flags)&&sf.flags.some(f=>f.type==="EXHAUSTION"&&f.side===t));
+    if(exhaustionHit){n=!0;o=`Extreme OI exhaustion detected near ATM on ${t} side — one-sided crowding this large usually precedes reversal, not continuation; signal blocked to prevent auto-entry`;}
+  }
+  if(!n&&Array.isArray(e.strikeFlags)){
+    const thinHit=e.strikeFlags.some(sf=>sf.proximity==="HIGH"&&Array.isArray(sf.flags)&&sf.flags.some(f=>f.type==="THIN_SIGNAL"&&f.side===t));
+    if(thinHit){n=!0;o=`Thin OI near ATM on ${t} side — too low-liquidity to trust the urgency/case reading; signal blocked to prevent auto-entry on an easily-faked move`;}
   }{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
 const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
 const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
@@ -1616,6 +1629,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
