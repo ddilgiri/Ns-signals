@@ -504,6 +504,13 @@ app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
 
 const BIAS_CACHE={},BIAS_TTL=3e5;
+// Minimum absolute OI (contracts) for a strike to be trusted as a real wall/floor signal.
+// A strike can look "STRONG" purely relative to a thin trading day's average OI (W) while
+// still being genuinely low-liquidity in absolute terms -- easy to move, easy to fake a
+// wall/floor read on. Below this floor, downgrade to THIN regardless of relative strength,
+// and exclude from WALL_CRACKING (a strike too thin to be a real wall can't meaningfully
+// "crack" either).
+const MIN_OI_THRESHOLD=300000;
 let _lastAngelCall=0;
 async function angelRateLimit(){const e=Date.now()-_lastAngelCall;e<700&&await new Promise(t=>setTimeout(t,700-e)),_lastAngelCall=Date.now()}
 let _lastCandleCall=0;
@@ -775,7 +782,8 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       // Additive only, does not change Case classification or any existing flag.
       if(peOiPct!=null&&peOiPct>300)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
     }
-    if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3))strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
+    if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi>=MIN_OI_THRESHOLD)strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
+    else if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi<MIN_OI_THRESHOLD)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI only ${row.PE_oi.toLocaleString("en-IN")} contracts — too thin to trust as a real wall, excluded from Wall Cracking`});
     if(ceCase!=null){
       const ceBuying=ceCase===6||ceCase===2;
       const ceWasBuying=prevCe===6||prevCe===2;
@@ -794,7 +802,8 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
       if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
       if(ceOiPct!=null&&ceOiPct>300)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% — extreme crowding, watch for reversal risk`});
     }
-    if(prevCe===1&&(ceCase===3||ceCase===4))strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
+    if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi>=MIN_OI_THRESHOLD)strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
+    else if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi<MIN_OI_THRESHOLD)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI only ${row.CE_oi.toLocaleString("en-IN")} contracts — too thin to trust as a real wall, excluded from Wall Cracking`});
 
     // Confidence tier: CLEAR / MIXED / STALE — answers "how much should I trust this right now", not just "what case is it"
     function computeTier(side,caseNow,urgencyNow,wasBuying,flipping,confirmedByMahesh){
@@ -967,7 +976,7 @@ const ceStrengthening=nearStrikes.filter(e=>(e.CE_oiChange||0)>20&&e.CE_prevClos
 if("PE"===se&&ceWeakening>=2&&peStrengthening>=1){ne+=15;oe.push(`Mahesh: Call wall weakening (${ceWeakening} strikes) + Put floor building (${peStrengthening} strikes) near spot — cross-confirmed`);}
 else if("CE"===se&&peWeakening>=2&&ceStrengthening>=1){ne+=15;oe.push(`Mahesh: Put floor weakening (${peWeakening} strikes) + Call wall building (${ceStrengthening} strikes) near spot — cross-confirmed`);}
 ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expiry week (${exInfo.daysToNSEExpiry}d left) — OI thresholds tighter, gamma elevated`);}
-  const re=ne>=70?"STRONG":ne>=50?"MODERATE":ne>=30?"WEAK":"AVOID",ie=R.filter(e=>e.CE_oi>0).sort((e,t)=>e.strike-t.strike)[0]?.strike||null,le=x.filter(e=>e.PE_oi>0).sort((e,t)=>t.strike-e.strike)[0]?.strike||null,ce=L.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),ue=M.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),pe=O.map(e=>({strike:e.strike,pcr:e.CE_oi>0?parseFloat((e.PE_oi/e.CE_oi).toFixed(2)):null,CE_oi:e.CE_oi,PE_oi:e.PE_oi,CE_change:e.CE_oiChange,PE_change:e.PE_oiChange,position:e.strike>S?"ABOVE":e.strike<S?"BELOW":"ATM",rameshStrength:e.CE_oi>1.5*W?"STRONG":e.CE_oi>.7*W?"MEDIUM":"WEAK",sureshStrength:e.PE_oi>1.5*W?"STRONG":e.PE_oi>.7*W?"MEDIUM":"WEAK"}));
+  const re=ne>=70?"STRONG":ne>=50?"MODERATE":ne>=30?"WEAK":"AVOID",ie=R.filter(e=>e.CE_oi>0).sort((e,t)=>e.strike-t.strike)[0]?.strike||null,le=x.filter(e=>e.PE_oi>0).sort((e,t)=>t.strike-e.strike)[0]?.strike||null,ce=L.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi<MIN_OI_THRESHOLD?"THIN":e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),ue=M.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi<MIN_OI_THRESHOLD?"THIN":e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),pe=O.map(e=>({strike:e.strike,pcr:e.CE_oi>0?parseFloat((e.PE_oi/e.CE_oi).toFixed(2)):null,CE_oi:e.CE_oi,PE_oi:e.PE_oi,CE_change:e.CE_oiChange,PE_change:e.PE_oiChange,position:e.strike>S?"ABOVE":e.strike<S?"BELOW":"ATM",rameshStrength:e.CE_oi<MIN_OI_THRESHOLD?"THIN":e.CE_oi>1.5*W?"STRONG":e.CE_oi>.7*W?"MEDIUM":"WEAK",sureshStrength:e.PE_oi<MIN_OI_THRESHOLD?"THIN":e.PE_oi>1.5*W?"STRONG":e.PE_oi>.7*W?"MEDIUM":"WEAK"}));
   // Detect gamma blast
   const exInfoForGamma=getExpiryWeekInfo(i);
   // Pass real VIX from cache if available
@@ -1580,6 +1589,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
