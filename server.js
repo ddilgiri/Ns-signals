@@ -807,6 +807,24 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
         if(peOiPct!=null&&peOiPct>300&&peBaseIsReal)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% off a real base of ${peBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
         else if(peOiPct!=null&&peOiPct>300&&!peBaseIsReal)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI change ${peOiPct.toFixed(0)}% looks extreme but prior base was only ${(peBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
       }
+      // OI VELOCITY CHECK (2026-08-08, user-described mechanism): distinguishes a sudden vertical
+      // OI spike in the most recent scan (retail/"dummy" momentum crowd piling in fast, likely to
+      // exit just as fast, leaving late entrants trapped) from steady multi-scan accumulation
+      // (real structural buying building gradually). Uses the last 3 stored scans (STRIKE_HISTORY
+      // already retains up to 6, only Case comparison used them before -- raw OI/LTP across scans
+      // sat unused). Additive only, separate flag from EXHAUSTION/SQUEEZE_URGENCY, does not modify
+      // either -- purely a new, independently-checkable warning.
+      if(history.length>=2){
+        const peHist=history.slice(-2).map(h=>(h.rows||[]).find(r=>r.strike===row.strike)?.PE_oi).filter(v=>v!=null);
+        peHist.push(row.PE_oi);
+        if(peHist.length===3&&peHist[0]>0){
+          const earlyMove=Math.abs((peHist[1]-peHist[0])/peHist[0]*100);
+          const lateMove=peHist[1]>0?Math.abs((peHist[2]-peHist[1])/peHist[1]*100):0;
+          if(lateMove>100&&earlyMove<lateMove*0.3){
+            strikeFlags.push({side:"PE",type:"OI_SPIKE",label:"📈 Sudden OI Spike",detail:`PE OI jumped ${lateMove.toFixed(0)}% just this scan after being flat — looks like fast momentum money piling in, not steady buildup; likely to exit just as fast`});
+          }
+        }
+      }
     }
     if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi>=chainMinOi)strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
     else if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi<chainMinOi)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI only ${row.PE_oi.toLocaleString("en-IN")} contracts (this stock's threshold: ${Math.round(chainMinOi).toLocaleString("en-IN")}) — too thin to trust as a real wall, excluded from Wall Cracking`});
@@ -831,6 +849,17 @@ function computeStrikeFlags(symbol,chain,confluence,atmStrike){
         const ceBaseIsReal=ceBaseOi!=null&&ceBaseOi>=chainMinOi;
         if(ceOiPct!=null&&ceOiPct>300&&ceBaseIsReal)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% off a real base of ${ceBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
         else if(ceOiPct!=null&&ceOiPct>300&&!ceBaseIsReal)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI change ${ceOiPct.toFixed(0)}% looks extreme but prior base was only ${(ceBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
+      }
+      if(history.length>=2){
+        const ceHist=history.slice(-2).map(h=>(h.rows||[]).find(r=>r.strike===row.strike)?.CE_oi).filter(v=>v!=null);
+        ceHist.push(row.CE_oi);
+        if(ceHist.length===3&&ceHist[0]>0){
+          const earlyMove=Math.abs((ceHist[1]-ceHist[0])/ceHist[0]*100);
+          const lateMove=ceHist[1]>0?Math.abs((ceHist[2]-ceHist[1])/ceHist[1]*100):0;
+          if(lateMove>100&&earlyMove<lateMove*0.3){
+            strikeFlags.push({side:"CE",type:"OI_SPIKE",label:"📈 Sudden OI Spike",detail:`CE OI jumped ${lateMove.toFixed(0)}% just this scan after being flat — looks like fast momentum money piling in, not steady buildup; likely to exit just as fast`});
+          }
+        }
       }
     }
     if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi>=chainMinOi)strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
@@ -1654,6 +1683,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
