@@ -1116,9 +1116,20 @@ function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&
     const atmEntry=e.strikeFlags.find(sf=>sf.strikesAway===0&&Array.isArray(sf.flags));
     if(atmEntry){
       const atmFlagTypes=new Set(atmEntry.flags.filter(f=>f.side===t).map(f=>f.type));
-      const hitCount=["SQUEEZE_URGENCY","EXHAUSTION","THIN_SIGNAL"].filter(ty=>atmFlagTypes.has(ty)).length;
+      const primaryTypes=["SQUEEZE_URGENCY","EXHAUSTION","THIN_SIGNAL"];
+      const primaryHits=primaryTypes.filter(ty=>atmFlagTypes.has(ty));
+      // OI_SPIKE (2026-08-08): a sudden OI spike is genuinely double-edged -- it can be the start
+      // of a real move OR a dummy-crowd squeeze trap, the shape alone can't tell which. Per user
+      // discussion, NOT made a standalone block condition (would risk killing real fast-moving
+      // opportunities), but added as a SOFT TIEBREAKER: it only counts toward the block when at
+      // least one primary condition (squeeze/exhaustion/thin) has already fired on its own --
+      // i.e. OI_SPIKE alone never blocks, but "1 primary condition + spike shape" now reaches the
+      // same 2-hit bar as "2 primary conditions" would, since a primary risk condition plus a
+      // spike-shaped OI move together is a stronger combined case than the primary condition alone.
+      const hasSpike=atmFlagTypes.has("OI_SPIKE");
+      const hitCount=primaryHits.length+(hasSpike&&primaryHits.length>=1?1:0);
       if(hitCount>=2){
-        const hitNames=["SQUEEZE_URGENCY","EXHAUSTION","THIN_SIGNAL"].filter(ty=>atmFlagTypes.has(ty)).join(" + ");
+        const hitNames=primaryHits.concat(hasSpike&&primaryHits.length>=1?["OI_SPIKE"]:[]).join(" + ");
         n=!0;o=`Multiple risk conditions at ATM on ${t} side (${hitNames}) — combination suggests an unreliable read, likely to reverse fast; signal blocked to prevent auto-entry`;
       }
     }
@@ -1683,6 +1694,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
