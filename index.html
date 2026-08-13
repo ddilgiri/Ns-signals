@@ -1749,8 +1749,15 @@ console.log('✅ DILIP FXO V4 Card Engine loaded');
 
 // ── 1. AUTO-SCROLL LOG ───────────────────────────────
 var _v3AddLog = window.addLog || function(){};
-window.addLog = function(msg, type) {
-  _v3AddLog(msg, type);
+// FIXED (2026-08-12): this wrapper was dropping the 3rd (html) argument entirely -- calling
+// _v3AddLog(msg, type) instead of _v3AddLog(msg, type, html) meant ANY call site passing
+// html=true (e.g. the Priority Movers colored-span log line) silently lost that flag once this
+// wrapper took over addLog, causing raw <span style="..."> tags to render as literal text
+// instead of colored HTML in the Activity Log. Confirmed via user screenshots on a genuinely
+// fresh, post-cache-fix session -- this was a real bug, not the stale-cache issue diagnosed
+// earlier for a similar-looking symptom.
+window.addLog = function(msg, type, html) {
+  _v3AddLog(msg, type, html);
   // Auto-scroll log area
   var la = document.getElementById('logArea');
   if(la) setTimeout(function(){ la.scrollTop = la.scrollHeight; }, 50);
@@ -2562,6 +2569,7 @@ if(_v42RenderTrades) {
 
 console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 </script>
+
 
 
 
