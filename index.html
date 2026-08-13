@@ -791,16 +791,10 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   regularBatch.forEach(function(s){window._lastScannedTs[s.sym]=_nowTs;});
   var moverSyms={};moverCandidates.forEach(function(m){moverSyms[m.sym]=1;});
   var t=moverCandidates.concat(regularBatch.filter(function(s){return !moverSyms[s.sym];}));
-  if(moverCandidates.length){
-    var reasonIcon={price:"💹",oi:"📊",volume:"🔥"};
-    var moverHtml="⚡ Priority movers: "+moverCandidates.map(function(m){
-      var isUp=(LIVE_PRICES[m.sym]&&LIVE_PREV[m.sym])?(LIVE_PRICES[m.sym]>=LIVE_PREV[m.sym]):true;
-      var color=m._priorityReason==="oi"?"#a855f7":m._priorityReason==="volume"?"#f59e0b":(isUp?"#22c55e":"#ef4444");
-      var icon=reasonIcon[m._priorityReason]||"💹";
-      return "<span style=\"color:"+color+";font-weight:700\">"+icon+m.sym+" "+(m._priorityDetail||"")+"</span>";
-    }).join(", ");
-    addLog(moverHtml,"",true);
-  }
+  // Priority movers Activity Log entry removed per user request (2026-08-12) -- the visual
+  // mover ticker (updateMoverTicker below) already shows this same Gainers/Losers information
+  // in the UI; duplicating it as a log line added clutter to the Activity Log without adding
+  // information. Ticker itself is untouched and still updates normally.
   updateMoverTicker();
   S.scannedCount+=t.length;
   // PARALLEL stock scanning — process in groups of 6 concurrent requests
@@ -2569,6 +2563,7 @@ if(_v42RenderTrades) {
 
 console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 </script>
+
 
 
 
