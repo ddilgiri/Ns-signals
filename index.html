@@ -737,6 +737,16 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   }
   S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(runScan,25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
+  // RE-ENTRY GUARD (2026-08-13): setInterval(runScan, 25000) fires on a fixed clock with no
+  // awareness of whether the previous 210-stock pass has actually finished. Candle 403/429
+  // retries (each adding a mandatory 2s wait) routinely push a full pass past 25s, so a second
+  // runScan() was starting mid-pass on top of the first -- same stocks getting scanned by two
+  // overlapping cycles at once (confirmed in production logs: duplicate OI fetches for the same
+  // stock within seconds, not explained by the normal CE-then-PE pattern). This guard makes a
+  // new cycle exit immediately if the previous one hasn't completed yet, instead of stacking.
+  if(S._scanInProgress){addLog("Scan cycle already running — skipping this tick to avoid overlap","warn");return;}
+  S._scanInProgress=true;
+  try{
   if(!getMarketStatus().nseOpen){clearInterval(S.scanInt);S.scanning=!1;document.getElementById("scanBtn").textContent="▶ SCAN";document.getElementById("scanBtn").className="scan-btn go";addLog("NSE closed — scanner stopped","warn");clearScanCache();return;}
   addLog("Scanning cycle...","");
   // Indices removed from auto-scan loop — not traded, was wasting a full round of API calls (4 indices x
@@ -813,6 +823,7 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
       n&&n.classList.add("active");
       renderSignals();
     }
+  }finally{S._scanInProgress=false;}
 }async function scanSymbol(e,t,o,n){try{if(!t){var _stk=NSE_STOCKS&&NSE_STOCKS.find(function(x){return x.sym===e;});if(_stk&&_stk.token)t=_stk.token;}var s=LIVE_PRICES[e]||0;if(!s&&t){var a=await fetch(getServer()+"/quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"FULL",exchangeTokens:{NSE:[String(t)]}})}),i=await a.json();(s=parseFloat(i.data&&i.data.fetched&&i.data.fetched[0]&&i.data.fetched[0].ltp||0))>0&&s<200000&&(LIVE_PRICES[e]=s)}if(!s)return void addLog("Skip "+e+" — no spot price","warn");if(s>200000){addLog("Skip "+e+" — implausible spot price ₹"+Math.round(s)+", clearing cache","warn");delete LIVE_PRICES[e];return;}
   // CHEAP PRE-FILTER: skip the expensive /signal-analysis call (which always triggers a
   // candle+bias fetch server-side) for stocks with near-zero movement from previous close.
@@ -2563,6 +2574,7 @@ if(_v42RenderTrades) {
 
 console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 </script>
+
 
 
 
