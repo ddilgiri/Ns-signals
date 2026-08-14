@@ -1131,54 +1131,15 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // without contributing to the score or shifting MAX_SCORE's meaning for any other component.
 const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:0,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);
-  // PGEL-DERIVED HARD BLOCK (2026-08-08): the earlier SQUEEZE_URGENCY flag was display-only --
-  // it labelled a squeeze-driven urgency spike but did nothing to stop the signal from still
-  // qualifying, scoring high, and being auto-taken. That is exactly what happened on PGEL: a
-  // squeeze spike read as urgency, the signal generated and got taken, the squeeze then flipped,
-  // and the trade lost. Per explicit instruction, this needs to change the SIGNAL LOGIC itself,
-  // not just the flag display -- so if any near-ATM strike (HIGH proximity) shows SQUEEZE_URGENCY
-  // on the side matching this signal's type (CE/PE), the signal is hard-blocked here, before
-  // scoring even runs, so it can never auto-generate or auto-qualify as a BUY on the back of a
-  // squeeze read.
-  // NARROWED PER USER FEEDBACK (2026-08-08): the original version blocked on ANY of squeeze /
-  // exhaustion / thin firing on ANY strike within HIGH proximity (0-3 strikes from ATM) -- too
-  // broad, since a flag on a neighboring strike you are not even trading could kill an otherwise
-  // good signal, and any ONE of three conditions alone was enough to block. Over-gating like that
-  // trades false negatives (missed good signals) for the false positives it was meant to catch.
-  // Narrowed to: only the exact ATM strike (strikesAway===0) counts, and at least 2 of the 3
-  // conditions must fire together on that same strike/side before blocking -- a genuine PGEL-
-  // style setup tends to show more than one warning sign at once (e.g. extreme OI change AND a
-  // choppy/unstable case), so requiring 2-of-3 keeps real danger caught while letting a signal
-  // through when only one condition is marginally triggered.
-  if(!n&&Array.isArray(e.strikeFlags)){
-    const atmEntry=e.strikeFlags.find(sf=>sf.strikesAway===0&&Array.isArray(sf.flags));
-    if(atmEntry){
-      const atmFlagTypes=new Set(atmEntry.flags.filter(f=>f.side===t).map(f=>f.type));
-      const primaryTypes=["SQUEEZE_URGENCY","EXHAUSTION","THIN_SIGNAL"];
-      const primaryHits=primaryTypes.filter(ty=>atmFlagTypes.has(ty));
-      // OI_SPIKE (2026-08-08): a sudden OI spike is genuinely double-edged -- it can be the start
-      // of a real move OR a dummy-crowd squeeze trap, the shape alone can't tell which. Per user
-      // discussion, NOT made a standalone block condition (would risk killing real fast-moving
-      // opportunities), but added as a SOFT TIEBREAKER: it only counts toward the block when at
-      // least one primary condition (squeeze/exhaustion/thin) has already fired on its own --
-      // i.e. OI_SPIKE alone never blocks, but "1 primary condition + spike shape" now reaches the
-      // same 2-hit bar as "2 primary conditions" would, since a primary risk condition plus a
-      // spike-shaped OI move together is a stronger combined case than the primary condition alone.
-      const hasSpike=atmFlagTypes.has("OI_SPIKE");
-      const hitCount=primaryHits.length+(hasSpike&&primaryHits.length>=1?1:0);
-      if(hitCount>=2){
-        const hitNames=primaryHits.concat(hasSpike&&primaryHits.length>=1?["OI_SPIKE"]:[]).join(" + ");
-        n=!0;o=`Multiple risk conditions at ATM on ${t} side (${hitNames}) — combination suggests an unreliable read, likely to reverse fast; signal blocked to prevent auto-entry`;
-      }
-      // RANGE_LOCK (2026-08-08): user specified this should suppress signal generation entirely
-      // on its own -- not requiring a 2nd condition like the primary trio above. Call wall + Put
-      // wall both holding at the same strike means the market is pinned by sellers on both sides;
-      // there is no real directional edge to trade regardless of what else scores well.
-      if(!n&&atmFlagTypes.has("RANGE_LOCK")){
-        n=!0;o=`Range Lock at ATM — Call and Put walls both holding, market pinned by sellers on both sides; no real directional edge to trade`;
-      }
-    }
-  }
+  // REMOVED PER EXPLICIT USER DECISION (2026-08-13): the squeeze/exhaustion/thin 2-of-3 hard
+  // block and the RANGE_LOCK standalone block (both originally added 2026-08-08 after the PGEL
+  // loss) were found by the user to be contributing to a broader "no signals appearing" problem.
+  // After discussion of alternatives (require 3-of-3, or convert to a score penalty instead of a
+  // full block), user explicitly chose full removal of this gate. SQUEEZE_URGENCY, EXHAUSTION,
+  // THIN_SIGNAL, and RANGE_LOCK flags themselves are UNCHANGED and still compute/display normally
+  // on cards (still visible in strikeFlags) -- only their consequence of blocking scoreSignal()
+  // outright has been removed. STALE_MOVE and CHOP_RANGE (added same day as this gate, but not
+  // targeted by this request) are untouched below.
   // STALE_MOVE (2026-08-08): the big OI+LTP move already happened and price has since gone flat --
   // a Case2/6 buying read right now is describing exhaustion of a move already behind us, not a
   // fresh entry opportunity. Per user spec: block when staleMove is true AND the current side's
@@ -1760,6 +1721,7 @@ app.listen(PORT,()=>{
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
+
 
 
 
