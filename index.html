@@ -16,35 +16,31 @@
 .v7-setup-btn:active{opacity:.85}
 .v7-setup-btn-secondary{border-radius:12px;background:var(--card2)!important;color:var(--text)!important;border:1px solid rgba(168,85,247,.25)!important;font-weight:800}
 .v7-setup-toggle{box-shadow:0 2px 8px rgba(0,0,0,.15)}
-.v7-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px;cursor:pointer}
-.v7-card.strong{border-color:rgba(251,146,60,.4)}
-.v7-head-top{display:flex;justify-content:space-between;align-items:center}
-.v7-head-stock{font-size:14px;font-weight:900;color:var(--text);font-family:Roboto,sans-serif}
-.v7-head-ltp{font-size:13px;font-weight:800;color:var(--text2)}
-.v7-head-caps{display:flex;gap:6px;margin-top:6px}
-.v7-cap{padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800}
-.v7-cap-cap{background:rgba(59,130,246,.12);color:var(--blue)}
-.v7-cap-time{background:rgba(168,85,247,.12);color:#a855f7}
-.v7-cap-entry{background:rgba(34,197,94,.12);color:var(--green)}
-.v7-winrow{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
-.v7-win-side{font-size:10.5px;font-weight:700;color:var(--text3)}
-.v7-win-side.active{color:var(--text);font-weight:900}
-.v7-win-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:999px;background:rgba(59,130,246,.1);color:var(--blue)}
-.v7-crosscheck{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
-.v7-check{flex:1;min-width:0;padding:6px 8px;border-radius:10px;font-size:10px;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.v7-check-amber{background:rgba(245,158,11,.1);color:var(--amber)}
-.v7-check-red{background:rgba(239,68,68,.1);color:var(--red)}
-.v7-check-green{background:rgba(34,197,94,.1);color:var(--green)}
-.v7-tradeplan{display:flex;gap:6px;margin-top:8px}
-.v7-plan{flex:1;text-align:center;padding:6px 4px;border-radius:10px;font-size:11px;font-weight:800}
-.v7-plan-target{background:rgba(34,197,94,.1);color:var(--green)}
-.v7-plan-stop{background:rgba(239,68,68,.1);color:var(--red)}
-.v7-plan-hold{background:rgba(245,158,11,.1);color:var(--amber)}
-.v7-plan-exit{background:rgba(185,28,28,.15);color:#b91c1c}
-.v7-verdict{margin-top:10px;padding:9px 11px;border-radius:10px;font-size:11px;font-weight:700;line-height:1.4}
-.v7-verdict-green{background:rgba(34,197,94,.08);color:var(--green)}
-.v7-verdict-amber{background:rgba(245,158,11,.08);color:var(--amber)}
-.v7-verdict-red{background:rgba(239,68,68,.08);color:var(--red)}
+.mcard{background:#ffffff;border-radius:13px;border:1px solid #e8e9ed;box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0 0 10px;cursor:pointer}
+.mcard-head{padding:9px 12px 7px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.mcard-id{display:flex;flex-direction:column;gap:3px}
+.mode-badge{display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:999px;width:fit-content}
+.mode-badge.auto{background:#e7f0fd;color:#1d5fbf}
+.mode-badge.manual{background:#f4e9fb;color:#7e22ce}
+.mcard-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mcard-name-row h2{font-size:14.5px;margin:0;font-weight:800;color:#14181f}
+.pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px}
+.pill-ce{background:#e6f6ec;color:#0f9d58}
+.pill-pe{background:#fdeceb;color:#d93025}
+.tier-badge{font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0}
+.tier-badge.clear-plus{background:#e6f6ec;color:#0f9d58}
+.tier-badge.clear{background:#e6f6ec;color:#0f9d58}
+.tier-badge.mixed{background:#fdf3e0;color:#b8860b}
+.tier-badge.stale{background:#fdeceb;color:#d93025}
+.tier-badge.skip{background:#f3f4f7;color:#6b7280}
+.mcard-mid{padding:0 12px 8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6b7280;font-weight:600}
+.mcard-mid .ltp{font-weight:800;font-size:12.5px}
+.mcard-mid .ltp.up{color:#0f9d58}
+.mcard-mid .ltp.down{color:#d93025}
+.mcard-tag{margin:0 10px 10px;font-size:10.5px;font-weight:700;padding:6px 9px;border-radius:8px;line-height:1.35}
+.mcard-tag.ok{background:#e6f6ec;color:#0f9d58}
+.mcard-tag.warn{background:#fdf3e0;color:#b8860b}
+.mcard-tag.skip{background:#fdeceb;color:#d93025}
 .v7-dash-header{display:flex;align-items:center;justify-content:space-between;padding:14px 13px 10px;background:#ffffff}
 .v7-dash-title{font-family:Roboto,sans-serif;font-size:19px;font-weight:900;color:#14181f;letter-spacing:.2px}
 .v7-dash-icons{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
@@ -1730,74 +1726,44 @@ function v4SpotDir(sym){
 function buildCardV7(e){
   var isPE="PE"===e.type;
   var sym=(e.sym||"").toUpperCase();
-  var symImg=sym.replace(/[^A-Z0-9\-]/g,"");
-  if(symImg==="NIFTY")symImg="NIFTY50";
-  var score=e.score||0;
-  var verdict=e.verdict||"WEAK";
-  var moodClass=verdict==="STRONG"?"strong":verdict==="MODERATE"?"moderate":"weak";
-  // --- Section 2: winning/losing side + strike badge ---
+  var mode=e.isManualCheck?"manual":"auto";
+  var modeIcon=e.isManualCheck?"🖊":"⚡";
+  var modeLabel=e.isManualCheck?"Manual":"Auto";
+  var pillClass=isPE?"pill-pe":"pill-ce";
+  var entry=(e.entryPremium||e.premium||e.ltp||0);
+  var ltpNow=(e.premium||e.ltp||entry);
+  var pctChg=entry?((ltpNow-entry)/entry*100):0;
+  var ltpClass=pctChg>=0?"up":"down";
+  var ltpStr="₹"+parseFloat(ltpNow).toFixed(2)+" ("+(pctChg>=0?"+":"")+pctChg.toFixed(0)+"%)";
+  // --- tier badge: derive from real flags/verdict ---
   var wall=e.ceWalls&&e.ceWalls[0], floor=e.peFloors&&e.peFloors[0];
-  var wallStrike=wall?wall.strike:null, floorStrike=floor?floor.strike:null;
-  var sellersWinning=(wall&&wall.strength==="STRONG")||e.rameshTrapped===false&&wall;
-  var buyersWinning=(floor&&floor.strength==="STRONG");
-  var strikeRangeText=(floorStrike&&wallStrike)?(floorStrike+" – "+wallStrike):(e.strike||"--");
-  // --- Section 3: cross-check reasons (3 capsules) ---
-  var reasons=[];
-  if(e.strikeFlags&&e.strikeFlags.length){
-    e.strikeFlags.slice(0,1).forEach(function(f){
-      var txt=typeof f==="object"?(f.label||f.type||""):String(f);
-      reasons.push({text:txt.replace(/_/g," "),mood:"amber"});
-    });
-  }
-  if(wall&&wall.strength==="STRONG"&&floor&&floor.strength==="STRONG"){
-    reasons.push({text:"Sellers block both sides",mood:"amber"});
-  }
-  if(e.chopRange){
-    reasons.push({text:"Price stuck in range",mood:"amber"});
-  }
-  var skipVerdict=verdict==="WEAK"||(e.strikeFlags&&e.strikeFlags.length>=2);
-  reasons.push({text:skipVerdict?"Skip this trade":"Setup looks clean",mood:skipVerdict?"red":"green"});
-  while(reasons.length<3)reasons.push({text:isPE?"Put side active":"Call side active",mood:"green"});
-  reasons=reasons.slice(0,3);
-  // --- Section 4: trade plan (4 capsules, color only) ---
-  var target1=e.target1?("₹"+parseFloat(e.target1).toLocaleString("en-IN",{maximumFractionDigits:2})):"--";
-  var holdZone=e.holdZone||"--";
-  var exitZone=e.exitZone||"--";
-  var stopVal=e.target2?("₹"+parseFloat(e.target2).toLocaleString("en-IN",{maximumFractionDigits:2})):"--";
-  // --- Section 5: verdict banner ---
-  var verdictText=skipVerdict?
-    (sym+" "+e.strike+" "+e.type+" — flags suggest caution, consider skipping or waiting for a cleaner setup."):
-    (sym+" "+e.strike+" "+e.type+" — "+(isPE?"sellers":"buyers")+" side showing strength, setup looks tradeable.");
-  var verdictMood=skipVerdict?"red":verdict==="STRONG"?"green":"amber";
-  var ltpVal=e.premium||e.ltp||0;
-  var capEst=e.target1&&e.lot?Math.round((e.premium||0)*(e.lot||1)*1.2):null;
-  return '<div class="v7-card '+moodClass+'" onclick="toggleCard(this)">'+
-    '<div class="v7-head">'+
-      '<div class="v7-head-top">'+
-        '<div class="v7-head-stock">'+sym+' '+e.strike+' '+e.type+'</div>'+
-        '<div class="v7-head-ltp">₹'+(typeof ltpVal==="number"?ltpVal.toFixed(2):ltpVal)+'</div>'+
-      '</div>'+
-      '<div class="v7-head-caps">'+
-        (capEst?'<span class="v7-cap v7-cap-cap">₹'+capEst.toLocaleString("en-IN")+'</span>':'')+
-        '<span class="v7-cap v7-cap-time">'+(e.ts?new Date(e.ts).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false}):"--:--")+'</span>'+
-        '<span class="v7-cap v7-cap-entry">'+verdict+'</span>'+
-      '</div>'+
+  var tier="clear", tierIcon="🟢", tierText="CLEAR";
+  var maheshConfirmed=(wall&&wall.strength==="STRONG"&&floor&&floor.strength==="STRONG"&&e.bias===(isPE?"BEARISH":"BULLISH"));
+  var isStale=!!e.staleMove;
+  var isRangeLock=!!(wall&&wall.strength==="STRONG"&&floor&&floor.strength==="STRONG"&&!maheshConfirmed);
+  var isMixed=!!(e.rameshTrapped||e.sureshTrapped);
+  var skipVerdict=e.verdict==="WEAK"||(e.strikeFlags&&e.strikeFlags.length>=2);
+  if(isStale||isRangeLock){tier="skip";tierIcon="🔒";tierText="SKIP";}
+  else if(maheshConfirmed){tier="clear-plus";tierIcon="🟢🤝";tierText="CLEAR+";}
+  else if(isMixed){tier="mixed";tierIcon="🟡";tierText="MIXED";}
+  else if(skipVerdict){tier="skip";tierIcon="🔒";tierText="SKIP";}
+  else{tier="clear";tierIcon="🟢";tierText="CLEAR";}
+  // --- one-line reasoning tag ---
+  var tagText, tagClass;
+  if(tier==="clear-plus"){tagText="✅ Buyers building strong + Mahesh confirms";tagClass="ok";}
+  else if(tier==="clear"){tagText=(isPE?"📉":"📈")+" Sellers building strong, fresh — no cross-check yet";tagClass="ok";}
+  else if(tier==="mixed"){tagText="⚠️ Both sides showing buying — size down";tagClass="warn";}
+  else if(isStale){tagText="⚠️ Move looks late — urgency fading";tagClass="warn";}
+  else{tagText="🚫 Call wall + Put wall both holding — pinned";tagClass="skip";}
+  var lotsStr=e.lots&&e.lots>1?" · "+e.lots+" lots":"";
+  return '<div class="mcard" onclick="toggleCard(this)">'+
+    '<div class="mcard-head">'+
+      '<div class="mcard-id"><span class="mode-badge '+mode+'">'+modeIcon+' '+modeLabel+'</span>'+
+        '<div class="mcard-name-row"><h2>'+sym+'</h2><span class="pill '+pillClass+'">'+e.strike+' '+e.type+'</span></div></div>'+
+      '<span class="tier-badge '+tier+'">'+tierIcon+' '+tierText+'</span>'+
     '</div>'+
-    '<div class="v7-winrow">'+
-      '<div class="v7-win-side '+(sellersWinning?"active":"")+'">Sellers Winning</div>'+
-      '<div class="v7-win-badge">'+strikeRangeText+'</div>'+
-      '<div class="v7-win-side '+(buyersWinning?"active":"")+'">Buyers Winning</div>'+
-    '</div>'+
-    '<div class="v7-crosscheck">'+
-      reasons.map(function(r){return '<div class="v7-check v7-check-'+r.mood+'">'+r.text+'</div>';}).join("")+
-    '</div>'+
-    '<div class="v7-tradeplan">'+
-      '<div class="v7-plan v7-plan-target">'+target1+'</div>'+
-      '<div class="v7-plan v7-plan-stop">'+stopVal+'</div>'+
-      '<div class="v7-plan v7-plan-hold">'+holdZone+'</div>'+
-      '<div class="v7-plan v7-plan-exit">'+exitZone+'</div>'+
-    '</div>'+
-    '<div class="v7-verdict v7-verdict-'+verdictMood+'">'+verdictText+'</div>'+
+    '<div class="mcard-mid"><span>Entry ₹'+parseFloat(entry).toFixed(2)+lotsStr+'</span><span class="ltp '+ltpClass+'">'+ltpStr+'</span></div>'+
+    '<div class="mcard-tag '+tagClass+'">'+tagText+'</div>'+
   '</div>';
 }
 function buildCardV4(e){
