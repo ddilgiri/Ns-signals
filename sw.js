@@ -1,5 +1,5 @@
-// NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v2'; // bumped 2026-08-12 -- v1 was never invalidated across many index.html updates this session, likely serving stale cached HTML on user's phone (missing debug badges, old logic) despite fresh page reloads. Bump this version string on every future index.html change to force stale-cache invalidation.
+// NSE F&O Signal Engine — Service Worker v3
+const CACHE = 'fno-v3'; // bumped 2026-08-15 -- v2 was never invalidated across this session's many index.html updates (V7 card, splash screen, page re-skins), causing Chrome to keep serving stale cached HTML despite confirmed-correct pushes to GitHub. Bump this version string on every future index.html change to force stale-cache invalidation.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
