@@ -192,8 +192,8 @@ var _pChgInit=_pHasPrevClose?(_pSign+_pDiff.toFixed(2)+" ("+_pSign+_pPct.toFixed
             var dayHasPrevClose=dayBase>0;
             var dayDiff=dayHasPrevClose?ltp-dayBase:0;
             var dayPctMove=dayHasPrevClose?Math.abs(dayDiff/dayBase*100):0;
-            // Preserve original class (v4-prem or prem-val), only update color class
-var baseClass=el.className.indexOf("v4-prem")>=0?"v4-prem":"prem-val";
+            // Preserve original class (ltp for V7, v4-prem for V4, prem-val for V3), only update color class
+var baseClass=el.className.indexOf("ltp")>=0?"ltp":el.className.indexOf("v4-prem")>=0?"v4-prem":"prem-val";
 el.className=baseClass+" "+(dayHasPrevClose?(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-neutral"):"price-neutral");
             el.style.color=dayHasPrevClose&&dayDiff!==0?premColor(dayPctMove,dayDiff>0):"";
           }
@@ -2021,7 +2021,7 @@ buildCard=function(e){
 };
 
 
-// ── LIVE SPOT UPDATE: keep V4 spot updated ────────────────────
+// ── LIVE SPOT UPDATE: keep V4/V7 spot updated ─────────────────
 var _v3UpdateAllCards=window.updateAllCards||function(){};
 window.updateAllCards=function(){
   try{_v3UpdateAllCards();}catch(e){}
@@ -2034,20 +2034,22 @@ window.updateAllCards=function(){
     var sign=diff>=0?'+':'',dir=diff>=0?'up':'dn';
     var spotEl=document.getElementById('clspot-'+sig.id);
     var chgEl=document.getElementById('clchg-'+sig.id);
+    // Detect which card variant is actually in the DOM for this signal, so the right CSS class is applied
+    var isV7=!!(spotEl&&spotEl.closest('.v7-card'));
     if(spotEl){
       spotEl.textContent=live.toLocaleString('en-IN',{maximumFractionDigits:2});
-      spotEl.className='v4-spot-val '+dir;
+      spotEl.className=(isV7?'spot ':'v4-spot-val ')+dir;
     }
     if(chgEl){
       chgEl.textContent=sign+diff.toFixed(2)+' ('+sign+pct.toFixed(1)+'%)';
-      chgEl.className='v4-spot-chg '+dir;
+      chgEl.className=(isV7?'chg ':'v4-spot-chg ')+dir;
     }
     // Hold/Strong/Exit are static computed zones (from computeLevels), not live spot —
     // don't overwrite them here. They update via updateCardLevels() when OI refreshes.
   });
 };
 
-console.log('✅ DILIP FXO V4 Card Engine loaded');
+console.log('✅ DILIP F&O V7 Card Engine loaded (falls back to V4 → V3 on error)');
 </script>
 <script>
 // ═══════════════════════════════════════════════════════
