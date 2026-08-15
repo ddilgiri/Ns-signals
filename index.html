@@ -1040,7 +1040,74 @@ setInterval(function(){try{savePaperTrades();}catch(e){}},8000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"){try{savePaperTrades();}catch(e){}}});
 window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
-window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),setTimeout(function(){doLogin()},1e3)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
+window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),setTimeout(function(){doLogin()},1e3)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")});
+v7InitSplash(!!(t&&o&&n));
+})</script>
+<div id="v7Splash" class="v7-splash">
+  <div class="v7-splash-inner">
+    <div class="v7-splash-logo">
+      <div class="v7-splash-icon">📈</div>
+    </div>
+    <div class="v7-splash-title">NS-SIGNALS</div>
+    <div class="v7-splash-tagline">Ramesh · Suresh · Mahesh · Naresh</div>
+    <div class="v7-splash-status" id="v7SplashStatus">Starting up…</div>
+    <div class="v7-splash-spinner"></div>
+  </div>
+</div>
+<script>
+function v7InitSplash(hasCreds){
+  var splash=document.getElementById("v7Splash");
+  var statusEl=document.getElementById("v7SplashStatus");
+  if(!splash)return;
+  if(!hasCreds){
+    // no saved credentials -- go straight to Setup, styled V7
+    statusEl.textContent="No saved login — opening Setup";
+    setTimeout(function(){
+      v7DismissSplash();
+      showPage("setup",document.getElementById("setupBtn"));
+    },700);
+    return;
+  }
+  // has creds -- real doLogin() was scheduled via setTimeout(...,1000) above.
+  // poll the REAL S.connected flag, don't fake a delay.
+  statusEl.textContent="Connecting to Angel One…";
+  var waited=0,maxWait=15000,pollMs=300;
+  var poll=setInterval(function(){
+    waited+=pollMs;
+    if(S.connected){
+      clearInterval(poll);
+      statusEl.textContent="Connected";
+      setTimeout(v7DismissSplash,400);
+    }else if(waited>=maxWait){
+      clearInterval(poll);
+      statusEl.textContent="Could not connect — opening Setup";
+      setTimeout(function(){
+        v7DismissSplash();
+        showPage("setup",document.getElementById("setupBtn"));
+      },700);
+    }
+  },pollMs);
+}
+function v7DismissSplash(){
+  var splash=document.getElementById("v7Splash");
+  if(!splash)return;
+  splash.classList.add("v7-splash-hide");
+  setTimeout(function(){splash.remove();},400);
+}
+</script>
+<style>
+.v7-splash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#1a0b3d 0%,#3b0764 45%,#0f0524 100%);transition:opacity .4s ease}
+.v7-splash.v7-splash-hide{opacity:0;pointer-events:none}
+.v7-splash-inner{text-align:center;padding:20px}
+.v7-splash-logo{width:76px;height:76px;margin:0 auto 18px;border-radius:20px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 40px rgba(168,85,247,.35)}
+.v7-splash-icon{font-size:38px}
+.v7-splash-title{font-size:22px;font-weight:900;letter-spacing:2px;color:#fff;font-family:Roboto,sans-serif}
+.v7-splash-tagline{font-size:11px;color:rgba(255,255,255,.6);margin-top:8px;letter-spacing:.5px;font-weight:600}
+.v7-splash-status{font-size:12px;color:rgba(255,255,255,.75);margin-top:26px;font-weight:600}
+.v7-splash-spinner{width:22px;height:22px;border:2px solid rgba(255,255,255,.2);border-top-color:#a855f7;border-radius:50%;margin:14px auto 0;animation:v7-spin .7s linear infinite}
+@keyframes v7-spin{to{transform:rotate(360deg)}}
+</style>
+<div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
 // Zone A: Symbol · Strike · Premium · Meta
