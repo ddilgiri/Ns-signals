@@ -80,6 +80,28 @@
 .v7-slider-row .v7-slider-label .val{color:#7e22ce}
 .v7-slider-row input[type=range]{width:100%;accent-color:#7e22ce}
 .v7-lot-input{width:60px;text-align:center;padding:9px 11px;border-radius:9px;border:1px solid #e8e9ed;font-size:14px;font-weight:600;color:#14181f;background:#fff}
+.v7-log-btn{width:36px;height:36px;border-radius:50%;background:#ffffff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0;position:relative}
+.v7-log-btn-badge{display:none;position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#d93025;border:1.5px solid #fff}
+.v7-log-screen{position:fixed;inset:0;z-index:160;display:none;flex-direction:column;height:100vh;background:#fff}
+.v7-log-screen.show{display:flex}
+.v7-log-header{display:flex;align-items:center;gap:12px;padding:16px 16px 12px;border-bottom:1px solid #e8e9ed;background:#fff;flex-shrink:0}
+.v7-log-header h1{font-family:'Space Grotesk',Roboto,sans-serif;font-size:19px;font-weight:700;margin:0;flex:1;color:#14181f}
+.v7-back-btn{width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:#14181f}
+.v7-log-filter-row{display:flex;gap:6px;padding:12px 16px;overflow-x:auto;flex-shrink:0;background:#fff;border-bottom:1px solid #e8e9ed}
+.v7-log-filter-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid #e8e9ed;background:#fff;color:#6b7280}
+.v7-log-filter-chip.active{background:#14181f;color:#fff;border-color:#14181f}
+.v7-log-list{flex:1;overflow-y:auto;padding:8px 16px 24px}
+.v7-log-entry{display:flex;gap:10px;padding:12px 2px;border-bottom:1px solid #e8e9ed}
+.v7-log-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.v7-log-dot.signal{background:#0f9d58}
+.v7-log-dot.scan{background:#1d5fbf}
+.v7-log-dot.manual{background:#7e22ce}
+.v7-log-dot.error{background:#d93025}
+.v7-log-dot.trap{background:#b8860b}
+.v7-log-content{flex:1;min-width:0}
+.v7-log-text{font-size:14px;font-weight:600;color:#14181f;line-height:1.4}
+.v7-log-time{font-size:11.5px;color:#6b7280;font-weight:600;margin-top:3px;font-family:'SF Mono','Courier New',monospace}
+.v7-log-empty{text-align:center;padding:60px 20px;color:#6b7280;font-size:14px;font-weight:600}
 .v7-dash-header{display:flex;align-items:center;justify-content:space-between;padding:14px 13px 10px;background:#ffffff}
 .v7-dash-title{font-family:Roboto,sans-serif;font-size:19px;font-weight:900;color:#14181f;letter-spacing:.2px}
 .v7-dash-icons{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
@@ -106,7 +128,7 @@
 #pg-setup .v7-setup-btn-secondary{background:#f5f5f7!important;color:#1a1a1a!important;border:1px solid #e5e5ea!important;border-radius:14px}
 body.v7-setup-open .topbar,body.v7-setup-open .toptabs{display:none}
 body.v7-setup-open #pg-setup .card:not(.v7-conn-card){display:none}
-</style></head><body><style>body>.topbar,body>.pages{visibility:hidden}#v7Splash{visibility:visible}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick='showPage("logs",null)' title="Logs">📋</button><button class="v7-gear-btn" id="setupBtn" onclick="v7OpenSettings()" title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
+</style></head><body><style>body>.topbar,body>.pages{visibility:hidden}#v7Splash{visibility:visible}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick="v7OpenLog()" title="Logs">📋<span class="v7-log-btn-badge"></span></button><button class="v7-gear-btn" id="setupBtn" onclick="v7OpenSettings()" title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
 <div class="baseline-screen" id="baselineScreen" style="display:none">
   <div class="baseline-hero">
     <div class="baseline-hero-content">
@@ -266,6 +288,48 @@ body.v7-setup-open #pg-setup .card:not(.v7-conn-card){display:none}
     btn.classList.toggle("on");
     if(typeof toggleNotifMute==="function")toggleNotifMute();
   };
+  var v7LogEntries=[];
+  var v7LogFilterActive="all";
+  function v7CategorizeLog(text,type){
+    var t=text.toLowerCase();
+    if(type==="err"||t.indexOf("fail")>=0||t.indexOf("error")>=0)return"error";
+    if(t.indexOf("manual check")>=0)return"manual";
+    if(t.indexOf("scan cycle")>=0||t.indexOf("baseline download")>=0||t.indexOf("scan complet")>=0)return"scan";
+    if(t.indexOf("trap")>=0||t.indexOf("stale")>=0||t.indexOf("mixed")>=0||t.indexOf("thin_signal")>=0||t.indexOf("exhaustion")>=0||t.indexOf("chop")>=0||type==="warn")return"trap";
+    if(t.indexOf("flagged")>=0||t.indexOf("clear+")>=0||t.indexOf("clear")>=0)return"signal";
+    return"scan";
+  }
+  var v7OrigAddLog=window.addLog;
+  window.addLog=function(text,type,html){
+    if(typeof v7OrigAddLog==="function")v7OrigAddLog(text,type,html);
+    var cat=v7CategorizeLog(String(text||""),type);
+    v7LogEntries.unshift({type:cat,text:String(text||"").replace(/<[^>]*>/g,""),time:(new Date()).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"})});
+    if(v7LogEntries.length>300)v7LogEntries.length=300;
+    var badge=document.querySelector(".v7-log-btn .v7-log-btn-badge");
+    if(badge)badge.style.display="block";
+  };
+  window.v7OpenLog=function(){
+    v7RenderLog();
+    document.getElementById("v7LogScreen").classList.add("show");
+  };
+  window.v7CloseLog=function(){
+    document.getElementById("v7LogScreen").classList.remove("show");
+  };
+  window.v7FilterLog=function(type,btn){
+    v7LogFilterActive=type;
+    document.querySelectorAll(".v7-log-filter-chip").forEach(function(c){c.classList.remove("active");});
+    btn.classList.add("active");
+    v7RenderLog();
+  };
+  function v7RenderLog(){
+    var list=document.getElementById("v7LogList");
+    if(!list)return;
+    var filtered=v7LogFilterActive==="all"?v7LogEntries:v7LogEntries.filter(function(e){return e.type===v7LogFilterActive;});
+    if(!filtered.length){list.innerHTML='<div class="v7-log-empty">No entries for this filter yet.</div>';return;}
+    list.innerHTML=filtered.map(function(e){
+      return'<div class="v7-log-entry"><div class="v7-log-dot '+e.type+'"></div><div class="v7-log-content"><div class="v7-log-text">'+e.text+'</div><div class="v7-log-time">'+e.time+'</div></div></div>';
+    }).join("");
+  }
   window.v7TestCard=function(){
     var fake={
       id:"v7test1",sym:"RELIANCE",strike:1420,type:"CE",verdict:"STRONG",score:78,
@@ -1428,6 +1492,21 @@ function v7DismissSplash(){
   <div class="v7-settings-section-title">Notifications</div>
   <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">CLEAR+ signal alerts</span><span class="sub">Push notification on high-confidence signals</span></div><button class="v7-toggle-switch on" id="v7ToggleClearPlus" onclick="v7ToggleNotifReal(this)"><span class="knob"></span></button></div>
   <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">Scan cycle sound</span><span class="sub">Subtle tick every scan completion</span></div><button class="v7-toggle-switch" id="v7ToggleScanSound" onclick="v7TogglePref(this,'v7prefScanSound')"><span class="knob"></span></button></div>
+</div>
+<div class="v7-log-screen" id="v7LogScreen">
+  <div class="v7-log-header">
+    <button class="v7-back-btn" onclick="v7CloseLog()">←</button>
+    <h1>Activity Log</h1>
+  </div>
+  <div class="v7-log-filter-row" id="v7LogFilterRow">
+    <button class="v7-log-filter-chip active" onclick="v7FilterLog('all',this)">All</button>
+    <button class="v7-log-filter-chip" onclick="v7FilterLog('signal',this)">Signals</button>
+    <button class="v7-log-filter-chip" onclick="v7FilterLog('trap',this)">Weak/Trap</button>
+    <button class="v7-log-filter-chip" onclick="v7FilterLog('scan',this)">Scans</button>
+    <button class="v7-log-filter-chip" onclick="v7FilterLog('manual',this)">Manual</button>
+    <button class="v7-log-filter-chip" onclick="v7FilterLog('error',this)">Errors</button>
+  </div>
+  <div class="v7-log-list" id="v7LogList"></div>
 </div>
 <div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
