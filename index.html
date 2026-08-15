@@ -1062,12 +1062,15 @@ window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem
   if(!splashEl) return;
 
   if(!hasCreds){
-    // No saved credentials — nothing to auto-connect, drop straight to the app so the person can log in manually.
-    if(statusEl) statusEl.textContent = 'No saved login — tap ⚙️ to connect';
+    // No saved credentials — nothing to auto-connect. Dismiss splash and auto-open Setup so the person can connect right away.
+    if(statusEl) statusEl.textContent = 'No saved login found';
     if(progEl) progEl.style.width = '100%';
     setTimeout(function(){
       splashEl.classList.add('hide');
-      setTimeout(function(){ splashEl.remove(); }, 450);
+      setTimeout(function(){
+        splashEl.remove();
+        showPage('setup', null);
+      }, 450);
     }, 900);
     return;
   }
