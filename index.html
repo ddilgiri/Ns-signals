@@ -1510,6 +1510,7 @@ function v7ReturnToSplashAfterLogin(){
 function v7GoToLogin(){
   var splash=document.getElementById("v7Splash");
   document.querySelectorAll("body>.pages").forEach(function(el){el.style.display="";});
+  document.querySelectorAll("body>.v7-summary-strip,body>.v7-feed-label").forEach(function(el){el.style.display="none";});
   showPage("setup",null);
   if(splash){
     splash.classList.add("v7-splash-hide");
