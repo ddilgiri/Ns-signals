@@ -1129,7 +1129,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // specific setup, not meaningful for general individual-stock signal scoring. Weight set to 0
 // rather than deleting the block, so gammaBlast data can still be computed/displayed elsewhere
 // without contributing to the score or shifting MAX_SCORE's meaning for any other component.
-const SIGNAL_WEIGHTS={marketBias:15,supertrend:8,rsi:8,macd:4,aboveVwap:8,orbBreakout:6,volumeConfirm:10,newsSentiment:0,geoRisk:0,oiMomentum:18,gammaBlast:0,dilipOIFormula:23},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:0,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);
   // REMOVED PER EXPLICIT USER DECISION (2026-08-13): the squeeze/exhaustion/thin 2-of-3 hard
   // block and the RANGE_LOCK standalone block (both originally added 2026-08-08 after the PGEL
