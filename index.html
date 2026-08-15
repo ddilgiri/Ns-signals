@@ -58,6 +58,28 @@
 .v7-fab{position:fixed;right:20px;bottom:24px;width:52px;height:52px;border-radius:50%;background:#7e22ce;color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:400;line-height:1;box-shadow:0 4px 14px rgba(126,34,206,.4);cursor:pointer;border:none;z-index:30}
 .v7-fab:active{transform:scale(.94)}
 #pg-signals{background:#f5f5f7}
+.v7-sheet-backdrop{position:fixed;inset:0;background:rgba(10,12,20,.45);opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:140}
+.v7-sheet-backdrop.show{opacity:1;pointer-events:auto}
+.v7-sheet{position:fixed;left:0;right:0;bottom:0;max-width:460px;margin:0 auto;background:#ffffff;border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(16,20,30,.25);transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);z-index:150;max-height:88vh;overflow-y:auto;padding:10px 16px 28px}
+.v7-sheet.show{transform:translateY(0)}
+.v7-sheet-handle{width:36px;height:4px;border-radius:99px;background:#d3d6dd;margin:2px auto 10px}
+.v7-sheet-close{position:absolute;top:10px;right:14px;width:28px;height:28px;border-radius:50%;background:#fff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:15px;color:#6b7280;font-weight:800;cursor:pointer}
+.v7-form-title{font-size:15px;font-weight:800;margin:2px 4px 10px;color:#14181f}
+.v7-settings-section-title{font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#6b7280;margin:16px 4px 4px}
+.v7-settings-row{display:flex;align-items:center;justify-content:space-between;padding:12px 4px;border-bottom:1px solid #e8e9ed}
+.v7-settings-row:last-child{border-bottom:none}
+.v7-label-block{display:flex;flex-direction:column;gap:2px;flex:1;padding-right:12px}
+.v7-label-block .lbl{font-size:13px;font-weight:700;color:#14181f}
+.v7-label-block .sub{font-size:10.5px;color:#6b7280}
+.v7-toggle-switch{position:relative;width:42px;height:24px;border-radius:999px;background:#d1d5db;flex-shrink:0;cursor:pointer;transition:background .2s ease;border:none}
+.v7-toggle-switch.on{background:#0f9d58}
+.v7-toggle-switch .knob{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s ease;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.v7-toggle-switch.on .knob{transform:translateX(18px)}
+.v7-slider-row{padding:10px 4px 4px}
+.v7-slider-row .v7-slider-label{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:8px;color:#14181f}
+.v7-slider-row .v7-slider-label .val{color:#7e22ce}
+.v7-slider-row input[type=range]{width:100%;accent-color:#7e22ce}
+.v7-lot-input{width:60px;text-align:center;padding:9px 11px;border-radius:9px;border:1px solid #e8e9ed;font-size:14px;font-weight:600;color:#14181f;background:#fff}
 .v7-dash-header{display:flex;align-items:center;justify-content:space-between;padding:14px 13px 10px;background:#ffffff}
 .v7-dash-title{font-family:Roboto,sans-serif;font-size:19px;font-weight:900;color:#14181f;letter-spacing:.2px}
 .v7-dash-icons{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
@@ -84,7 +106,7 @@
 #pg-setup .v7-setup-btn-secondary{background:#f5f5f7!important;color:#1a1a1a!important;border:1px solid #e5e5ea!important;border-radius:14px}
 body.v7-setup-open .topbar,body.v7-setup-open .toptabs{display:none}
 body.v7-setup-open #pg-setup .card:not(.v7-conn-card){display:none}
-</style></head><body><style>body>.topbar,body>.pages{visibility:hidden}#v7Splash{visibility:visible}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick='showPage("logs",null)' title="Logs">📋</button><button class="v7-gear-btn" id="setupBtn" onclick='showPage("setup",null)' title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
+</style></head><body><style>body>.topbar,body>.pages{visibility:hidden}#v7Splash{visibility:visible}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick='showPage("logs",null)' title="Logs">📋</button><button class="v7-gear-btn" id="setupBtn" onclick="v7OpenSettings()" title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
 <div class="baseline-screen" id="baselineScreen" style="display:none">
   <div class="baseline-hero">
     <div class="baseline-hero-content">
@@ -209,18 +231,41 @@ body.v7-setup-open #pg-setup .card:not(.v7-conn-card){display:none}
     if(scanEl)scanEl.textContent=S.scanning?"Scanning…":(S.signals&&S.signals.length?"Idle":"--");
   }
   setInterval(syncV7Stats,1000);
-  function syncV7Stats(){
-    var liveEl=document.getElementById("v7StatLive");
-    var biasEl=document.getElementById("v7StatBias");
-    var scanEl=document.getElementById("v7StatScan");
-    if(!liveEl||typeof S==="undefined")return;
-    liveEl.textContent=(S.signals||[]).length;
-    var ceCount=(S.signals||[]).filter(function(s){return s.type==="CE";}).length;
-    var peCount=(S.signals||[]).filter(function(s){return s.type==="PE";}).length;
-    if(biasEl)biasEl.textContent=ceCount>peCount?"BULLISH":peCount>ceCount?"BEARISH":"NEUTRAL";
-    if(scanEl)scanEl.textContent=S.scanning?"Scanning…":(S.signals&&S.signals.length?"Idle":"--");
-  }
-  setInterval(syncV7Stats,1000);
+  window.v7OpenSettings=function(){
+    var realConf=document.getElementById("cfgMinConf");
+    if(realConf){
+      document.getElementById("v7MinConfSlider").value=realConf.value;
+      document.getElementById("v7MinConfVal").textContent=realConf.value+"%";
+    }
+    var connStatus=document.getElementById("connStatus");
+    var miniStatus=document.getElementById("v7ConnStatusMini");
+    if(connStatus&&miniStatus)miniStatus.textContent=connStatus.textContent||"Not connected";
+    document.getElementById("v7ToggleStale").classList.toggle("on",localStorage.getItem("v7prefShowStale")==="1");
+    document.getElementById("v7ToggleMixed").classList.toggle("on",localStorage.getItem("v7prefShowMixed")!=="0");
+    document.getElementById("v7ToggleScanSound").classList.toggle("on",localStorage.getItem("v7prefScanSound")==="1");
+    document.getElementById("v7DefaultLot").value=localStorage.getItem("v7prefDefaultLot")||"1";
+    var notifToggle=document.getElementById("notifToggle");
+    document.getElementById("v7ToggleClearPlus").classList.toggle("on",!(typeof isNotifMuted==="function"&&isNotifMuted()));
+    document.getElementById("v7SettingsBackdrop").classList.add("show");
+    document.getElementById("v7SettingsSheet").classList.add("show");
+  };
+  window.v7CloseSettings=function(){
+    document.getElementById("v7SettingsBackdrop").classList.remove("show");
+    document.getElementById("v7SettingsSheet").classList.remove("show");
+  };
+  window.v7SyncMinConf=function(val){
+    document.getElementById("v7MinConfVal").textContent=val+"%";
+    var realConf=document.getElementById("cfgMinConf");
+    if(realConf)realConf.value=val;
+  };
+  window.v7TogglePref=function(btn,key){
+    btn.classList.toggle("on");
+    localStorage.setItem(key,btn.classList.contains("on")?"1":"0");
+  };
+  window.v7ToggleNotifReal=function(btn){
+    btn.classList.toggle("on");
+    if(typeof toggleNotifMute==="function")toggleNotifMute();
+  };
   window.v7TestCard=function(){
     var fake={
       id:"v7test1",sym:"RELIANCE",strike:1420,type:"CE",verdict:"STRONG",score:78,
@@ -1365,6 +1410,25 @@ function v7DismissSplash(){
 @keyframes v7-spin{to{transform:rotate(360deg)}}
 </style>
 <button class="v7-fab" id="v7Fab" onclick="toast('🖊️ Manual Check form — coming next')" title="Manual Check">+</button>
+<div class="v7-sheet-backdrop" id="v7SettingsBackdrop" onclick="v7CloseSettings()"></div>
+<div class="v7-sheet" id="v7SettingsSheet">
+  <div class="v7-sheet-handle"></div>
+  <div class="v7-sheet-close" onclick="v7CloseSettings()">✕</div>
+  <div class="v7-form-title">⚙️ Settings</div>
+  <div class="v7-settings-row" onclick="v7CloseSettings();showPage('setup',null)" style="cursor:pointer"><div class="v7-label-block"><span class="lbl">🔐 Angel One Connection</span><span class="sub" id="v7ConnStatusMini">Not connected</span></div><span style="color:#6b7280;font-size:16px">›</span></div>
+  <div class="v7-settings-section-title">Signal Filters</div>
+  <div class="v7-slider-row">
+    <div class="v7-slider-label"><span>Min Confidence %</span><span class="val" id="v7MinConfVal">60%</span></div>
+    <input type="range" id="v7MinConfSlider" min="40" max="90" value="60" oninput="v7SyncMinConf(this.value)">
+  </div>
+  <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">Show STALE signals</span><span class="sub">Include late-entry-risk cards in feed</span></div><button class="v7-toggle-switch" id="v7ToggleStale" onclick="v7TogglePref(this,'v7prefShowStale')"><span class="knob"></span></button></div>
+  <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">Show MIXED signals</span><span class="sub">Include conflicting-signal cards in feed</span></div><button class="v7-toggle-switch on" id="v7ToggleMixed" onclick="v7TogglePref(this,'v7prefShowMixed')"><span class="knob"></span></button></div>
+  <div class="v7-settings-section-title">Manual Check</div>
+  <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">Default lot size</span><span class="sub">Applied when a manual check is submitted</span></div><input class="v7-lot-input" id="v7DefaultLot" value="1" oninput="localStorage.setItem('v7prefDefaultLot',this.value)"></div>
+  <div class="v7-settings-section-title">Notifications</div>
+  <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">CLEAR+ signal alerts</span><span class="sub">Push notification on high-confidence signals</span></div><button class="v7-toggle-switch on" id="v7ToggleClearPlus" onclick="v7ToggleNotifReal(this)"><span class="knob"></span></button></div>
+  <div class="v7-settings-row"><div class="v7-label-block"><span class="lbl">Scan cycle sound</span><span class="sub">Subtle tick every scan completion</span></div><button class="v7-toggle-switch" id="v7ToggleScanSound" onclick="v7TogglePref(this,'v7prefScanSound')"><span class="knob"></span></button></div>
+</div>
 <div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
