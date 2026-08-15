@@ -487,7 +487,7 @@ function showPage(e,t){
 }function switchSubTab(e,t,o){document.getElementById(e).classList.remove("hidden"),document.getElementById(t).classList.add("hidden"),document.querySelectorAll(".sub-tab").forEach(e=>e.classList.remove("active")),o.classList.add("active")}function getMarketStatus(){const e=new Date,t=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=t.getHours(),n=t.getMinutes(),s=t.getDay(),a=60*o+n;const nseOpen=s>=1&&s<=5&&a>=555&&a<930;return{nseOpen,ist:t}}
 async function fetchMarketStatus(){try{const r=await fetch(getServer()+"/market-status");const ct=r.headers.get("content-type")||"";if(!ct.includes("application/json"))return null;const d=await r.json();
 const pill=document.getElementById("mPill");if(pill){pill.textContent=d.open?"● OPEN":"● "+d.code;pill.className="market-pill "+(d.open?"open":"closed");}
-return d;}catch(e){return null;}}function updateClock(){const{nseOpen:e,ist:t}=getMarketStatus();const o=document.getElementById("mPill");o.textContent=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Kolkata"}),o.className="time-pill "+(e?"open":"closed")}function addLog(e,t,html){const o=document.getElementById("logArea");if(!o)return;const n=document.createElement("div");n.className="ok"===t?"log-ok":"err"===t?"log-err":"warn"===t?"log-warn":"";const s=(new Date).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});if(html){n.innerHTML="["+s+"] "+e;}else{n.textContent="["+s+"] "+e;}o.appendChild(n),o.scrollTop=o.scrollHeight}function clearLog(){document.getElementById("logArea").innerHTML=""}function toast(e,t){const o=document.getElementById("toast");o.textContent=e,o.classList.add("show"),setTimeout(function(){o.classList.remove("show")},t||2500)}async function doLogin(){const e=document.getElementById("cfgClient").value.trim(),t=document.getElementById("cfgPass").value.trim(),o=document.getElementById("cfgApi").value.trim(),n=document.getElementById("cfgTotp").value.trim();if(!e||!t||!o)return void toast("⚠️ Fill Client Code, Password & API Key");const s=document.getElementById("loginBtn");s.disabled=!0,s.innerHTML='<span class="spin"></span>Connecting...',addLog("Connecting to Angel One...","");try{const i=await fetch(getServer()+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clientCode:e,password:t,apiKey:o,totpSecret:n})}),l=await i.json();if(l.status){S.connected=!0,document.getElementById("connStatus").textContent="✅ "+l.client,document.getElementById("connStatus").style.color="var(--green)",s.innerHTML="✅ Connected",s.style.background="var(--green)",addLog("✅ Login OK — "+l.client,"ok"),toast("✅ Connected!"),localStorage.setItem("fxo-client",e),localStorage.setItem("fxo-api",o),localStorage.setItem("fxo-pass",btoa(t)),localStorage.setItem("fxo-totp",n);var a=document.getElementById("cfgMaxCap");a&&localStorage.setItem("fxo-maxcap",a.value),loadFnoStockList(false).then(async function(){
+return d;}catch(e){return null;}}function updateClock(){const{nseOpen:e,ist:t}=getMarketStatus();const o=document.getElementById("mPill");o.textContent=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Kolkata"}),o.className="time-pill "+(e?"open":"closed")}function addLog(e,t,html){const o=document.getElementById("logArea");if(!o)return;const n=document.createElement("div");n.className="ok"===t?"log-ok":"err"===t?"log-err":"warn"===t?"log-warn":"";const s=(new Date).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});if(html){n.innerHTML="["+s+"] "+e;}else{n.textContent="["+s+"] "+e;}o.appendChild(n),o.scrollTop=o.scrollHeight}function clearLog(){document.getElementById("logArea").innerHTML=""}function toast(e,t){const o=document.getElementById("toast");o.textContent=e,o.classList.add("show"),setTimeout(function(){o.classList.remove("show")},t||2500)}async function doLogin(){const e=document.getElementById("cfgClient").value.trim(),t=document.getElementById("cfgPass").value.trim(),o=document.getElementById("cfgApi").value.trim(),n=document.getElementById("cfgTotp").value.trim();if(!e||!t||!o)return void toast("⚠️ Fill Client Code, Password & API Key");const s=document.getElementById("loginBtn");s.disabled=!0,s.innerHTML='<span class="spin"></span>Connecting...',addLog("Connecting to Angel One...","");try{const i=await fetch(getServer()+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({clientCode:e,password:t,apiKey:o,totpSecret:n})}),l=await i.json();if(l.status){S.connected=!0,typeof v7ReturnToSplashAfterLogin==="function"&&v7ReturnToSplashAfterLogin(),document.getElementById("connStatus").textContent="✅ "+l.client,document.getElementById("connStatus").style.color="var(--green)",s.innerHTML="✅ Connected",s.style.background="var(--green)",addLog("✅ Login OK — "+l.client,"ok"),toast("✅ Connected!"),localStorage.setItem("fxo-client",e),localStorage.setItem("fxo-api",o),localStorage.setItem("fxo-pass",btoa(t)),localStorage.setItem("fxo-totp",n);var a=document.getElementById("cfgMaxCap");a&&localStorage.setItem("fxo-maxcap",a.value),loadFnoStockList(false).then(async function(){
   if(!getMarketStatus().nseOpen){addLog("Market closed — skipping baseline download and scan","warn");loadIndices();loadVix();startPriceUpdates();startKeepAlive();startTradeOnlyOIRefresh();startHoldDurationTracker();return;}
   // USER REQUIREMENT: absolutely nothing else runs until baseline download finishes --
   // no live price updates, no index/VIX header data, no keepalive, no trade-OI refresh,
@@ -1408,7 +1408,7 @@ setTimeout(function(){
 },16000);
 })</script>
 <div id="v7Splash" class="v7-splash">
-  <button class="v7-splash-gear" id="v7SplashGear" onclick="v7DismissSplash();showPage('setup',null)" title="Settings" style="display:none">⚙️</button>
+  <button class="v7-splash-gear" id="v7SplashGear" onclick="v7DismissSplash();showPage('setup',null)" title="Login" style="display:none">🔑</button>
   <div class="v7-splash-inner">
     <div class="v7-splash-logo">
       <div class="v7-splash-icon">📈</div>
@@ -1501,6 +1501,21 @@ function v7WatchBaselineOnSplash(){
       }
     }
   },300);
+}
+function v7ReturnToSplashAfterLogin(){
+  var splash=document.getElementById("v7Splash");
+  var statusEl=document.getElementById("v7SplashStatus");
+  var spinner=document.getElementById("v7SplashSpinner");
+  var gearEl=document.getElementById("v7SplashGear");
+  if(!splash)return;
+  showPage("signals",null);
+  splash.classList.remove("v7-splash-hide");
+  splash.style.display="flex";
+  document.querySelectorAll("body>.topbar,body>.pages").forEach(function(el){el.style.display="none";});
+  if(gearEl)gearEl.style.display="none";
+  if(spinner)spinner.style.display="block";
+  if(statusEl)statusEl.textContent="Connected";
+  setTimeout(v7WatchBaselineOnSplash,300);
 }
 function v7DismissSplash(){
   var splash=document.getElementById("v7Splash");
