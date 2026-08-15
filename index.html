@@ -128,7 +128,7 @@
 #pg-setup .v7-setup-btn-secondary{background:#f5f5f7!important;color:#1a1a1a!important;border:1px solid #e5e5ea!important;border-radius:14px}
 body.v7-setup-open .topbar,body.v7-setup-open .toptabs{display:none}
 body.v7-setup-open #pg-setup .card:not(.v7-conn-card){display:none}
-</style></head><body><style>body>.topbar,body>.pages{visibility:hidden}#v7Splash{visibility:visible}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick="v7OpenLog()" title="Logs">📋<span class="v7-log-btn-badge"></span></button><button class="v7-gear-btn" id="setupBtn" onclick="v7OpenSettings()" title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
+</style></head><body><style>body>.topbar,body>.pages{display:none}#v7Splash{display:flex}</style><div class="topbar v7-dash-header"><h1 class="v7-dash-title">NS-Signals</h1><div class="v7-header-icons"><button class="v7-log-btn" onclick="v7OpenLog()" title="Logs">📋<span class="v7-log-btn-badge"></span></button><button class="v7-gear-btn" id="setupBtn" onclick="v7OpenSettings()" title="Settings">⚙️</button><button class="v7-gear-btn" id="v7TestBaselineBtn" onclick="v7TestBaseline()" title="TEST: baseline" style="font-size:13px">🧪</button><button class="v7-gear-btn" id="v7TestCardBtn" onclick="v7TestCard()" title="TEST: card" style="font-size:13px">🃏</button></div></div><div class="v7-summary-strip"><div class="v7-stat-card live"><div class="v7-stat-val" id="v7StatLive">0</div><div class="v7-stat-lbl">Live Signals</div></div><div class="v7-stat-card manual"><div class="v7-stat-val" id="v7StatManual">0</div><div class="v7-stat-lbl">Manual Checks</div></div><div class="v7-stat-card pulse"><div class="v7-stat-val" id="v7StatBias">--</div><div class="v7-stat-lbl">PCR Bias</div></div><div class="v7-stat-card scan"><div class="v7-stat-val" id="v7StatScan">--</div><div class="v7-stat-lbl">Last Scan</div></div></div><div class="v7-feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div><div class="time-pill closed" id="mPill" style="display:none">--:--:--</div><div id="themeBtn" style="display:none">🌙</div><button id="scanBtn" style="display:none">▶ SCAN</button><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden"><span id="dlPct">0%</span><div id="dlBar" style="width:0%"></div><div id="dlStatus">Preparing…</div><div id="dlEta"></div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none">🔁 Retry Failed Stocks</button></div>
 <div class="baseline-screen" id="baselineScreen" style="display:none">
   <div class="baseline-hero">
     <div class="baseline-hero-content">
@@ -1404,7 +1404,7 @@ window.addEventListener("DOMContentLoaded",function(){var e="dark";document.docu
 v7InitSplash(!!(t&&o&&n));
 setTimeout(function(){try{v7TestCard();}catch(e){}},2500);
 setTimeout(function(){
-  document.querySelectorAll("body>.topbar,body>.toptabs,body>.pages").forEach(function(el){if(el.style.visibility==="hidden")el.style.visibility="visible";});
+  document.querySelectorAll("body>.topbar,body>.pages").forEach(function(el){if(el.style.display==="none")el.style.display="";});
 },16000);
 })</script>
 <div id="v7Splash" class="v7-splash">
@@ -1432,10 +1432,10 @@ function v7InitSplash(hasCreds){
   var statusEl=document.getElementById("v7SplashStatus");
   var gearEl=document.getElementById("v7SplashGear");
   if(!splash)return;
+  if(gearEl)gearEl.style.display="flex";
   if(!hasCreds){
     statusEl.textContent="Tap ⚙️ to add your Angel One login";
     document.getElementById("v7SplashSpinner").style.display="none";
-    if(gearEl)gearEl.style.display="flex";
     return;
   }
   // has creds -- real doLogin() was scheduled via setTimeout(...,1000) above.
@@ -1503,7 +1503,7 @@ function v7WatchBaselineOnSplash(){
 }
 function v7DismissSplash(){
   var splash=document.getElementById("v7Splash");
-  document.querySelectorAll("body>.topbar,body>.toptabs,body>.pages").forEach(function(el){el.style.visibility="visible";});
+  document.querySelectorAll("body>.topbar,body>.pages").forEach(function(el){el.style.display="";});
   if(!splash)return;
   splash.classList.add("v7-splash-hide");
   setTimeout(function(){splash.remove();},400);
