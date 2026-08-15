@@ -1441,9 +1441,10 @@ function v7InitSplash(hasCreds){
   // has creds -- real doLogin() was scheduled via setTimeout(...,1000) above.
   // poll the REAL S.connected flag, don't fake a delay.
   statusEl.textContent="Connecting to Angel One…";
-  var waited=0,maxWait=15000,pollMs=300;
+  var waited=0,maxWait=60000,pollMs=300;
   var poll=setInterval(function(){
     waited+=pollMs;
+    if(waited===9000)statusEl.textContent="Server waking up (free tier can take ~50s)…";
     if(S.connected){
       clearInterval(poll);
       statusEl.textContent="Connected";
