@@ -1418,7 +1418,6 @@ window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("DOMContentLoaded",function(){var e="dark";document.documentElement.setAttribute("data-theme",e),document.getElementById("themeBtn").textContent="dark"===e?"🌙":"☀️";var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),setTimeout(function(){doLogin()},1e3)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")});
 v7InitSplash(!!(t&&o&&n));
-setTimeout(function(){try{v7TestCard();}catch(e){}},2500);
 setTimeout(function(){
   document.querySelectorAll("body>.topbar,body>.pages,body>.v7-summary-strip,body>.v7-feed-label").forEach(function(el){if(el.style.display==="none")el.style.display="";});
 },16000);
@@ -1432,7 +1431,7 @@ function v7InitSplash(hasCreds){
   if(!splash)return;
   if(gearEl)gearEl.style.display="flex";
   if(!hasCreds){
-    if(statusText)statusText.textContent="Tap ⚙️ to add your Angel One login";
+    if(statusText)statusText.textContent="Tap 🔑 to add your Angel One login";
     if(spinner)spinner.style.display="none";
     return;
   }
@@ -1449,7 +1448,7 @@ function v7InitSplash(hasCreds){
       v7WatchBaselineOnSplash();
     }else if(waited>=maxWait){
       clearInterval(poll);
-      if(statusText)statusText.textContent="Could not connect — tap ⚙️ to check login";
+      if(statusText)statusText.textContent="Could not connect — tap 🔑 to check login";
       if(spinner)spinner.style.display="none";
       if(gearEl)gearEl.style.display="flex";
     }
