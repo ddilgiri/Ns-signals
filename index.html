@@ -2089,15 +2089,39 @@ function buildCardV7(e){
 
 // ── OVERRIDE buildCard with V7 (falls back to V4, which falls back to V3) ──
 var _v4BuildCard=buildCard;
+window._v7DebugState={calls:0,v7Success:0,v4Fallback:0,lastError:null};
 buildCard=function(e){
+  window._v7DebugState.calls++;
   try{
     e=computeLevels(e);
-    return buildCardV7(e);
+    var html=buildCardV7(e);
+    window._v7DebugState.v7Success++;
+    v7ShowDebugBadge();
+    return html;
   }catch(err){
+    window._v7DebugState.v4Fallback++;
+    window._v7DebugState.lastError=(err&&err.message)?err.message:String(err);
     console.warn('V7 card error, falling back to V4:',err);
+    v7ShowDebugBadge();
     return _v4BuildCard(e);
   }
 };
+
+// TEMP DEBUG BADGE — shows on-screen which card version is actually rendering, no devtools needed.
+// Remove once the V4/V7 display mismatch is resolved.
+function v7ShowDebugBadge(){
+  var d=window._v7DebugState;
+  var el=document.getElementById('v7DebugBadge');
+  if(!el){
+    el=document.createElement('div');
+    el.id='v7DebugBadge';
+    el.style.cssText='position:fixed;top:4px;left:4px;z-index:99999;background:#000;color:#0f0;font-family:monospace;font-size:9px;padding:5px 7px;border-radius:6px;max-width:92vw;word-break:break-all;line-height:1.4;opacity:0.92;';
+    document.body.appendChild(el);
+  }
+  var status=d.v7Success>0&&d.v4Fallback===0?'✅ V7 ACTIVE':d.v4Fallback>0?'⚠️ V4 FALLBACK':'…';
+  var errLine=d.lastError?'<br>ERR: '+d.lastError:'';
+  el.innerHTML='CARD ENGINE: '+status+' (calls:'+d.calls+' v7ok:'+d.v7Success+' v4fb:'+d.v4Fallback+')'+errLine;
+}
 
 
 // ── LIVE SPOT UPDATE: keep V4/V7 spot updated ─────────────────
