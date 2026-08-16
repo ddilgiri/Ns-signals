@@ -356,10 +356,11 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
         <div class="v8baseline-refresh-icon">🔄</div>
         <div class="v8baseline-refresh-text">
           <div class="t">Refresh F&amp;O Stock List</div>
-          <div class="s">Re-pull the latest NSE F&amp;O universe before download</div>
+          <div class="s" id="v8BaselineRefreshSub">Re-pull the latest NSE F&amp;O universe before download</div>
         </div>
         <div class="v8baseline-refresh-arrow">›</div>
       </div>
+      <button class="v8form-submit" id="v8BaselineContinueBtn" onclick="v8ContinueToDashboard()" style="margin-top:14px">Continue to Dashboard →</button>
     </div>
   </div>
   <div class="v8baseline-error" id="v8BaselineErrorView">
@@ -384,7 +385,7 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
     <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
     <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
-    <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"></span>12s</div><div class="v8stat-lbl">Last Scan</div></div>
+    <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
   <div id="v8FeedList"></div>
 </div>
@@ -3171,42 +3172,78 @@ function v8WatchRealBaseline(){
     var active = panel && panel.style.display !== 'none';
     if(active){
       clearInterval(checkStart);
-      statusText.textContent='Setting up for today';
+      v8Diag('real baseline active, showing baseline screen with live progress');
+      v8ShowBaselineScreen(true);
+      statusText.textContent='';
+      splash.style.display='none';
       var poll=setInterval(function(){
         var stillActive = panel.style.display !== 'none';
         var pctEl=document.getElementById('dlPct');
         var pct=parseInt((pctEl && pctEl.textContent)||'0',10)||0;
-        progress.style.width=pct+'%';
+        var ringEl=document.getElementById('v8BaselineRing');
+        if(ringEl){ var circ=2*Math.PI*60; ringEl.style.strokeDashoffset=String(circ-(circ*pct/100)); }
+        var pctStat=document.getElementById('v8BaselinePctStat');
+        if(pctStat) pctStat.textContent=pct+'%';
         var statusTxt=document.getElementById('dlStatus');
-        if(statusTxt && statusTxt.textContent) statusText.textContent=statusTxt.textContent;
+        if(statusTxt && statusTxt.textContent){
+          var curStock=document.getElementById('v8BaselineCurrentStock');
+          if(curStock) curStock.textContent=statusTxt.textContent;
+        }
         if(!stillActive){
           clearInterval(poll);
-          statusText.textContent='Ready';
-          setTimeout(function(){
-            v8Diag('baseline done, showing V8 dashboard');
-            if(typeof v8LoadSignals==='function') v8LoadSignals();
-            if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
-            var dash=document.getElementById('v8DashboardScreen');
-            if(dash){ dash.style.display='block'; if(typeof v8RenderFeed==='function') v8RenderFeed(); }
-            splash.style.display='none';
-          },500);
+          v8Diag('baseline download complete');
         }
       },400);
     } else {
-      // Market closed or baseline already done today -- no download step needed, go straight in.
+      // Market closed or baseline already done today -- still show the baseline screen
+      // briefly (already-up-to-date state + real Refresh F&O card) per confirmed decision,
+      // rather than skipping straight to the dashboard.
       v8ElapsedMs += 300;
       if(v8ElapsedMs===300||v8ElapsedMs===1500||v8ElapsedMs===3000) v8Diag('tick, elapsed='+v8ElapsedMs+', active='+active);
-      if(v8ElapsedMs >= 4000){
+      if(v8ElapsedMs >= 1500){
         clearInterval(checkStart);
-        v8Diag('fallback path firing, showing V8 dashboard');
-        if(typeof v8LoadSignals==='function') v8LoadSignals();
-        if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
-        var dash=document.getElementById('v8DashboardScreen');
-        if(dash){ dash.style.display='block'; if(typeof v8RenderFeed==='function') v8RenderFeed(); }
+        v8Diag('showing baseline screen (up-to-date state)');
+        v8ShowBaselineScreen(false);
         splash.style.display='none';
       }
     }
   }, 300);
+}
+function v8ShowBaselineScreen(isDownloading){
+  var bscreen=document.getElementById('v8BaselineScreen');
+  if(!bscreen) return;
+  bscreen.style.display='flex';
+  var titleEl=bscreen.querySelector('.v8baseline-title');
+  var subEl=bscreen.querySelector('.v8baseline-sub');
+  var curStock=document.getElementById('v8BaselineCurrentStock');
+  var attemptStat=document.getElementById('v8BaselineAttemptStat');
+  var pctStat=document.getElementById('v8BaselinePctStat');
+  if(isDownloading){
+    if(titleEl) titleEl.textContent='Downloading Baseline';
+    if(subEl) subEl.textContent='Fetching option chain data for F&O stocks';
+    if(curStock) curStock.textContent='Starting…';
+  } else {
+    if(titleEl) titleEl.textContent='Baseline Ready';
+    if(subEl) subEl.textContent='Already up to date for today';
+    if(curStock) curStock.parentElement.style.display='none';
+    if(attemptStat) attemptStat.parentElement.style.display='none';
+    if(pctStat){ pctStat.textContent='100%'; }
+    var ringEl=document.getElementById('v8BaselineRing');
+    if(ringEl){ var circ=2*Math.PI*60; ringEl.style.strokeDashoffset='0'; }
+    var countNow=document.getElementById('v8BaselineCountNow');
+    var countTotal=document.getElementById('v8BaselineCountTotal');
+    if(countNow) countNow.textContent='✓';
+    if(countTotal) countTotal.textContent='Ready';
+  }
+}
+function v8ContinueToDashboard(){
+  v8Diag('continuing to V8 dashboard');
+  if(typeof v8LoadSignals==='function') v8LoadSignals();
+  if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
+  var bscreen=document.getElementById('v8BaselineScreen');
+  if(bscreen) bscreen.style.display='none';
+  var dash=document.getElementById('v8DashboardScreen');
+  if(dash){ dash.style.display='block'; if(typeof v8RenderFeed==='function') v8RenderFeed(); }
 }
 // On load: if real saved credentials exist, real doLogin() auto-fires (existing logic,
 // untouched) -- start polling its real result to drive the splash. If no saved
@@ -3288,7 +3325,17 @@ function v8RunBaselineTick(count){
 }
 
 document.getElementById('v8BaselineRetryBtn').onclick=function(){ v8StartBaselineDownload(true); };
-document.getElementById('v8BaselineRefreshCard').onclick=function(){ toast('🔄 Refresh F&O List (mock) — not wired to real refreshFnoList yet'); };
+document.getElementById('v8BaselineRefreshCard').onclick=async function(){
+  var sub=document.getElementById('v8BaselineRefreshSub');
+  if(sub) sub.textContent='Fetching fresh list from Angel One…';
+  if(typeof refreshFnoList==='function'){
+    await refreshFnoList();
+    var realOut=document.getElementById('verifyTokResult');
+    if(sub) sub.textContent = (realOut && realOut.textContent) ? realOut.textContent : 'Done';
+  } else if(typeof toast==='function'){
+    toast('⚠️ Refresh function not available');
+  }
+};
 
 // ===== Stage 4: Dashboard (mock, using mock's own 5 real sample cards verbatim) =====
 document.getElementById('v8LogBtn').onclick=v8OpenLogScreen;
@@ -3800,6 +3847,34 @@ function v8SyncFromRealSignals(){
 }
 // Non-destructive wrap: real renderSignals() always runs first, unchanged; v8 sync runs after.
 // Same safe pattern used earlier this session for addLog() -- never replaces the original logic.
+// Non-destructive wrap: real runScan() always runs first, unchanged -- records a genuine
+// last-completed timestamp afterward, used to drive the V8 "Last Scan" stat for real.
+var v8OrigRunScan = window.runScan;
+var v8LastScanCompletedAt = null;
+window.runScan = async function(){
+  if(typeof v8OrigRunScan === 'function') await v8OrigRunScan.apply(this, arguments);
+  v8LastScanCompletedAt = Date.now();
+};
+function v8UpdateLastScanStat(){
+  var el=document.getElementById('v8LastScanVal');
+  var dot=document.getElementById('v8ScanDot');
+  if(!el) return;
+  var scanning = (typeof S!=='undefined') && S.scanning;
+  if(dot) dot.classList.toggle('scanning', !!scanning);
+  var textEl = el.childNodes[el.childNodes.length-1];
+  var timeStr;
+  if(scanning){
+    timeStr = 'Scanning…';
+  } else if(v8LastScanCompletedAt){
+    var secs = Math.round((Date.now()-v8LastScanCompletedAt)/1000);
+    timeStr = secs<60 ? secs+'s ago' : Math.round(secs/60)+'m ago';
+  } else {
+    timeStr = '--';
+  }
+  if(textEl && textEl.nodeType===3) textEl.textContent=timeStr;
+  else el.appendChild(document.createTextNode(timeStr));
+}
+setInterval(v8UpdateLastScanStat, 1000);
 var v8OrigRenderSignals = window.renderSignals;
 var v8LastScanSoundCount = 0;
 function v8PlayScanSound(){
