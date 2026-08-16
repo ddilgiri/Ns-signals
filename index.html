@@ -315,6 +315,7 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
     <span id="splashStatusText">Connecting…</span>
   </div>
   <div class="splash-progress-wrap"><div class="splash-progress-bar" id="splashProgress"></div></div>
+  <div id="v8DebugTrail" style="margin-top:24px;font-size:9px;color:rgba(255,255,255,.5);text-align:left;max-width:280px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
 </div>
 <div class="v8setup-screen" id="v8SetupScreen" style="display:none">
   <div class="v8setup-header">
@@ -3142,6 +3143,12 @@ document.getElementById('v8SetupEdit').onclick=function(){
   localStorage.removeItem('v8mock-totp');
   v8RenderSetupState();
 };
+function v8Diag(msg){
+  var el=document.getElementById('v8DebugTrail');
+  var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
+  if(el) el.textContent += '['+time+'] '+msg+'\n';
+  console.log('[v8diag]',msg);
+}
 function v8OpenRealSetup(){
   var splash=document.getElementById('splashScreen');
   document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
@@ -3165,11 +3172,18 @@ function v8CloseRealSetup(){
 // flow instead of leaving the user stranded on the old real Setup page.
 var v8OrigDoLogin = window.doLogin;
 window.doLogin = async function(){
-  if(typeof v8OrigDoLogin === 'function') await v8OrigDoLogin.apply(this, arguments);
+  v8Diag('wrapper start');
+  try{
+    if(typeof v8OrigDoLogin === 'function') await v8OrigDoLogin.apply(this, arguments);
+  }catch(err){
+    v8Diag('real doLogin threw: '+err.message);
+  }
+  v8Diag('after real login, S.connected='+(typeof S!=='undefined'?S.connected:'S undefined'));
   if(typeof S !== 'undefined' && S.connected){
     setTimeout(function(){
+      v8Diag('setTimeout fired, returning to splash');
       var splash=document.getElementById('splashScreen');
-      if(!splash) return;
+      if(!splash){ v8Diag('splashScreen element missing!'); return; }
       document.body.classList.remove('v8-login-only');
       document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display='none'; });
       splash.style.display='flex';
@@ -3178,8 +3192,11 @@ window.doLogin = async function(){
       var progress=document.getElementById('splashProgress');
       if(statusText) statusText.textContent='Connected';
       if(progress) progress.style.width='100%';
+      v8Diag('calling v8WatchRealBaseline, typeof='+typeof v8WatchRealBaseline);
       if(typeof v8WatchRealBaseline === 'function') v8WatchRealBaseline();
-    }, 900); // small delay so the user briefly sees the real "Connected" confirmation first
+    }, 900);
+  } else {
+    v8Diag('S.connected is falsy, not proceeding to splash');
   }
 };
 // Watches the REAL S.connected flag (set by real doLogin()) and updates the splash
@@ -3213,6 +3230,7 @@ function v8WatchRealBaseline(){
   var statusText=document.getElementById('splashStatusText');
   var progress=document.getElementById('splashProgress');
   var panel=document.getElementById('bulkDownloadPanel');
+  v8Diag('v8WatchRealBaseline started, panel found='+(!!panel));
   var checkStart=setInterval(function(){
     var active = panel && panel.style.display !== 'none';
     if(active){
@@ -3241,6 +3259,7 @@ function v8WatchRealBaseline(){
       checkStart._elapsed += 300;
       if(checkStart._elapsed >= 4000){
         clearInterval(checkStart);
+        v8Diag('fallback path firing, showing dashboard');
         document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
         showPage('signals', document.querySelector('.nav-item[onclick*="signals"]'));
         splash.style.display='none';
