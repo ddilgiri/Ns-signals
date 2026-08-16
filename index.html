@@ -3197,6 +3197,7 @@ window.doLogin = async function(){
     }, 900);
   } else {
     v8Diag('S.connected is falsy, not proceeding to splash');
+    if(typeof toast==='function') toast('❌ Login failed — check your Client Code, Password, API Key');
   }
 };
 // Watches the REAL S.connected flag (set by real doLogin()) and updates the splash
@@ -3248,8 +3249,11 @@ function v8WatchRealBaseline(){
           clearInterval(poll);
           statusText.textContent='Ready';
           setTimeout(function(){
-            document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
-            showPage('signals', document.querySelector('.nav-item[onclick*="signals"]'));
+            v8Diag('baseline done, showing V8 dashboard');
+            if(typeof v8LoadSignals==='function') v8LoadSignals();
+            if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
+            var dash=document.getElementById('v8DashboardScreen');
+            if(dash){ dash.style.display='block'; if(typeof v8RenderFeed==='function') v8RenderFeed(); }
             splash.style.display='none';
           },500);
         }
@@ -3259,9 +3263,11 @@ function v8WatchRealBaseline(){
       v8ElapsedMs += 300;
       if(v8ElapsedMs >= 4000){
         clearInterval(checkStart);
-        v8Diag('fallback path firing, showing dashboard');
-        document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
-        showPage('signals', document.querySelector('.nav-item[onclick*="signals"]'));
+        v8Diag('fallback path firing, showing V8 dashboard');
+        if(typeof v8LoadSignals==='function') v8LoadSignals();
+        if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
+        var dash=document.getElementById('v8DashboardScreen');
+        if(dash){ dash.style.display='block'; if(typeof v8RenderFeed==='function') v8RenderFeed(); }
         splash.style.display='none';
       }
     }
