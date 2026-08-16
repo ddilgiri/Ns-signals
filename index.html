@@ -66,6 +66,7 @@
       <input type="text" id="v8CfgTotp" placeholder="From your authenticator app setup" autocomplete="off">
     </div>
     <button class="v8setup-save-btn" id="v8LoginBtn">Save &amp; Connect</button>
+    <div id="v8SetupError" style="display:none;margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--red-bg);color:var(--red);font-size:12px;font-weight:700;text-align:center"></div>
   </div>
   <div id="v8SetupConnectedView" class="v8connected-state" style="display:none">
     <div class="v8connected-icon">✓</div>
@@ -2647,10 +2648,77 @@ console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 <script>
 document.getElementById('splashSetupBtn').onclick=function(){
   document.getElementById('v8SetupScreen').style.display='flex';
+  v8RenderSetupState();
 };
 document.getElementById('v8SetupBack').onclick=function(){
   document.getElementById('v8SetupScreen').style.display='none';
 };
+function v8RenderSetupState(){
+  var isConnected = !!localStorage.getItem('v8mock-client');
+  document.getElementById('v8SetupFormView').style.display = isConnected ? 'none' : 'flex';
+  document.getElementById('v8SetupConnectedView').style.display = isConnected ? 'flex' : 'none';
+  if(isConnected){
+    document.getElementById('v8CfgClient').value = localStorage.getItem('v8mock-client') || '';
+    document.getElementById('v8CfgApi').value = localStorage.getItem('v8mock-api') || '';
+    document.getElementById('v8CfgPass').value = localStorage.getItem('v8mock-pass') || '';
+    document.getElementById('v8CfgTotp').value = localStorage.getItem('v8mock-totp') || '';
+  }
+}
+document.getElementById('v8LoginBtn').onclick=function(){
+  var client=document.getElementById('v8CfgClient').value.trim();
+  var api=document.getElementById('v8CfgApi').value.trim();
+  var pass=document.getElementById('v8CfgPass').value.trim();
+  var totp=document.getElementById('v8CfgTotp').value.trim();
+  var errEl=document.getElementById('v8SetupError');
+  errEl.style.display='none';
+  if(!client||!api||!pass){
+    errEl.textContent='⚠️ Please fill Client ID, API Key and Password';
+    errEl.style.display='block';
+    return;
+  }
+  // Mock connect -- no real Angel One call yet, per explicit instruction.
+  localStorage.setItem('v8mock-client', client);
+  localStorage.setItem('v8mock-api', api);
+  localStorage.setItem('v8mock-pass', pass);
+  localStorage.setItem('v8mock-totp', totp);
+  v8RenderSetupState();
+  setTimeout(function(){
+    document.getElementById('v8SetupScreen').style.display='none';
+    v8ResumeSplashAfterConnect();
+  }, 700);
+};
+document.getElementById('v8SetupEdit').onclick=function(){
+  localStorage.removeItem('v8mock-client');
+  localStorage.removeItem('v8mock-api');
+  localStorage.removeItem('v8mock-pass');
+  localStorage.removeItem('v8mock-totp');
+  v8RenderSetupState();
+};
+function v8ResumeSplashAfterConnect(){
+  var splash=document.getElementById('splashScreen');
+  var statusText=document.getElementById('splashStatusText');
+  var progress=document.getElementById('splashProgress');
+  if(!splash) return;
+  splash.style.display='flex';
+  splash.classList.remove('hide');
+  var stages=['Connecting to Angel One…','Verifying credentials…','Connected'];
+  var i=0;
+  progress.style.width='10%';
+  var iv=setInterval(function(){
+    statusText.textContent=stages[i];
+    progress.style.width=(30+i*35)+'%';
+    i++;
+    if(i>=stages.length){
+      clearInterval(iv);
+    }
+  },900);
+}
+// On load: if mock credentials already saved, auto-run the connect status cycle on the splash.
+(function(){
+  if(localStorage.getItem('v8mock-client')){
+    setTimeout(v8ResumeSplashAfterConnect, 400);
+  }
+})();
 </script>
 
 
