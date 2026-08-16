@@ -89,7 +89,11 @@
 .v8stat-card.manual .v8stat-val{color:#7e22ce}
 .v8stat-card.pulse .v8stat-val{color:#1d5fbf;font-size:12px}
 .v8stat-card.scan .v8stat-val{color:#b8860b;font-size:11px}
-.v8scan-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f9d58;margin-right:4px;animation:v8pulse 1.5s infinite}
+.v8scan-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f9d58;margin-right:4px}
+.v8scan-dot.scanning{animation:v8pulse 1.5s infinite}
+.v8stat-card.capital .v8stat-val{color:#1d5fbf}
+.v8stat-card.pnl .v8stat-val.up{color:#0f9d58}
+.v8stat-card.pnl .v8stat-val.down{color:#d93025}
 @keyframes v8pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .v8feed-label{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;margin:0 3px 6px;display:flex;justify-content:space-between;align-items:center}
 .v8fab{position:fixed;right:20px;bottom:24px;width:52px;height:52px;border-radius:50%;background:#7e22ce;color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:400;line-height:1;box-shadow:0 4px 14px rgba(126,34,206,.4);cursor:pointer;border:none;z-index:30}
@@ -118,8 +122,15 @@
 .v8tier-badge.mixed{background:#fdf3e0;color:#b8860b}
 .v8tier-badge.stale{background:#fdeceb;color:#d93025}
 .v8tier-badge.skip{background:#f3f4f7;color:#6b7280}
-.v8mcard-mid{padding:0 12px 8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6b7280;font-weight:600}
-.v8mcard-mid .v8ltp{font-weight:800;font-size:12.5px}
+.v8mcard-mid{padding:0 12px 10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6b7280;font-weight:600}
+.v8mcard-mid .v8entry-val{font-size:11px;font-weight:700;color:#6b7280}
+.v8mcard-mid .v8spot-val{font-weight:800;font-size:14px}
+.v8mcard-mid .v8spot-val.up{color:#0f9d58}
+.v8mcard-mid .v8spot-val.down{color:#d93025}
+.v8mcard-mid .v8pnl-val{font-weight:900;font-size:15px}
+.v8mcard-mid .v8pnl-val.up{color:#0f9d58}
+.v8mcard-mid .v8pnl-val.down{color:#d93025}
+.v8mcard-mid .v8ltp{font-weight:800;font-size:14px}
 .v8mcard-mid .v8ltp.up{color:#0f9d58}
 .v8mcard-mid .v8ltp.down{color:#d93025}
 .v8mcard-tag{margin:0 10px 10px;font-size:10.5px;font-weight:700;padding:6px 9px;border-radius:8px;line-height:1.35}
@@ -271,6 +282,10 @@
 .v8spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid #e5e7eb;border-top-color:#7e22ce;animation:v8spin2 .7s linear infinite}
 @keyframes v8spin2{to{transform:rotate(360deg)}}
 .v8new-tag{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.3px;background:#7e22ce;color:#fff;padding:2px 6px;border-radius:5px;margin-left:6px;text-transform:uppercase}
+.v8form-group{position:relative}
+.v8stock-suggest{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e8e9ed;border-radius:9px;box-shadow:0 4px 14px rgba(16,20,30,.12);max-height:180px;overflow-y:auto;z-index:20;margin-top:2px}
+.v8stock-suggest-item{padding:9px 12px;font-size:13px;font-weight:700;color:#14181f;cursor:pointer}
+.v8stock-suggest-item:active{background:#f3f4f7}
 </style></head><body><div class="splash" id="splashScreen">
   <button class="splash-setup-btn" id="splashSetupBtn">🔑</button>
   <div class="splash-title">NS-Signals</div>
@@ -372,11 +387,10 @@
   </div>
   <div class="v8summary-strip">
     <div class="v8stat-card live"><div class="v8stat-val">7</div><div class="v8stat-lbl">Live Signals</div></div>
-    <div class="v8stat-card manual"><div class="v8stat-val">2</div><div class="v8stat-lbl">Manual Checks</div></div>
-    <div class="v8stat-card pulse"><div class="v8stat-val">BULLISH</div><div class="v8stat-lbl">PCR Bias</div></div>
-    <div class="v8stat-card scan"><div class="v8stat-val"><span class="v8scan-dot"></span>12s</div><div class="v8stat-lbl">Last Scan</div></div>
+    <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
+    <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
+    <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"></span>12s</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
-  <div class="v8feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div>
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
@@ -388,7 +402,8 @@
     <div class="v8form-title">🖊️ Manual Check</div>
     <div class="v8form-group">
       <label>Stock</label>
-      <input class="v8form-input" id="v8MStock" placeholder="e.g. TATASTEEL" value="TATASTEEL">
+      <input class="v8form-input" id="v8MStock" placeholder="e.g. TATASTEEL" value="TATASTEEL" autocomplete="off" oninput="v8FilterStockSuggest()" onfocus="v8FilterStockSuggest()">
+      <div class="v8stock-suggest" id="v8StockSuggest" style="display:none"></div>
     </div>
     <div class="v8form-row">
       <div class="v8form-group">
@@ -418,12 +433,6 @@
   <div id="v8LoadingView" style="display:none">
     <div class="v8loading-row"><div class="v8spinner"></div> Running Ramesh/Suresh/Mahesh check…</div>
   </div>
-</div>
-<div class="v8sheet-backdrop" id="v8Backdrop"></div>
-<div class="v8sheet" id="v8Sheet">
-  <div class="v8sheet-handle"></div>
-  <div class="v8sheet-close" id="v8SheetClose">✕</div>
-  <div class="v8card" id="v8SheetCardContent"></div>
 </div>
 <div class="v8sheet-backdrop" id="v8SettingsBackdrop"></div>
 <div class="v8sheet" id="v8SettingsSheet">
@@ -3181,7 +3190,10 @@ function v8RunBaselineTick(count){
     setTimeout(function(){
       screenEl.style.display='none';
       document.getElementById('v8DashboardScreen').style.display='block';
+      v8LoadSignals();
       v8RenderFeed();
+      var dot=document.getElementById('v8ScanDot');
+      if(dot) dot.classList.add('scanning');
     },500);
     return;
   }
@@ -3333,6 +3345,25 @@ document.getElementById('v8Fab').onclick=v8OpenFormSheet;
 var v8SelectedSide='CE';
 document.getElementById('v8BtnCE').onclick=function(){ v8SetSide('CE'); };
 document.getElementById('v8BtnPE').onclick=function(){ v8SetSide('PE'); };
+function v8FilterStockSuggest(){
+  var q=(document.getElementById('v8MStock').value||'').toUpperCase().trim();
+  var box=document.getElementById('v8StockSuggest');
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  var list=(typeof NSE_STOCKS!=='undefined'?NSE_STOCKS:[]).filter(function(s){return s.sym.indexOf(q)===0;}).slice(0,8);
+  if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML=list.map(function(s){return '<div class="v8stock-suggest-item" onclick="v8SelectStock(\''+s.sym+'\')">'+s.sym+'</div>';}).join('');
+  box.style.display='block';
+}
+function v8SelectStock(sym){
+  document.getElementById('v8MStock').value=sym;
+  document.getElementById('v8StockSuggest').style.display='none';
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.v8form-group')){
+    var box=document.getElementById('v8StockSuggest');
+    if(box) box.style.display='none';
+  }
+});
 function v8SetSide(side){
   v8SelectedSide=side;
   document.getElementById('v8BtnCE').classList.toggle('active', side==='CE');
@@ -3372,59 +3403,34 @@ var v8ManualCardCount=0;
 function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   v8ManualCardCount++;
   var cardKey='manual_'+v8ManualCardCount;
-  var pillClass=side==='CE'?'v8pill-ce':'v8pill-pe';
   var readLabel=side==='CE'?['Buyers Winning','green','Sellers Winning','red']:['Sellers Winning','red','Buyers Winning','green'];
-
-  v8CardDetails[cardKey]={
-    modeLabel:'🖊️ Manual Check',modeClass:'manual',
-    name:stock.toUpperCase(),strikeSide:strike+' '+side,pillClass:pillClass,
-    capCap:'₹—',capTime:'Now',capEntry:'₹'+entry,
-    ltp:'₹'+entry,chg:'₹0.00 (0.0%)',chgClass:'up',
-    spot:'₹—',spotChg:'— (—)',spotClass:'up',
-    lots:lots,pnl:'₹0',pnlClass:'up',confBadge:'📈 FRESH',
-    ceRead:readLabel[0],ceClass:readLabel[1],peRead:readLabel[2],peClass:readLabel[3],
-    strikeRange:strike,
+  var entryNum=parseFloat(entry)||0;
+  var lotsNum=parseInt(lots,10)||1;
+  var lotSize=1;
+  if(typeof NSE_STOCKS!=='undefined'){
+    var stk=NSE_STOCKS.find(function(x){return x.sym===stock.toUpperCase();});
+    if(stk) lotSize=stk.lot;
+  }
+  v8Signals.unshift({
+    key:cardKey,mode:'manual',name:stock.toUpperCase(),strike:parseFloat(strike)||0,type:side,
+    tier:'clear',tierLabel:'🟢 CLEAR',
+    entry:entryNum,spot:entryNum,ltp:entryNum,lots:lotsNum,lotSize:lotSize,dim:false,isNew:true,
+    ceRead:readLabel[0],ceClass:readLabel[1],peRead:readLabel[2],peClass:readLabel[3],strikeRange:String(strike),
     ccCapsules:[{cls:'warn',txt:'📈 Fresh signal, building'},{cls:'warn',txt:'🧭 No cross-check yet'},{cls:'warn',txt:'✅ Take with normal size'}],
     planTarget:'—',planStop:'—',planHold:'—',planExit:'—',
-    verdictEmoji:'📈',verdictTxt:stock.toUpperCase()+' '+strike+' '+side+' is showing a fresh buildup with no Mahesh cross-check yet — sample illustrative result, not live data.'
-  };
-
-  var wrap=document.createElement('div');
-  wrap.className='v8swipe-wrap';
-  wrap.dataset.key=cardKey;
-  wrap.innerHTML='<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div><div class="v8swipe-target"></div>';
-  var target=wrap.querySelector('.v8swipe-target');
-  var card=document.createElement('div');
-  card.className='v8mcard';
-  card.style.cursor='pointer';
-  card.onclick=function(){ v8OpenSheet(cardKey); };
-  card.innerHTML='<div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span>'
-    +'<div class="v8mcard-name-row"><h2>'+stock.toUpperCase()+'</h2><span class="v8pill '+pillClass+'">'+strike+' '+side+'</span><span class="v8new-tag">New</span></div></div>'
-    +'<span class="v8tier-badge clear">🟢 CLEAR</span></div>'
-    +'<div class="v8mcard-mid"><span>Entry ₹'+entry+' · '+lots+' lots</span><span class="v8ltp up">₹'+entry+'</span></div>'
-    +'<div class="v8mcard-tag ok">📈 Fresh signal, no cross-check yet — sample result</div>';
-  target.appendChild(card);
-  var feed=document.getElementById('v8FeedList');
-  feed.insertBefore(wrap, feed.firstChild);
-  v8AttachSwipeHandlers();
+    verdictEmoji:'📈',verdictTxt:stock.toUpperCase()+' '+strike+' '+side+' is showing a fresh buildup with no Mahesh cross-check yet — sample illustrative result, not live data.',
+    tag:'📈 Fresh signal, no cross-check yet — sample result',tagCls:'ok'
+  });
+  v8SaveSignals();
+  v8RenderFeed();
 }
+
 
 
 function v8SwipeWrap(cardKey, innerHTML){
   return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
     + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
     + '<div class="v8swipe-target">'+innerHTML+'</div></div>';
-}
-
-function v8RenderFeed(){
-  var feed=document.getElementById('v8FeedList');
-  feed.innerHTML =
-    v8SwipeWrap('ashokley','<div class="v8mcard" onclick="v8OpenSheet(\'ashokley\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>ASHOKLEY</h2><span class="v8pill v8pill-ce">185 CE</span></div></div><span class="v8tier-badge clear-plus">🟢🤝 CLEAR+</span></div><div class="v8mcard-mid"><span>Entry ₹4.20</span><span class="v8ltp up">₹6.85 (+63%)</span></div><div class="v8mcard-tag ok">✅ Buyers building strong + Mahesh confirms</div></div>')
-  + v8SwipeWrap('sonacoms','<div class="v8mcard" onclick="v8OpenSheet(\'sonacoms\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>SONACOMS</h2><span class="v8pill v8pill-pe">620 PE</span></div></div><span class="v8tier-badge clear">🟢 CLEAR</span></div><div class="v8mcard-mid"><span>Entry ₹9.10</span><span class="v8ltp up">₹11.40 (+25%)</span></div><div class="v8mcard-tag ok">📈 Sellers building strong, fresh — no cross-check yet</div></div>')
-  + v8SwipeWrap('concor','<div class="v8mcard" onclick="v8OpenSheet(\'concor\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span><div class="v8mcard-name-row"><h2>CONCOR</h2><span class="v8pill v8pill-ce">820 CE</span></div></div><span class="v8tier-badge mixed">🟡 MIXED</span></div><div class="v8mcard-mid"><span>Entry ₹6.50 · 2 lots</span><span class="v8ltp down">₹5.90 (−9%)</span></div><div class="v8mcard-tag warn">⚠️ Both sides showing buying — size down</div></div>')
-  + v8SwipeWrap('motherson','<div class="v8mcard dim" onclick="v8OpenSheet(\'motherson\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>MOTHERSON</h2><span class="v8pill v8pill-pe">175 PE</span></div></div><span class="v8tier-badge stale">🔴 STALE</span></div><div class="v8mcard-mid"><span>Entry ₹3.80</span><span class="v8ltp down">₹3.35 (−12%)</span></div><div class="v8mcard-tag warn">⚠️ Move looks late — urgency fading</div></div>')
-  + v8SwipeWrap('jublfood','<div class="v8mcard dim" onclick="v8OpenSheet(\'jublfood\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span><div class="v8mcard-name-row"><h2>JUBLFOOD</h2><span class="v8pill v8pill-ce">510 CE</span></div></div><span class="v8tier-badge skip">🔒 SKIP</span></div><div class="v8mcard-mid"><span>Entry ₹11.60 · 2 lots</span><span class="v8ltp down">₹8.30 (−28%)</span></div><div class="v8mcard-tag skip">🚫 Call wall + Put wall both holding — pinned</div></div>');
-  v8AttachSwipeHandlers();
 }
 
 function v8AttachSwipeHandlers(){
@@ -3480,6 +3486,9 @@ document.addEventListener('click',function(e){
 function v8DeleteCard(btn){
   var wrap=btn.closest('.v8swipe-wrap');
   if(!wrap) return;
+  var key=wrap.dataset.key;
+  v8Signals=v8Signals.filter(function(s){return s.key!==key;});
+  v8SaveSignals();
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -3488,78 +3497,136 @@ function v8DeleteCard(btn){
     wrap.style.maxHeight='0px';
     wrap.style.marginBottom='0px';
   });
-  setTimeout(function(){ wrap.remove(); },300);
+  setTimeout(function(){ wrap.remove(); v8RenderHeaderStats(); },300);
 }
 
 // ===== Stage 5: Card detail sheet (mock, 5 real sample cards verbatim from mock) =====
-var v8CardDetails={
-  ashokley:{modeLabel:'⚡ Auto Signal',modeClass:'auto',name:'ASHOKLEY',strikeSide:'185 CE',pillClass:'pill-ce',
-    capCap:'₹18K',capTime:'11:02',capEntry:'₹4.20',ltp:'₹6.85',chg:'₹2.65 (63.1%)',chgClass:'up',
-    spot:'₹186.40',spotChg:'₹2.10 (1.14%)',spotClass:'up',lots:'3',pnl:'₹9,540',pnlClass:'up',confBadge:'🟢🤝 CLEAR+',
+var v8Signals=[
+  {key:'ashokley',mode:'auto',name:'ASHOKLEY',strike:185,type:'CE',tier:'clear-plus',tierLabel:'🟢🤝 CLEAR+',
+    entry:4.20,spot:186.40,ltp:6.85,lots:3,lotSize:5000,dim:false,
     ceRead:'Buyers Winning',ceClass:'green',peRead:'Sellers Weak',peClass:'red',strikeRange:'182–188',
     ccCapsules:[{cls:'ok',txt:'✅ Buyers building strong'},{cls:'ok',txt:'🤝 Mahesh confirms'},{cls:'ok',txt:'✅ Take this trade'}],
     planTarget:'₹192',planStop:'₹182',planHold:'184–188',planExit:'182 breakdown',
-    verdictEmoji:'✅',verdictTxt:'Buyers building strong at 185, and Mahesh cross-check confirms the move — clean take with normal size.'},
-  sonacoms:{modeLabel:'⚡ Auto Signal',modeClass:'auto',name:'SONACOMS',strikeSide:'620 PE',pillClass:'pill-pe',
-    capCap:'₹22K',capTime:'11:15',capEntry:'₹9.10',ltp:'₹11.40',chg:'₹2.30 (25.3%)',chgClass:'up',
-    spot:'₹617.80',spotChg:'₹4.60 (0.74%)',spotClass:'down',lots:'2',pnl:'₹4,600',pnlClass:'up',confBadge:'📈 FRESH',
+    verdictEmoji:'✅',verdictTxt:'Buyers building strong at 185, and Mahesh cross-check confirms the move — clean take with normal size.',
+    tag:'✅ Buyers building strong + Mahesh confirms',tagCls:'ok'},
+  {key:'sonacoms',mode:'auto',name:'SONACOMS',strike:620,type:'PE',tier:'clear',tierLabel:'🟢 CLEAR',
+    entry:9.10,spot:617.80,ltp:11.40,lots:2,lotSize:1200,dim:false,
     ceRead:'Buyers Fading',ceClass:'red',peRead:'Sellers Winning',peClass:'green',strikeRange:'615–625',
     ccCapsules:[{cls:'ok',txt:'📈 Sellers building strong'},{cls:'ok',txt:'🧭 Fresh, no cross-check yet'},{cls:'ok',txt:'✅ Take with normal size'}],
     planTarget:'₹610',planStop:'₹625',planHold:'618–622',planExit:'625 breakout',
-    verdictEmoji:'📈',verdictTxt:'Sellers building strong at 620 — fresh move, no Mahesh cross-check yet. Reasonable entry, watch for confirmation.'},
-  concor:{modeLabel:'🖊️ Manual Check',modeClass:'manual',name:'CONCOR',strikeSide:'820 CE',pillClass:'pill-ce',
-    capCap:'₹15K',capTime:'11:40',capEntry:'₹6.50',ltp:'₹5.90',chg:'₹0.60 (9.2%)',chgClass:'down',
-    spot:'₹818.20',spotChg:'₹1.10 (0.13%)',spotClass:'down',lots:'2',pnl:'−₹1,800',pnlClass:'down',confBadge:'🟡 MIXED',
+    verdictEmoji:'📈',verdictTxt:'Sellers building strong at 620 — fresh move, no Mahesh cross-check yet. Reasonable entry, watch for confirmation.',
+    tag:'📈 Sellers building strong, fresh — no cross-check yet',tagCls:'ok'},
+  {key:'concor',mode:'manual',name:'CONCOR',strike:820,type:'CE',tier:'mixed',tierLabel:'🟡 MIXED',
+    entry:6.50,spot:818.20,ltp:5.90,lots:2,lotSize:1500,dim:false,
     ceRead:'Buyers Building',ceClass:'green',peRead:'Also Buying',peClass:'green',strikeRange:'815–825',
     ccCapsules:[{cls:'warn',txt:'⚠️ Signal fighting itself'},{cls:'warn',txt:'🧭 Both sides showing buying'},{cls:'warn',txt:'⏳ Size down, tight stop'}],
     planTarget:'₹825',planStop:'₹815',planHold:'817–822',planExit:'815 breakdown',
-    verdictEmoji:'⚠️',verdictTxt:'Both CE and PE sides showing buying at 820 — the signal is fighting itself. If taking this, size down and use a tight stop.'},
-  motherson:{modeLabel:'⚡ Auto Signal',modeClass:'auto',name:'MOTHERSON',strikeSide:'175 PE',pillClass:'pill-pe',
-    capCap:'₹11K',capTime:'10:55',capEntry:'₹3.80',ltp:'₹3.35',chg:'₹0.45 (11.8%)',chgClass:'down',
-    spot:'₹176.90',spotChg:'₹0.80 (0.45%)',spotClass:'up',lots:'2',pnl:'−₹1,350',pnlClass:'down',confBadge:'🔴 STALE',
+    verdictEmoji:'⚠️',verdictTxt:'Both CE and PE sides showing buying at 820 — the signal is fighting itself. If taking this, size down and use a tight stop.',
+    tag:'⚠️ Both sides showing buying — size down',tagCls:'warn'},
+  {key:'motherson',mode:'auto',name:'MOTHERSON',strike:175,type:'PE',tier:'stale',tierLabel:'🔴 STALE',
+    entry:3.80,spot:176.90,ltp:3.35,lots:2,lotSize:2000,dim:true,
     ceRead:'Buyers Winning',ceClass:'green',peRead:'Sellers Fading',peClass:'red',strikeRange:'172–178',
     ccCapsules:[{cls:'warn',txt:'⚠️ Move looks late'},{cls:'warn',txt:'🧭 Urgency fading'},{cls:'skip',txt:'🚫 Skip — late entry risk'}],
     planTarget:'—',planStop:'₹175',planHold:'—',planExit:'Already stale',
-    verdictEmoji:'⚠️',verdictTxt:'The big move at 175 already happened and price has since gone flat — urgency is fading. Entering now carries late-entry risk.'},
-  jublfood:{modeLabel:'🖊️ Manual Check',modeClass:'manual',name:'JUBLFOOD',strikeSide:'510 CE',pillClass:'pill-ce',
-    capCap:'₹13K',capTime:'10:29',capEntry:'₹11.60',ltp:'₹8.30',chg:'₹3.30 (28.4%)',chgClass:'down',
-    spot:'₹508.60',spotChg:'₹1.90 (0.37%)',spotClass:'down',lots:'2',pnl:'−₹1,650',pnlClass:'down',confBadge:'⚠️ PINNED',
+    verdictEmoji:'⚠️',verdictTxt:'The big move at 175 already happened and price has since gone flat — urgency is fading. Entering now carries late-entry risk.',
+    tag:'⚠️ Move looks late — urgency fading',tagCls:'warn'},
+  {key:'jublfood',mode:'manual',name:'JUBLFOOD',strike:510,type:'CE',tier:'skip',tierLabel:'🔒 SKIP',
+    entry:11.60,spot:508.60,ltp:8.30,lots:2,lotSize:550,dim:true,
     ceRead:'Sellers Winning',ceClass:'red',peRead:'Buyers Winning',peClass:'green',strikeRange:'505–515',
     ccCapsules:[{cls:'warn',txt:'🔒 Call wall (Case 1) holding'},{cls:'warn',txt:'🔒 Put wall (Case 5) holding'},{cls:'skip',txt:'🚫 Skip this trade'}],
     planTarget:'₹515',planStop:'505–506',planHold:'508–510',planExit:'505 breakdown',
-    verdictEmoji:'⚠️',verdictTxt:'Call wall and Put wall are both holding at 510 — sellers winning both sides, market pinned in range. No clear direction to trade right now.'}
-};
+    verdictEmoji:'⚠️',verdictTxt:'Call wall and Put wall are both holding at 510 — sellers winning both sides, market pinned in range. No clear direction to trade right now.',
+    tag:'🚫 Call wall + Put wall both holding — pinned',tagCls:'skip'}
+];
+var v8ExpandedKey=null;
 
-function v8BuildSheetHTML(d){
-  return '<div class="v8card-head"><div class="v8left-side"><div class="v8logo"></div><div class="v8lines-stack">'
-    +'<span class="v8full-mode-badge '+d.modeClass+'">'+d.modeLabel+'</span>'
-    +'<div class="v8stock-name"><h1>'+d.name+'</h1><span class="v8full-pill '+d.pillClass+'">'+d.strikeSide+'</span></div>'
-    +'<div class="v8capsule-row"><span class="v8capsule cap">'+d.capCap+'</span><span class="v8capsule time">'+d.capTime+'</span><span class="v8capsule entry">'+d.capEntry+'</span></div>'
-    +'</div></div><div class="v8price-block"><div class="v8ltp">'+d.ltp+'</div><div class="v8chg '+d.chgClass+'">'+d.chg+'</div></div></div>'
-    +'<div class="v8spot-row"><div class="v8spot-block"><div class="v8spot '+d.spotClass+'">'+d.spot+'</div><div class="v8chg '+d.spotClass+'">'+d.spotChg+'</div></div>'
-    +'<div class="v8mid-col"><div class="v8lot-stepper"><button type="button" disabled>−</button><span class="v8lot-val">'+d.lots+'</span><button type="button" disabled>+</button></div>'
-    +'<div class="v8pnl '+d.pnlClass+'">'+d.pnl+'</div></div><div class="v8conf-badge">'+d.confBadge+'</div></div>'
-    +'<div class="v8section"><div class="v8metric-row"><div class="v8side-read ce"><span class="v8case-chip '+d.ceClass+'">'+d.ceRead+'</span></div>'
-    +'<div class="v8strike-badge">'+d.strikeRange+'</div><div class="v8side-read pe"><span class="v8case-chip '+d.peClass+'">'+d.peRead+'</span></div></div></div>'
-    +'<div class="v8section"><div class="v8cc-wrap">'+d.ccCapsules.map(function(c){return '<span class="v8cc-capsule '+c.cls+'">'+c.txt+'</span>';}).join('')+'</div></div>'
-    +'<div class="v8section"><div class="v8plan-row"><span class="v8plan-cap target">'+d.planTarget+'</span><span class="v8plan-cap stop">'+d.planStop+'</span>'
-    +'<span class="v8plan-cap hold">'+d.planHold+'</span><span class="v8plan-cap exit">'+d.planExit+'</span></div></div>'
-    +'<div class="v8section"><div class="v8verdict"><div class="v8emoji">'+d.verdictEmoji+'</div><div class="v8txt">'+d.verdictTxt+'</div></div></div>';
+function v8Fmt(n){ return '₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2}); }
+function v8PnlOf(s){ return (s.ltp - s.entry) * s.lots * s.lotSize; }
+function v8SaveSignals(){
+  try{ localStorage.setItem('v8mock-signals', JSON.stringify(v8Signals)); }catch(e){}
 }
-function v8OpenSheet(cardKey){
-  var d=v8CardDetails[cardKey];
-  if(!d) return;
-  document.getElementById('v8SheetCardContent').innerHTML=v8BuildSheetHTML(d);
-  document.getElementById('v8Backdrop').classList.add('show');
-  document.getElementById('v8Sheet').classList.add('show');
+function v8LoadSignals(){
+  var savedDate = localStorage.getItem('v8mock-signals-date');
+  var today = (new Date()).toLocaleDateString('en-IN');
+  if(savedDate && savedDate !== today){
+    // day ended -- auto-clear per confirmed rule
+    localStorage.removeItem('v8mock-signals');
+    localStorage.setItem('v8mock-signals-date', today);
+    return;
+  }
+  localStorage.setItem('v8mock-signals-date', today);
+  var raw = localStorage.getItem('v8mock-signals');
+  if(raw){
+    try{ v8Signals = JSON.parse(raw); }catch(e){}
+  }
 }
-function v8CloseSheet(){
-  document.getElementById('v8Backdrop').classList.remove('show');
-  document.getElementById('v8Sheet').classList.remove('show');
-}
-document.getElementById('v8Backdrop').onclick=v8CloseSheet;
-document.getElementById('v8SheetClose').onclick=v8CloseSheet;
 
+function v8BuildCompactCard(s){
+  var pnl=v8PnlOf(s);
+  var pnlCls=pnl>=0?'up':'down';
+  var spotCls='up'; // spot direction vs prior close -- mock has no prior-close tracking yet, default up
+  return '<div class="v8mcard'+(s.dim?' dim':'')+'" onclick="v8ToggleExpand(\''+s.key+'\')">'
+    +'<div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge '+s.mode+'">'+(s.mode==='auto'?'⚡ Auto':'🖊️ Manual')+'</span>'
+    +'<div class="v8mcard-name-row"><h2>'+s.name+'</h2><span class="v8pill '+(s.type==='CE'?'v8pill-ce':'v8pill-pe')+'">'+s.strike+' '+s.type+'</span>'+(s.isNew?'<span class="v8new-tag">New</span>':'')+'</div></div>'
+    +'<span class="v8tier-badge '+s.tier+'">'+s.tierLabel+'</span></div>'
+    +'<div class="v8mcard-mid">'
+    +'<span class="v8entry-val">'+v8Fmt(s.entry)+'</span>'
+    +'<span class="v8spot-val '+spotCls+'">'+v8Fmt(s.spot)+'</span>'
+    +'<span class="v8pnl-val '+pnlCls+'">'+v8Fmt(pnl)+'</span>'
+    +'<span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span>'
+    +'</div>'
+    +'<div class="v8mcard-tag '+s.tagCls+'">'+s.tag+'</div>'
+    +(v8ExpandedKey===s.key ? v8BuildExpandedHTML(s) : '')
+    +'</div>';
+}
+function v8BuildExpandedHTML(s){
+  var pnl=v8PnlOf(s);
+  var pnlCls=pnl>=0?'up':'down';
+  return '<div class="v8section"><div class="v8mid-col" style="margin:0 auto"><div class="v8lot-stepper">'
+    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',-1)">−</button>'
+    +'<span class="v8lot-val">'+s.lots+'</span>'
+    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',1)">+</button></div></div></div>'
+    +'<div class="v8section"><div class="v8metric-row"><div class="v8side-read ce"><span class="v8case-chip '+s.ceClass+'">'+s.ceRead+'</span></div>'
+    +'<div class="v8strike-badge">'+s.strikeRange+'</div><div class="v8side-read pe"><span class="v8case-chip '+s.peClass+'">'+s.peRead+'</span></div></div></div>'
+    +'<div class="v8section"><div class="v8cc-wrap">'+s.ccCapsules.map(function(c){return '<span class="v8cc-capsule '+c.cls+'">'+c.txt+'</span>';}).join('')+'</div></div>'
+    +'<div class="v8section"><div class="v8plan-row"><span class="v8plan-cap target">'+s.planTarget+'</span><span class="v8plan-cap stop">'+s.planStop+'</span>'
+    +'<span class="v8plan-cap hold">'+s.planHold+'</span><span class="v8plan-cap exit">'+s.planExit+'</span></div></div>'
+    +'<div class="v8section"><div class="v8verdict"><div class="v8emoji">'+s.verdictEmoji+'</div><div class="v8txt">'+s.verdictTxt+'</div></div></div>';
+}
+function v8ToggleExpand(key){
+  v8ExpandedKey = (v8ExpandedKey===key) ? null : key;
+  v8RenderFeed();
+}
+function v8ChangeLots(key, delta){
+  var s=v8Signals.find(function(x){return x.key===key;});
+  if(!s) return;
+  s.lots=Math.max(0,s.lots+delta);
+  v8SaveSignals();
+  v8RenderFeed();
+  v8RenderHeaderStats();
+}
+function v8RenderFeed(){
+  var feed=document.getElementById('v8FeedList');
+  feed.innerHTML = v8Signals.map(function(s){
+    return v8SwipeWrap(s.key, v8BuildCompactCard(s));
+  }).join('');
+  v8AttachSwipeHandlers();
+  v8RenderHeaderStats();
+}
+function v8RenderHeaderStats(){
+  var capital=0, pnl=0;
+  v8Signals.forEach(function(s){
+    capital += s.entry * s.lots * s.lotSize;
+    pnl += v8PnlOf(s);
+  });
+  var capEl=document.getElementById('v8CapitalVal');
+  var pnlEl=document.getElementById('v8PnlVal');
+  if(capEl) capEl.textContent=v8Fmt(capital);
+  if(pnlEl){
+    pnlEl.textContent=v8Fmt(pnl);
+    pnlEl.className='v8stat-val '+(pnl>=0?'up':'down');
+  }
+}
 
 </script>
 
