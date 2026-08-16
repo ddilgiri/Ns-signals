@@ -3231,6 +3231,7 @@ function v8WatchRealBaseline(){
   var progress=document.getElementById('splashProgress');
   var panel=document.getElementById('bulkDownloadPanel');
   v8Diag('v8WatchRealBaseline started, panel found='+(!!panel));
+  var v8ElapsedMs=0;
   var checkStart=setInterval(function(){
     var active = panel && panel.style.display !== 'none';
     if(active){
@@ -3255,9 +3256,8 @@ function v8WatchRealBaseline(){
       },400);
     } else {
       // Market closed or baseline already done today -- no download step needed, go straight in.
-      if(checkStart._elapsed===undefined) checkStart._elapsed=0;
-      checkStart._elapsed += 300;
-      if(checkStart._elapsed >= 4000){
+      v8ElapsedMs += 300;
+      if(v8ElapsedMs >= 4000){
         clearInterval(checkStart);
         v8Diag('fallback path firing, showing dashboard');
         document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
