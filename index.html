@@ -175,6 +175,8 @@
 .v8spot-block .v8chg.up{color:#0f9d58}
 .v8spot-block .v8chg.down{color:#d93025}
 .v8mid-col{display:flex;align-items:center;gap:8px;flex-shrink:0;margin:0 auto}
+.v8lot-row{display:flex;align-items:center;justify-content:space-between}
+.v8lot-row-lbl{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px}
 .v8lot-stepper{display:flex;align-items:center;gap:0;background:#fff;border:1px solid #e8e9ed;border-radius:8px;overflow:hidden}
 .v8lot-stepper button{width:24px;height:24px;border:none;background:#f3f4f7;font-size:14px;font-weight:800;color:#1d5fbf;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;padding:0}
 .v8lot-stepper button:active{background:#e5e7eb}
@@ -198,7 +200,7 @@
 .v8case-chip.amber{background:#fdf3e0;color:#b8860b}
 .v8strike-badge{font-size:13px;font-weight:800;color:#1d5fbf;background:#f3f4f7;padding:5px 10px;border-radius:8px;white-space:nowrap}
 .v8cc-wrap{display:flex;flex-wrap:wrap;gap:5px}
-.v8cc-capsule{font-size:9.5px;font-weight:800;padding:6px 5px;border-radius:8px;white-space:normal;flex:1 1 100%;min-width:0;text-align:center;line-height:1.25;word-break:break-word}
+.v8cc-capsule{font-size:9.5px;font-weight:800;padding:6px 5px;border-radius:5px;white-space:normal;flex:1 1 100%;min-width:0;text-align:center;line-height:1.25;word-break:break-word}
 @media (min-width:400px){.v8cc-capsule{flex:1 1 30%}}
 .v8cc-capsule.ok{background:#e6f6ec;color:#0f9d58}
 .v8cc-capsule.warn{background:#fdf3e0;color:#b8860b}
@@ -3586,7 +3588,7 @@ function v8BuildCompactCard(s){
 function v8BuildExpandedHTML(s){
   var pnl=v8PnlOf(s);
   var pnlCls=pnl>=0?'up':'down';
-  return '<div class="v8section"><div class="v8mid-col" style="margin:0 auto"><div class="v8lot-stepper">'
+  return '<div class="v8section"><div class="v8lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
     +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',1)">+</button></div></div></div>'
