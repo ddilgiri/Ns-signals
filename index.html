@@ -3186,6 +3186,7 @@ function v8WatchRealBaseline(){
     } else {
       // Market closed or baseline already done today -- no download step needed, go straight in.
       v8ElapsedMs += 300;
+      if(v8ElapsedMs===300||v8ElapsedMs===1500||v8ElapsedMs===3000) v8Diag('tick, elapsed='+v8ElapsedMs+', active='+active);
       if(v8ElapsedMs >= 4000){
         clearInterval(checkStart);
         v8Diag('fallback path firing, showing V8 dashboard');
