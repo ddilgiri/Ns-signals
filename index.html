@@ -297,7 +297,7 @@
 .v8stock-suggest-item{padding:9px 12px;font-size:13px;font-weight:700;color:#14181f;cursor:pointer}
 .v8stock-suggest-item:active{background:#f3f4f7}
 </style></head><body><div class="splash" id="splashScreen">
-  <button class="splash-setup-btn" id="splashSetupBtn">🔑</button>
+  <button class="splash-setup-btn" id="splashSetupBtn" onclick="v8OpenRealSetup()">🔑</button>
   <div class="splash-title">NS-Signals</div>
   <div class="splash-sub">Ramesh · Suresh · Mahesh · Naresh</div>
   <div class="splash-status" id="splashStatus">
@@ -3127,7 +3127,6 @@ document.getElementById('v8LoginBtn').onclick=function(){
   v8RenderSetupState();
   setTimeout(function(){
     document.getElementById('v8SetupScreen').style.display='none';
-    v8ResumeSplashAfterConnect();
   }, 700);
 };
 document.getElementById('v8SetupEdit').onclick=function(){
@@ -3137,34 +3136,88 @@ document.getElementById('v8SetupEdit').onclick=function(){
   localStorage.removeItem('v8mock-totp');
   v8RenderSetupState();
 };
-function v8ResumeSplashAfterConnect(){
+function v8OpenRealSetup(){
+  var splash=document.getElementById('splashScreen');
+  document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
+  showPage('setup', null);
+  if(splash) splash.style.display='none';
+}
+// Watches the REAL S.connected flag (set by real doLogin()) and updates the splash
+// status/progress genuinely -- no fake timers, no mock localStorage triggers.
+function v8PollRealConnect(){
   var splash=document.getElementById('splashScreen');
   var statusText=document.getElementById('splashStatusText');
   var progress=document.getElementById('splashProgress');
-  if(!splash) return;
-  splash.style.display='flex';
-  splash.classList.remove('hide');
-  var stages=['Connecting to Angel One…','Verifying credentials…','Connected'];
-  var i=0;
+  if(!splash || typeof S==='undefined') return;
+  var waited=0, maxWait=60000, pollMs=300;
   progress.style.width='10%';
+  statusText.textContent='Connecting to Angel One…';
   var iv=setInterval(function(){
-    statusText.textContent=stages[i];
-    progress.style.width=(30+i*35)+'%';
-    i++;
-    if(i>=stages.length){
+    waited+=pollMs;
+    if(waited===9000) statusText.textContent='Server waking up (free tier can take ~50s)…';
+    if(S.connected){
       clearInterval(iv);
-      setTimeout(function(){
-        splash.style.display='none';
-        document.getElementById('v8BaselineScreen').style.display='flex';
-        v8StartBaselineDownload(false);
-      },600);
+      statusText.textContent='Connected';
+      progress.style.width='100%';
+      setTimeout(v8WatchRealBaseline, 500);
+    } else if(waited>=maxWait){
+      clearInterval(iv);
+      statusText.textContent='Could not connect — tap 🔑 to check login';
     }
-  },900);
+  }, pollMs);
 }
-// On load: if mock credentials already saved, auto-run the connect status cycle on the splash.
+// Watches the REAL #bulkDownloadPanel (hidden, driven by real bulkDownload()) to know
+// when baseline download is running/done -- same real signal used elsewhere this session.
+function v8WatchRealBaseline(){
+  var splash=document.getElementById('splashScreen');
+  var statusText=document.getElementById('splashStatusText');
+  var progress=document.getElementById('splashProgress');
+  var panel=document.getElementById('bulkDownloadPanel');
+  var checkStart=setInterval(function(){
+    var active = panel && panel.style.display !== 'none';
+    if(active){
+      clearInterval(checkStart);
+      statusText.textContent='Setting up for today';
+      var poll=setInterval(function(){
+        var stillActive = panel.style.display !== 'none';
+        var pctEl=document.getElementById('dlPct');
+        var pct=parseInt((pctEl && pctEl.textContent)||'0',10)||0;
+        progress.style.width=pct+'%';
+        var statusTxt=document.getElementById('dlStatus');
+        if(statusTxt && statusTxt.textContent) statusText.textContent=statusTxt.textContent;
+        if(!stillActive){
+          clearInterval(poll);
+          statusText.textContent='Ready';
+          setTimeout(function(){
+            document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
+            showPage('signals', document.querySelector('.nav-item[onclick*="signals"]'));
+            splash.style.display='none';
+          },500);
+        }
+      },400);
+    } else {
+      // Market closed or baseline already done today -- no download step needed, go straight in.
+      if(checkStart._elapsed===undefined) checkStart._elapsed=0;
+      checkStart._elapsed += 300;
+      if(checkStart._elapsed >= 4000){
+        clearInterval(checkStart);
+        document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display=''; });
+        showPage('signals', document.querySelector('.nav-item[onclick*="signals"]'));
+        splash.style.display='none';
+      }
+    }
+  }, 300);
+}
+// On load: if real saved credentials exist, real doLogin() auto-fires (existing logic,
+// untouched) -- start polling its real result to drive the splash. If no saved
+// credentials, the splash just waits for the user to tap the key icon.
 (function(){
-  if(localStorage.getItem('v8mock-client')){
-    setTimeout(v8ResumeSplashAfterConnect, 400);
+  var hasCreds = !!(localStorage.getItem('fxo-client') && localStorage.getItem('fxo-api') && localStorage.getItem('fxo-pass'));
+  if(hasCreds){
+    setTimeout(v8PollRealConnect, 1200);
+  } else {
+    var statusText=document.getElementById('splashStatusText');
+    if(statusText) statusText.textContent='Tap 🔑 to add your Angel One login';
   }
 })();
 
