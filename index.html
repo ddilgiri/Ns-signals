@@ -3571,6 +3571,94 @@ function v8LoadSignals(){
   }
 }
 
+// ===== REAL WIRING: derive tier badge + reasoning sentence from real signal fields =====
+// Locked rule (confirmed): checked top-to-bottom, first match wins.
+function v8DeriveTier(sig){
+  var wall = sig.ceWalls && sig.ceWalls[0];
+  var floor = sig.peFloors && sig.peFloors[0];
+  var biasMatches = (sig.type === 'CE' && sig.bias === 'BULLISH') || (sig.type === 'PE' && sig.bias === 'BEARISH');
+  var confirmingStrong = (sig.type === 'CE' && wall && wall.strength === 'STRONG') || (sig.type === 'PE' && floor && floor.strength === 'STRONG');
+  var rangeLocked = wall && floor && wall.strength === 'STRONG' && floor.strength === 'STRONG' && !biasMatches;
+  var flagCount = (sig.strikeFlags || []).length;
+
+  if(sig.staleMove){
+    return {tier:'stale', tierLabel:'🔴 STALE', tagCls:'warn',
+      verdictEmoji:'⚠️', verdictTxt:'The big move at '+sig.strike+' already happened and price has since gone flat — urgency is fading. Entering now carries late-entry risk.'};
+  }
+  if(flagCount >= 2 || sig.verdict === 'WEAK' || rangeLocked){
+    var reason = rangeLocked ? 'Call wall and Put wall are both holding at '+sig.strike+' — sellers winning both sides, market pinned in range.'
+      : 'Multiple caution flags on this strike — no clear direction to trade right now.';
+    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip',
+      verdictEmoji:'⚠️', verdictTxt:reason+' No clear direction to trade right now.'};
+  }
+  if(sig.rameshTrapped || sig.sureshTrapped){
+    return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn',
+      verdictEmoji:'⚠️', verdictTxt:'Both CE and PE sides showing buying at '+sig.strike+' — the signal is fighting itself. If taking this, size down and use a tight stop.'};
+  }
+  if(sig.verdict !== 'WEAK' && confirmingStrong && biasMatches){
+    return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok',
+      verdictEmoji:'✅', verdictTxt:(sig.type==='CE'?'Buyers':'Sellers')+' building strong at '+sig.strike+', and Mahesh cross-check confirms the move — clean take with normal size.'};
+  }
+  return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok',
+    verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:(sig.type==='CE'?'Buyers':'Sellers')+' building strong at '+sig.strike+' — fresh move, no Mahesh cross-check yet. Reasonable entry, watch for confirmation.'};
+}
+
+// Converts one real S.signals entry into the v8 card data shape (compact + expanded views).
+function v8FromRealSignal(sig){
+  var t = v8DeriveTier(sig);
+  var wall = sig.ceWalls && sig.ceWalls[0];
+  var floor = sig.peFloors && sig.peFloors[0];
+  return {
+    key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
+    tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls,
+    entry: sig.entryPremium || sig.premium || 0,
+    spot: sig.spotPrice || 0,
+    ltp: sig.premium || sig.entryPremium || 0,
+    lots: sig.v8Lots != null ? sig.v8Lots : 0,
+    lotSize: sig.lot || 1,
+    dim: (t.tier === 'stale' || t.tier === 'skip'),
+    ceRead: wall ? (wall.strength === 'STRONG' ? 'Sellers Winning' : 'Buyers Winning') : '--',
+    ceClass: wall && wall.strength === 'STRONG' ? 'red' : 'green',
+    peRead: floor ? (floor.strength === 'STRONG' ? 'Buyers Winning' : 'Sellers Winning') : '--',
+    peClass: floor && floor.strength === 'STRONG' ? 'green' : 'red',
+    strikeRange: (floor ? floor.strike : sig.strike) + '–' + (wall ? wall.strike : sig.strike),
+    ccCapsules: (sig.strikeFlags || []).slice(0,3).map(function(f){
+      var txt = typeof f === 'object' ? (f.label || f.type || '') : String(f);
+      return {cls:'warn', txt:'⚠️ '+txt.replace(/_/g,' ')};
+    }),
+    planTarget: sig.target1 ? '₹'+parseFloat(sig.target1).toLocaleString('en-IN',{maximumFractionDigits:2}) : '—',
+    planStop: sig.target2 ? '₹'+parseFloat(sig.target2).toLocaleString('en-IN',{maximumFractionDigits:2}) : '—',
+    planHold: sig.holdZone || '—',
+    planExit: sig.exitZone || '—',
+    verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt,
+    tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
+  };
+}
+
+// Pull current real signals into the v8 UI. Call this whenever S.signals changes
+// (after a real scan updates the array) to keep the dashboard cards in sync.
+function v8SyncFromRealSignals(){
+  if(typeof S === 'undefined' || !S.signals) return;
+  var existingLots = {};
+  v8Signals.forEach(function(s){ existingLots[s.key] = s.lots; });
+  v8Signals = S.signals.map(function(sig){
+    var card = v8FromRealSignal(sig);
+    if(existingLots[card.key] != null) card.lots = existingLots[card.key];
+    return card;
+  });
+  v8SaveSignals();
+  if(document.getElementById('v8DashboardScreen') && document.getElementById('v8DashboardScreen').style.display !== 'none'){
+    v8RenderFeed();
+  }
+}
+// Non-destructive wrap: real renderSignals() always runs first, unchanged; v8 sync runs after.
+// Same safe pattern used earlier this session for addLog() -- never replaces the original logic.
+var v8OrigRenderSignals = window.renderSignals;
+window.renderSignals = function(){
+  if(typeof v8OrigRenderSignals === 'function') v8OrigRenderSignals.apply(this, arguments);
+  try{ v8SyncFromRealSignals(); }catch(e){}
+};
+
 function v8BuildCompactCard(s){
   var pnl=v8PnlOf(s);
   var pnlCls=pnl>=0?'up':'down';
