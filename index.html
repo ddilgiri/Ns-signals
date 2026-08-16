@@ -3585,6 +3585,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item center"><span class="v8mid-lbl">P&amp;L</span><span class="v8pnl-val '+pnlCls+'">'+v8Fmt(pnl)+'</span></div>'
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
+    +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.tag+'</div>'
     +(v8ExpandedKey===s.key ? v8BuildExpandedHTML(s) : '')
     +'</div>';
@@ -3600,8 +3601,7 @@ function v8BuildExpandedHTML(s){
     +'<div class="v8strike-badge">'+s.strikeRange+'</div><div class="v8side-read pe"><span class="v8case-chip '+s.peClass+'">'+s.peRead+'</span></div></div></div>'
     +'<div class="v8section"><div class="v8cc-wrap">'+s.ccCapsules.map(function(c){return '<span class="v8cc-capsule '+c.cls+'">'+c.txt+'</span>';}).join('')+'</div></div>'
     +'<div class="v8section"><div class="v8plan-row"><span class="v8plan-cap target">'+s.planTarget+'</span><span class="v8plan-cap stop">'+s.planStop+'</span>'
-    +'<span class="v8plan-cap hold">'+s.planHold+'</span><span class="v8plan-cap exit">'+s.planExit+'</span></div></div>'
-    +'<div class="v8section"><div class="v8mcard-tag-small '+s.tagCls+'">'+s.tag+'</div></div>';
+    +'<span class="v8plan-cap hold">'+s.planHold+'</span><span class="v8plan-cap exit">'+s.planExit+'</span></div></div>';
 }
 function v8ToggleExpand(key){
   v8ExpandedKey = (v8ExpandedKey===key) ? null : key;
