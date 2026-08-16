@@ -1129,7 +1129,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // specific setup, not meaningful for general individual-stock signal scoring. Weight set to 0
 // rather than deleting the block, so gammaBlast data can still be computed/displayed elsewhere
 // without contributing to the score or shifting MAX_SCORE's meaning for any other component.
-const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:0,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:15,supertrend:8,rsi:8,macd:4,aboveVwap:8,orbBreakout:6,volumeConfirm:10,newsSentiment:0,geoRisk:0,oiMomentum:18,gammaBlast:0,dilipOIFormula:23},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);
   // REMOVED PER EXPLICIT USER DECISION (2026-08-13): the squeeze/exhaustion/thin 2-of-3 hard
   // block and the RANGE_LOCK standalone block (both originally added 2026-08-08 after the PGEL
@@ -1187,26 +1187,7 @@ else{
   n=Math.min(Math.max(Math.round(base+dirBonus+dryPenalty+oiVolBonus),0),t);
   o=baseNote+dirNote+dryNote+oiVolNote;
   s.volumeConfirm={earned:n,max:t,pass:n>=t*0.4,note:o};
-}}{const t=SIGNAL_WEIGHTS.instFlow;let n=0,o="";a?"BULLISH"===e.instBias?(n=t,o=`FII/DII bullish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bearish ₹${e.fiiNet}Cr`):"BEARISH"===e.instBias?(n=t,o=`FII/DII bearish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bullish ₹${e.fiiNet}Cr`),s.instFlow={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.pcrBias;if(e.pcr){let n=0,o="";a?"BULLISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bullish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bearish`):"BEARISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bearish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bullish`),s.pcrBias={earned:n,max:t,pass:n>=.5*t,note:o}}else s.pcrBias={earned:.5*t,max:t,pass:null,note:"PCR unavailable"}}{const t=SIGNAL_WEIGHTS.vixRegime,a=e.vixRegime||"UNKNOWN",n=e.vixValue;let o=0,r="";"VERY_LOW"===a?(o=t,r=`VIX ${n} — very low, cheap options ✓✓`):"LOW"===a?(o=t,r=`VIX ${n} — low, good conditions ✓`):"NORMAL"===a?(o=.7*t,r=`VIX ${n} — normal`):"ELEVATED"===a?(o=.4*t,r=`VIX ${n} — elevated, options pricey`):"HIGH"===a?(o=.1*t,r=`VIX ${n} — high, reduce size`):"EXTREME"===a?(o=0,r=`VIX ${n} — extreme, hard block`):(o=.5*t,r="VIX unknown — neutral"),s.vixRegime={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.newsSentiment,n=e.newsSentimentScore||50;let o=0,r="";a?n>=60?(o=t,r=`News bullish (${n}%) ✓`):n>=40?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bearish (${n}%)`):n<=40?(o=t,r=`News bearish (${n}%) ✓`):n<=60?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bullish (${n}%)`),s.newsSentiment={earned:o,max:t,pass:o>=.5*t,note:r}}{const t=SIGNAL_WEIGHTS.geoRisk,a=e.newsGeoRisk||0;let n=0,o="";0===a?(n=t,o="No geopolitical risk ✓"):a<=3?(n=.7*t,o=`Low geo risk (${a})`):a<=6?(n=.3*t,o=`Moderate geo risk (${a})`):(n=0,o=`High geo risk (${a}) — caution`),s.geoRisk={earned:n,max:t,pass:a<=6,note:o}}{
-// EXPIRY RISK scoring (replaces old expiryDay)
-const t=SIGNAL_WEIGHTS.expiryRisk;
-let exEarned=t,exNote="";
-const dte=e.daysToExpiry;
-// Use OI-analysis daysToExpiry (which reflects actual contract being scanned — next month on expiry day)
-// NOT isExpiryDay which always refers to current month expiry
-// dte = days to expiry of the CONTRACT being scanned
-// >5 = safe (normal trading), 1-5 = expiry week (caution), <=0 = expiry day (avoid)
-const tradingCurrentExpiry = typeof dte==="number" && dte <= 0;
-const inExpiryWeek = typeof dte==="number" && dte > 0 && dte <= 5;
-const safeContract = typeof dte!=="number" || dte > 5;
-if(tradingCurrentExpiry){
-  exEarned=0;exNote="⚠️ Expiry day contract — avoid, switch to next";
-} else if(inExpiryWeek){
-  exEarned=Math.round(t*0.3);exNote=`⚠️ Expiry week (${dte}d left) — gamma elevated, reduce size`;
-} else {
-  exEarned=t;exNote=`Safe contract (${typeof dte==="number"?dte+"d":"?"} to expiry) ✓`;
-}
-s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};}
+}}{const t=SIGNAL_WEIGHTS.newsSentiment,n=e.newsSentimentScore||50;let o=0,r="";a?n>=60?(o=t,r=`News bullish (${n}%) ✓`):n>=40?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bearish (${n}%)`):n<=40?(o=t,r=`News bearish (${n}%) ✓`):n<=60?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bullish (${n}%)`),s.newsSentiment={earned:o,max:t,pass:o>=.5*t,note:r}}{const t=SIGNAL_WEIGHTS.geoRisk,a=e.newsGeoRisk||0;let n=0,o="";0===a?(n=t,o="No geopolitical risk ✓"):a<=3?(n=.7*t,o=`Low geo risk (${a})`):a<=6?(n=.3*t,o=`Moderate geo risk (${a})`):(n=0,o=`High geo risk (${a}) — caution`),s.geoRisk={earned:n,max:t,pass:a<=6,note:o}}
 // ── ATM DISTANCE scoring (bonus factor, not in weights — adjusts score quality)
 // Adds up to 5 bonus points if spot is close to strike (ATM signal = higher probability)
 {const spotPrice=e.ltp||0;const strikePrice=e.atmStrike||e.strike||0;
@@ -1265,32 +1246,6 @@ omNote+=` (${oiH.snapCount} snaps, ${oiH.firstSnap}→${oiH.lastSnap}${velNote})
 }
 s.oiMomentum={earned:omEarned,max:t,pass:omEarned>=t*0.5,note:omNote};
 }{
-// PCR DELTA SCORING — sudden PCR shift between scans
-// Uses oiTrendData.history PCR values (already available)
-const PCR_DELTA_MAX=SIGNAL_WEIGHTS.pcrDelta||8;
-let pcrDeltaEarned=0,pcrDeltaNote="No PCR history — neutral";
-try{
-  const hist=e.oiTrendData?.history;
-  if(hist&&hist.length>=2){
-    const latestPCR=hist[hist.length-1]?.pcr||0;
-    const prevPCR=hist[hist.length-2]?.pcr||0;
-    if(prevPCR>0){
-      const pcrShift=((latestPCR-prevPCR)/prevPCR)*100; // % change
-      if(a){// CE signal — rising PCR = Suresh arriving = bullish
-        if(pcrShift>=20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR spike +${pcrShift.toFixed(1)}% — Suresh army arriving ✓✓`;}
-        else if(pcrShift>=10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift ✓`;}
-        else if(pcrShift<=-15){pcrDeltaEarned=0;pcrDeltaNote=`PCR dropping ${pcrShift.toFixed(1)}% — bearish shift, CE caution`;}
-        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
-      }else{// PE signal — falling PCR = Ramesh arriving = bearish
-        if(pcrShift<=-20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR drop ${pcrShift.toFixed(1)}% — Ramesh army arriving ✓✓`;}
-        else if(pcrShift<=-10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR falling ${pcrShift.toFixed(1)}% — bearish shift ✓`;}
-        else if(pcrShift>=15){pcrDeltaEarned=0;pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift, PE caution`;}
-        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
-      }
-    }
-  }
-}catch(pcrErr){}
-s.pcrDelta={earned:pcrDeltaEarned,max:PCR_DELTA_MAX,pass:pcrDeltaEarned>=PCR_DELTA_MAX*0.4,note:pcrDeltaNote};
 }{
 // GAMMA BLAST scoring
 const t=SIGNAL_WEIGHTS.gammaBlast||0;
@@ -1714,7 +1669,7 @@ app.listen(PORT,()=>{
   console.log("╠══════════════════════════════════════════════════════════════╣");
   console.log(`║   Server  : http://localhost:${PORT}                                  ║`);
   console.log("║   v3.1: /market-status /oi-history /signal-log               ║");
-  console.log("║   v3.2: OI momentum in scoring · expiryRisk weight           ║");
+  console.log("║   v3.3: OI momentum in scoring · 100-total weights            ║");
   console.log("║   v3.4: VIX→GammaBlast, NSE cookie refresh, log persist      ║");
   console.log("║   v5.0: Volume scoring · notifications · zero-premium skip   ║");
   console.log("║   v5.1: PCR delta scoring · OI velocity bonus · banner sync  ║");
