@@ -3394,44 +3394,78 @@ function v8CloseFormSheet(){
 document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
 document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
 
-document.getElementById('v8SubmitManual').onclick=function(){
+document.getElementById('v8SubmitManual').onclick=async function(){
   var stock=document.getElementById('v8MStock').value||'TATASTEEL';
   var strike=document.getElementById('v8MStrike').value||'150';
   var entry=document.getElementById('v8MEntry').value||'5.20';
   var lots=document.getElementById('v8MLots').value||'2';
   document.getElementById('v8FormView').style.display='none';
   document.getElementById('v8LoadingView').style.display='block';
-  setTimeout(function(){
-    v8CloseFormSheet();
-    setTimeout(function(){
-      v8AddManualCardToFeed(stock, strike, v8SelectedSide, entry, lots);
-    },320);
-  },1400);
+  try{
+    await v8AddManualCardToFeed(stock, strike, v8SelectedSide, entry, lots);
+  }catch(err){
+    if(typeof addLog==='function') addLog('Manual check error: '+err.message,'err');
+    toast('⚠️ Manual check failed — check Activity Log');
+  }
+  v8CloseFormSheet();
 };
 
 var v8ManualCardCount=0;
-function v8AddManualCardToFeed(stock, strike, side, entry, lots){
+async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
+  var symUpper=stock.toUpperCase();
   var entryNum=parseFloat(entry)||0;
   var lotsNum=parseInt(lots,10)||1;
-  var lotSize=1;
+  var lotSize=1, token=null, isIndexSym=false;
   if(typeof NSE_STOCKS!=='undefined'){
-    var stk=NSE_STOCKS.find(function(x){return x.sym===stock.toUpperCase();});
-    if(stk) lotSize=stk.lot;
+    var stk=NSE_STOCKS.find(function(x){return x.sym===symUpper;});
+    if(stk){ lotSize=stk.lot; token=stk.token; }
   }
+  if(!token && typeof IDX_LIST!=='undefined'){
+    var idx=IDX_LIST.find(function(x){return x.sym===symUpper;});
+    if(idx){ lotSize=idx.lot; token=idx.token; isIndexSym=true; }
+  }
+  var liveSpot=(typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[symUpper]) ? LIVE_PRICES[symUpper] : entryNum;
+
+  // REAL analysis: call the same endpoints the auto scanner uses, for this specific stock/strike.
+  var real={};
+  if(token){
+    try{
+      var respA=await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbolToken:String(token),sym:symUpper,exchange:'NSE',isIndex:isIndexSym,spotPrice:liveSpot,type:side})});
+      var dataA=await respA.json();
+      if(dataA && dataA.status) real=dataA;
+    }catch(e){ if(typeof addLog==='function') addLog('Manual signal-analysis error: '+e.message,'warn'); }
+    try{
+      var respB=await fetch(getServer()+'/oi-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
+      var dataB=await respB.json();
+      if(dataB && dataB.status){
+        real.ceWalls = real.ceWalls && real.ceWalls.length ? real.ceWalls : (dataB.ceWalls||[]);
+        real.peFloors = real.peFloors && real.peFloors.length ? real.peFloors : (dataB.peFloors||[]);
+        real.rameshTrapped = real.rameshTrapped || dataB.rameshTrapped || false;
+        real.sureshTrapped = real.sureshTrapped || dataB.sureshTrapped || false;
+        real.strikeFlags = real.strikeFlags && real.strikeFlags.length ? real.strikeFlags : (dataB.strikeFlags||[]);
+      }
+    }catch(e){ if(typeof addLog==='function') addLog('Manual oi-analysis error: '+e.message,'warn'); }
+  }
+
   // Build a REAL signal object matching the shape the real scan engine produces,
   // so it works correctly with real renderSignals()/buildCard()/paper-trade logic
   // exactly like an auto-generated signal -- not a mock-only object.
   var realSig={
-    id: stock.toUpperCase()+'_'+side+'_'+Date.now(),
-    sym: stock.toUpperCase(), type: side, strike: parseFloat(strike)||0,
-    lot: lotSize, score: 60, verdict: 'MODERATE',
-    spotPrice: entryNum, premium: entryNum, entryPremium: entryNum,
+    id: symUpper+'_'+side+'_'+Date.now(),
+    sym: symUpper, type: side, strike: parseFloat(strike)||0,
+    lot: lotSize, score: real.score!=null ? real.score : 60, verdict: real.verdict || 'MODERATE',
+    spotPrice: liveSpot, premium: entryNum, entryPremium: entryNum,
     prevPremiumClose: 0, ts: Date.now(),
     isExpiry: false, isCommodity: false,
-    isManualCheck: true, // NEW real field -- distinguishes manual from auto signals
+    isManualCheck: true, // real field -- distinguishes manual from auto signals
     v8Lots: lotsNum, // used by v8FromRealSignal to seed the lot stepper
-    ceWalls: [], peFloors: [], strikeFlags: [], bias: 'NEUTRAL',
-    rameshTrapped: false, sureshTrapped: false, staleMove: false
+    ceWalls: real.ceWalls||[], peFloors: real.peFloors||[], strikeFlags: real.strikeFlags||[],
+    bias: real.bias || 'NEUTRAL',
+    rameshTrapped: real.rameshTrapped||false, sureshTrapped: real.sureshTrapped||false,
+    staleMove: real.staleMove||false, target1: real.target1, target2: real.target2,
+    holdZone: real.holdZone, exitZone: real.exitZone
   };
   if(typeof computeLevels === 'function'){
     try{ computeLevels(realSig); }catch(e){}
@@ -3445,6 +3479,7 @@ function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   } else {
     v8SyncFromRealSignals();
   }
+  toast(token ? '✅ Analysis complete' : '⚠️ Stock not found in F&O list — added with basic data only');
 }
 
 
@@ -3511,6 +3546,11 @@ function v8DeleteCard(btn){
   var key=wrap.dataset.key;
   v8Signals=v8Signals.filter(function(s){return s.key!==key;});
   v8SaveSignals();
+  // Also remove from the REAL signal array, so it doesn't silently reappear
+  // on the next scan cycle's v8SyncFromRealSignals() rebuild.
+  if(typeof S !== 'undefined' && S.signals){
+    S.signals = S.signals.filter(function(sig){ return sig.id !== key; });
+  }
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -3709,10 +3749,35 @@ function v8ToggleExpand(key){
 function v8ChangeLots(key, delta){
   var s=v8Signals.find(function(x){return x.key===key;});
   if(!s) return;
-  s.lots=Math.max(0,s.lots+delta);
+  var newLots=Math.max(0,s.lots+delta);
+  if(typeof S !== 'undefined' && S.paperTrades && typeof addPaperTrade === 'function' && typeof exitPaperTrade === 'function'){
+    var existingTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
+    if(delta > 0){
+      // "+" -- add one real lot via the real paper-trade function.
+      addPaperTrade({stopPropagation:function(){}}, key);
+    } else if(delta < 0 && existingTrade){
+      if(newLots <= 0){
+        // Reached zero -- close the real paper trade entirely.
+        exitPaperTrade(existingTrade.id);
+      } else {
+        // Real addPaperTrade only supports adding lots, not removing one at a time --
+        // reduce the local lot count and P&L basis directly for a partial decrease.
+        existingTrade.lotPrices = (existingTrade.lotPrices||[]).slice(0, newLots);
+        existingTrade.lots = existingTrade.lotPrices.length || newLots;
+        if(existingTrade.lotPrices.length){
+          existingTrade.avgPremium = existingTrade.lotPrices.reduce(function(a,b){return a+b;},0)/existingTrade.lotPrices.length;
+        }
+        existingTrade.pnl = ((existingTrade.currentPremium||existingTrade.avgPremium||0) - existingTrade.avgPremium) * existingTrade.lot * existingTrade.lots;
+        if(typeof savePaperTrades === 'function') savePaperTrades();
+        if(typeof renderTrades === 'function') renderTrades();
+      }
+    }
+  }
+  s.lots=newLots;
   v8SaveSignals();
   v8RenderFeed();
   v8RenderHeaderStats();
+  if(typeof updateAnalytics === 'function'){ try{ updateAnalytics(); }catch(e){} }
 }
 function v8RenderFeed(){
   var feed=document.getElementById('v8FeedList');
@@ -3724,10 +3789,21 @@ function v8RenderFeed(){
 }
 function v8RenderHeaderStats(){
   var capital=0, pnl=0;
-  v8Signals.forEach(function(s){
-    capital += s.entry * s.lots * s.lotSize;
-    pnl += v8PnlOf(s);
-  });
+  if(typeof S !== 'undefined' && S.paperTrades && S.paperTrades.length){
+    // Real paper trades are now the authoritative source once the lot stepper has
+    // created any -- avoids showing two different Capital/P&L numbers.
+    S.paperTrades.forEach(function(pt){
+      var avgP = pt.avgPremium || pt.entryPremium || 0;
+      var lots = pt.lots || 1;
+      capital += avgP * (pt.lot||1) * lots * 1.2;
+      pnl += pt.pnl || 0;
+    });
+  } else {
+    v8Signals.forEach(function(s){
+      capital += s.entry * s.lots * s.lotSize;
+      pnl += v8PnlOf(s);
+    });
+  }
   var capEl=document.getElementById('v8CapitalVal');
   var pnlEl=document.getElementById('v8PnlVal');
   if(capEl) capEl.textContent=v8Fmt(capital);
