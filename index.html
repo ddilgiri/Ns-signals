@@ -396,7 +396,7 @@
     </div>
   </div>
   <div class="v8summary-strip">
-    <div class="v8stat-card live"><div class="v8stat-val">7</div><div class="v8stat-lbl">Live Signals</div></div>
+    <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
     <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"></span>12s</div><div class="v8stat-lbl">Last Scan</div></div>
@@ -3876,6 +3876,8 @@ function v8RenderHeaderStats(){
     pnlEl.textContent=v8Fmt(pnl);
     pnlEl.className='v8stat-val '+(pnl>=0?'up':'down');
   }
+  var liveEl=document.getElementById('v8LiveSignalsVal');
+  if(liveEl) liveEl.textContent = (typeof S !== 'undefined' && S.signals) ? S.signals.length : v8Signals.length;
 }
 
 </script>
