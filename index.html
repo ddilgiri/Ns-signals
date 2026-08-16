@@ -377,7 +377,7 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
   <div class="v8dash-header">
     <h1>NS-Signals</h1>
     <div class="v8header-icons">
-      <button class="v8log-btn" id="v8LogBtn">📋<span class="v8log-btn-badge"></span></button>
+      <button class="v8log-btn" id="v8LogBtn">📋</button>
       <button class="v8gear-btn" id="v8GearBtn">⚙️</button>
     </div>
   </div>
@@ -459,9 +459,6 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
       <option value="CE">CE Only</option>
       <option value="PE">PE Only</option>
     </select>
-  </div>
-  <div class="v8settings-row" onclick="v8TriggerRefreshFno()" style="cursor:pointer">
-    <div class="v8label-block"><span class="lbl">🔄 Refresh F&amp;O Stock List</span><span class="sub" id="v8RefreshFnoSub">Re-pull the latest NSE F&amp;O universe</span></div>
   </div>
   <div class="v8settings-section-title">Manual Check</div>
   <div class="v8settings-row">
@@ -3560,17 +3557,35 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
     var idx=IDX_LIST.find(function(x){return x.sym===symUpper;});
     if(idx){ lotSize=idx.lot; token=idx.token; isIndexSym=true; }
   }
+  if(typeof getMarketStatus==='function' && !getMarketStatus().nseOpen){
+    if(typeof toast==='function') toast('⏰ Market is closed — manual analysis runs only during market hours (9:15 AM–3:30 PM IST)');
+    throw new Error('Market closed');
+  }
   var liveSpot=(typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[symUpper]) ? LIVE_PRICES[symUpper] : entryNum;
 
   // REAL analysis: call the same endpoints the auto scanner uses, for this specific stock/strike.
+  // If this genuinely fails, STOP here and tell the user why -- do not silently fall through
+  // to a placeholder card with fake score/verdict, which is what happened before.
   var real={};
-  if(token){
-    try{
-      var respA=await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({symbolToken:String(token),sym:symUpper,exchange:'NSE',isIndex:isIndexSym,spotPrice:liveSpot,type:side})});
-      var dataA=await respA.json();
-      if(dataA && dataA.status) real=dataA;
-    }catch(e){ if(typeof addLog==='function') addLog('Manual signal-analysis error: '+e.message,'warn'); }
+  if(!token){
+    if(typeof toast==='function') toast('⚠️ '+symUpper+' not found in F&O stock list');
+    throw new Error('Stock not found in F&O list: '+symUpper);
+  }
+  try{
+    var respA=await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({symbolToken:String(token),sym:symUpper,exchange:'NSE',isIndex:isIndexSym,spotPrice:liveSpot,type:side})});
+    var dataA=await respA.json();
+    if(!dataA || !dataA.status){
+      var msg=(dataA && dataA.message) ? dataA.message : 'Signal analysis failed';
+      if(typeof toast==='function') toast('❌ '+msg);
+      throw new Error(msg);
+    }
+    real=dataA;
+  }catch(e){
+    if(typeof addLog==='function') addLog('Manual signal-analysis error: '+e.message,'err');
+    throw e;
+  }
+  {
     try{
       var respB=await fetch(getServer()+'/oi-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
