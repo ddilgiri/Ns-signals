@@ -3138,6 +3138,27 @@ function v8OpenRealSetup(){
   showPage('setup', null);
   if(splash) splash.style.display='none';
 }
+// Non-destructive wrap: real doLogin() always runs first, completely unchanged --
+// after it finishes, if S.connected is genuinely true, return to the V8 splash/dashboard
+// flow instead of leaving the user stranded on the old real Setup page.
+var v8OrigDoLogin = window.doLogin;
+window.doLogin = async function(){
+  if(typeof v8OrigDoLogin === 'function') await v8OrigDoLogin.apply(this, arguments);
+  if(typeof S !== 'undefined' && S.connected){
+    setTimeout(function(){
+      var splash=document.getElementById('splashScreen');
+      if(!splash) return;
+      document.querySelectorAll('.pages,.topbar').forEach(function(el){ el.style.display='none'; });
+      splash.style.display='flex';
+      splash.classList.remove('hide');
+      var statusText=document.getElementById('splashStatusText');
+      var progress=document.getElementById('splashProgress');
+      if(statusText) statusText.textContent='Connected';
+      if(progress) progress.style.width='100%';
+      if(typeof v8WatchRealBaseline === 'function') v8WatchRealBaseline();
+    }, 900); // small delay so the user briefly sees the real "Connected" confirmation first
+  }
+};
 // Watches the REAL S.connected flag (set by real doLogin()) and updates the splash
 // status/progress genuinely -- no fake timers, no mock localStorage triggers.
 function v8PollRealConnect(){
