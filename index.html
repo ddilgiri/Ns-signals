@@ -74,6 +74,58 @@
 .v8baseline-retry-btn{padding:11px 28px;border-radius:11px;border:none;background:#7e22ce;color:#fff;font-size:13.5px;font-weight:800;cursor:pointer}
 .v8baseline-retry-btn:active{opacity:.85}
 .v8baseline-attempt-note{font-size:10.5px;color:#6b7280;margin-top:10px;font-weight:600}
+.v8wrap{width:100%;max-width:460px;margin:0 auto;overflow-x:hidden;padding:14px 12px 40px;background:#fff;min-height:100vh}
+.v8dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.v8dash-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:#14181f}
+.v8header-icons{display:flex;gap:8px}
+.v8gear-btn,.v8log-btn{width:36px;height:36px;border-radius:50%;background:#fff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;position:relative}
+.v8gear-btn:active,.v8log-btn:active{background:#f3f4f7}
+.v8log-btn-badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#d93025;border:1.5px solid #fff}
+.v8summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.v8stat-card{background:#fff;border:1px solid #e8e9ed;border-radius:11px;padding:8px 5px;text-align:center}
+.v8stat-val{font-size:15px;font-weight:800;line-height:1.1;color:#14181f}
+.v8stat-lbl{font-size:8.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.v8stat-card.live .v8stat-val{color:#0f9d58}
+.v8stat-card.manual .v8stat-val{color:#7e22ce}
+.v8stat-card.pulse .v8stat-val{color:#1d5fbf;font-size:12px}
+.v8stat-card.scan .v8stat-val{color:#b8860b;font-size:11px}
+.v8scan-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#0f9d58;margin-right:4px;animation:v8pulse 1.5s infinite}
+@keyframes v8pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.v8feed-label{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;margin:0 3px 6px;display:flex;justify-content:space-between;align-items:center}
+.v8fab{position:fixed;right:20px;bottom:24px;width:52px;height:52px;border-radius:50%;background:#7e22ce;color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:400;line-height:1;box-shadow:0 4px 14px rgba(126,34,206,.4);cursor:pointer;border:none;z-index:30}
+.v8fab:active{transform:scale(.94)}
+.v8swipe-wrap{position:relative;margin-bottom:8px;border-radius:13px;overflow:hidden}
+.v8swipe-delete-bg{position:absolute;inset:0;background:#d93025;display:flex;align-items:stretch;justify-content:flex-end;border-radius:13px}
+.v8swipe-delete-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.v8swipe-delete-bg .v8del-icon{color:#fff;font-size:22px;font-weight:800;pointer-events:none}
+.v8swipe-target{position:relative;background:#fff;touch-action:pan-y;transition:transform .25s ease}
+.v8swipe-target.dragging{transition:none}
+.v8mcard{background:#fff;border-radius:13px;border:1px solid #e8e9ed;box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0;cursor:pointer}
+.v8mcard.dim{opacity:.7}
+.v8mcard-head{padding:9px 12px 7px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.v8mcard-id{display:flex;flex-direction:column;gap:3px}
+.v8mode-badge{display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:999px;width:fit-content}
+.v8mode-badge.auto{background:#e7f0fd;color:#1d5fbf}
+.v8mode-badge.manual{background:#f4e9fb;color:#7e22ce}
+.v8mcard-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.v8mcard-name-row h2{font-size:14.5px;margin:0;font-weight:800;color:#14181f}
+.v8pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px}
+.v8pill-ce{background:#e6f6ec;color:#0f9d58}
+.v8pill-pe{background:#fdeceb;color:#d93025}
+.v8tier-badge{font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0}
+.v8tier-badge.clear-plus{background:#e6f6ec;color:#0f9d58}
+.v8tier-badge.clear{background:#e6f6ec;color:#0f9d58}
+.v8tier-badge.mixed{background:#fdf3e0;color:#b8860b}
+.v8tier-badge.stale{background:#fdeceb;color:#d93025}
+.v8tier-badge.skip{background:#f3f4f7;color:#6b7280}
+.v8mcard-mid{padding:0 12px 8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#6b7280;font-weight:600}
+.v8mcard-mid .v8ltp{font-weight:800;font-size:12.5px}
+.v8mcard-mid .v8ltp.up{color:#0f9d58}
+.v8mcard-mid .v8ltp.down{color:#d93025}
+.v8mcard-tag{margin:0 10px 10px;font-size:10.5px;font-weight:700;padding:6px 9px;border-radius:8px;line-height:1.35}
+.v8mcard-tag.ok{background:#e6f6ec;color:#0f9d58}
+.v8mcard-tag.warn{background:#fdf3e0;color:#b8860b}
+.v8mcard-tag.skip{background:#fdeceb;color:#d93025}
 </style></head><body><div class="splash" id="splashScreen">
   <button class="splash-setup-btn" id="splashSetupBtn">🔑</button>
   <div class="splash-title">NS-Signals</div>
@@ -164,6 +216,26 @@
   </div>
 </div>
 
+<div id="v8DashboardScreen" style="display:none">
+<div class="v8wrap">
+  <div class="v8dash-header">
+    <h1>NS-Signals</h1>
+    <div class="v8header-icons">
+      <button class="v8log-btn" id="v8LogBtn">📋<span class="v8log-btn-badge"></span></button>
+      <button class="v8gear-btn" id="v8GearBtn">⚙️</button>
+    </div>
+  </div>
+  <div class="v8summary-strip">
+    <div class="v8stat-card live"><div class="v8stat-val">7</div><div class="v8stat-lbl">Live Signals</div></div>
+    <div class="v8stat-card manual"><div class="v8stat-val">2</div><div class="v8stat-lbl">Manual Checks</div></div>
+    <div class="v8stat-card pulse"><div class="v8stat-val">BULLISH</div><div class="v8stat-lbl">PCR Bias</div></div>
+    <div class="v8stat-card scan"><div class="v8stat-val"><span class="v8scan-dot"></span>12s</div><div class="v8stat-lbl">Last Scan</div></div>
+  </div>
+  <div class="v8feed-label"><span>Today's Feed</span><span>Tap a card for details</span></div>
+  <div id="v8FeedList"></div>
+</div>
+<button class="v8fab" id="v8Fab">+</button>
+</div>
 <div class="topbar" style="display:none"><div class="logo"><div class="logo-icon" style="width:36px;height:36px;border-radius:8px;overflow:hidden;flex-shrink:0;border:1px solid rgba(255,255,255,0.1)"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAIBAQEBAQIBAQECAgICAgQDAgICAgUEBAMEBgUGBgYFBgYGBwkIBgcJBwYGCAsICQoKCgoKBggLDAsKDAkKCgr/2wBDAQICAgICAgUDAwUKBwYHCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgr/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9+2ZUUsxAAHJNcpp3xEvvF1pJrHgfS7eTSEBKa5qNyYoLgDq8KqpaSPr+8O1WxlSw5rzv9vHxh4zs/g5c/DT4b+Gr3VNZ8VwS2ZSw1BbVre0wBK5mdSE3blhB65myOhI89+Cvw5+NXxU/taw/aNs/E2j6Lb3lpLoen6Xcsgu0Q/vI5FjwkUI8sxiJQytEysGBZgPksyz3FQzqGX4ajN6XlNJKCdr2cnfo1pGLbbtdWZxvEp46NCzS0vJLRf8ADLWy32uj23RPj3Y6ppOp+KLG2j1bRtF1J7LWL/R1lZ7V0jSR3EToDNGqyKS0ZY9cK2DXfabqWn6xp8GraTfQ3VrdQrLbXNvIHjljYBldWHDKQQQRwQa+Av8AgoD4U/4Ki6f8QH8dfsafGq80/QNNs1GheB7HwY0FtGEh+d7q6xL5zEqQqCJ8ll4jALV69/wSa8a/Gm7+AGp/Cb9ozR47Lxh4O8T3lvOLXYbW4srl/tdtJblAFEIWZoljwrRLEqsicCvSwWY154r6tWg1p8Vkotrt7zeurSetl30X6NmHCWFw/ClLN6GLpVJPk56cXPnipLVyUoRVoytFuLavJLVJTl9O6nPaadZz6pcRHEULM7RrlyoBOBjkn0HvXifwQ+Ifxi8UaFZeNPi5Dp+iwahbGeHTkt1S5QNuKJKpcvEwXbuBGd3HHNe5XNtBeW72t1EHjkUq6nuDWJP8NPB9xoj+Hn0+YWjyiRo47+dCWAwDuVw3TtnBrqxWDr18XTrQqNRhf3U2lJu1uZLe1tNbau6Z8C6bnWjJyaS3t/lpe3qj4y/aE/bG/aX034h/Ebw/8HNPhin8Nx6TbfDfRI/AM2p/8JbdXESNczS3wlENtBHI/lkbkZRDIT2FfcGlJ9ps7bUL1baS6+zqHmtxlckDdsJyduff0rNufhv4PvNNtdJu9MeS3s0KQRveTHAJBOTvy3IH3ia24YYbeIQwRKiKMKiKAB+Aq8Lhq9GtOdSfMnstbLVvZ7b206JaXvf6TN83wOPwdDD4fCxpOmrOStzT92EfeajF7wc7NyfNOfvcvKl//9k=" style="width:100%;height:100%;object-fit:cover;border-radius:8px" alt="DILIP F&O"></div></div><div class="logo-text">DILIP F&amp;O</div><div class="time-pill closed" id="mPill">--:--:--</div><div class="spacer"></div><button class="scan-btn go" id="scanBtn" onclick="toggleScan()">▶ SCAN</button><div class="icons"><div class="icon-btn" id="themeBtn" onclick="toggleTheme()">🌙</div><div class="icon-btn" onclick="confirmClear()" title="Clear Signals">🗑️</div><div class="icon-btn" id="setupBtn" onclick='showPage("setup",null)' title="Setup">⚙️</div></div></div><div class="toptabs" style="display:none"><button class="nav-item active" onclick='showPage("signals",this)'><div class="nav-icon">🎯</div><span>Signals</span> <span class="nav-badge" id="sigBadge">0</span></button> <button class="nav-item" onclick='showPage("trades",this)'><div class="nav-icon">📋</div><span>Trades</span></button> <button class="nav-item" onclick='showPage("analyze",this)'><div class="nav-icon">💰</div><span>Capital</span></button> <button class="nav-item" onclick='showPage("logs",this)'><div class="nav-icon">📜</div><span>Logs</span></button></div><div class="pages"><div class="page active" id="pg-signals"><div id="bulkDownloadPanel" style="display:none;padding:16px 13px;background:var(--card);border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.8px">📥 Downloading baseline data</span><span id="dlPct" style="font-size:13px;font-weight:900;color:var(--blue);font-family:Roboto,sans-serif">0%</span></div><div style="height:8px;background:var(--border2);border-radius:4px;overflow:hidden"><div id="dlBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--blue),#60a5fa);border-radius:4px;transition:width .3s ease"></div></div><div style="display:flex;justify-content:space-between;margin-top:7px"><div id="dlStatus" style="font-size:11px;color:var(--text3);font-family:Roboto,sans-serif">Preparing…</div><div id="dlEta" style="font-size:10px;color:var(--text3);font-family:Roboto,sans-serif;flex-shrink:0"></div></div><div style="font-size:9px;color:var(--text3);margin-top:6px;line-height:1.4">One-time per session · builds a real baseline so flags work from the first scan, not just after · safe, throttled pace to avoid rate limits</div><div style="font-size:10px;color:var(--amber);margin-top:6px;font-weight:700;line-height:1.4">⚠️ Keep this app open and in foreground during download — switching to another app can pause network requests and cause failures</div><button id="dlRetryBtn" onclick="retryFailedBaseline()" style="display:none;margin-top:10px;width:100%;padding:8px;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber);border-radius:8px;font-size:11px;font-weight:800;cursor:pointer">🔁 Retry Failed Stocks</button></div><div class="mood-strip" id="moodStrip"><div class="mood-chip neutral">⏳ <span class="mv">Login to load indices</span></div></div><div class="mover-ticker" id="moverTicker"><div class="mover-row"><span class="mover-lbl">📈 Gainers</span><div class="mover-row-viewport"><div class="mover-row-inner" id="gainerRow"><span class="mover-item up">Scanning…</span></div></div></div><div class="mover-row"><span class="mover-lbl">📉 Losers</span><div class="mover-row-viewport"><div class="mover-row-inner" id="loserRow"><span class="mover-item down">Scanning…</span></div></div></div></div><div class="summary-bar"><div class="sum-item" id="sumBear"><div class="sum-num r" id="sBear">0</div><div class="sum-lbl">🔴 BEAR</div></div><div class="sum-item" id="sumBull"><div class="sum-num g" id="sBull">0</div><div class="sum-lbl">🟢 BULL</div></div><div class="sum-item" id="sumStrong"><div class="sum-num a" id="sStrong">0</div><div class="sum-lbl">🔥 STRONG</div></div><div class="sum-item" id="sumAll"><div class="sum-num b" id="sScanned">0</div><div class="sum-lbl">⚡ SCANNED</div></div></div><div class="filter-row"><div class="fpill active" id="pill-all" onclick='filterSigs("all",this)' style="background:rgba(59,130,246,.12);color:var(--blue);border-color:rgba(59,130,246,.4)">ALL</div><div class="fpill" id="pill-bear" onclick='filterSigs("bear",this)' style="background:rgba(239,68,68,.1);color:#ef4444;border-color:rgba(239,68,68,.35)">🔴 BEAR</div><div class="fpill" id="pill-bull" onclick='filterSigs("bull",this)' style="background:rgba(34,197,94,.1);color:#22c55e;border-color:rgba(34,197,94,.35)">🟢 BULL</div><div class="fpill" id="pill-strong" onclick='filterSigs("strong",this)' style="background:rgba(251,146,60,.1);color:#fb923c;border-color:rgba(251,146,60,.35)">🔥 STRONG</div><div class="fpill" id="pill-moderate" onclick='filterSigs("moderate",this)' style="background:rgba(245,158,11,.1);color:#f59e0b;border-color:rgba(245,158,11,.35)">✓ MOD</div></div><div class="scroll-area" id="sigList"><div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-title">No signals yet</div><div class="empty-sub">Login in Setup tab then tap ▶ SCAN<br>Engine scans 203 stocks + indices using<br>your Ramesh/Suresh OI framework</div></div></div></div><div class="page" id="pg-trades"><div class="sub-tabs"><div class="sub-tab active" onclick='switchSubTab("open-trades","closed-trades",this)'>Open (<span id="openCount">0</span>)</div><div class="sub-tab" onclick='switchSubTab("closed-trades","open-trades",this)'>Closed (<span id="closedCount">0</span>)</div></div><div id="open-trades" class="scroll-area"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No open paper trades</div><div class="empty-sub">Tap "Add to Paper Trade" on any signal card</div></div></div><div id="closed-trades" class="scroll-area hidden"><div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">No closed trades yet</div><div class="empty-sub">History appears here after closing trades</div></div></div></div><div class="page" id="pg-analyze"><div class="scroll-area"><div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr"><div class="stat-box"><div class="sb-val g" id="aWinRate">--%</div><div class="sb-lbl">Win Rate</div></div><div class="stat-box"><div class="sb-val" id="aTotalPnl" style="color:var(--text3)">₹0</div><div class="sb-lbl">Total P&amp;L</div></div><div class="stat-box"><div class="sb-val b" id="aTotalTrades">0</div><div class="sb-lbl">Trades</div></div><div class="stat-box"><div class="sb-val a" id="aBestSig">--%</div><div class="sb-lbl">Best Signal</div></div><div class="stat-box"><div class="sb-val" id="aDeployedCap" style="color:var(--blue)">₹0</div><div class="sb-lbl">Deployed Capital</div></div></div><div style="padding:10px 13px"><div class="ce-pe-split"><div class="split-box"><div class="split-val" id="aCeCount" style="color:var(--green)">0</div><div class="split-lbl">🟢 CE Signals</div></div><div class="split-box"><div class="split-val" id="aPeCount" style="color:var(--red)">0</div><div class="split-lbl">🔴 PE Signals</div></div><div class="split-box"><div class="split-val" id="aAvgScore" style="color:var(--blue)">--%</div><div class="split-lbl">Avg Score</div></div></div><div class="chart-wrap" style="margin-top:10px"><div class="chart-title">Signals by Time of Day</div><div class="time-chart" id="aTimeChart"><div style="color:var(--text3);font-size:11px;align-self:center">No signals yet</div></div><div class="tc-labels" id="aTimeLabels"></div></div><div class="chart-wrap"><div class="chart-title">By Stock — P&amp;L</div><div class="bar-chart" id="aStockChart"><div style="color:var(--text3);font-size:11px">No closed trades yet</div></div></div></div><div style="padding:0 13px"><div class="sec-lbl">By Stock — Paper Trades</div><div class="perf-box" id="perfBox"><div class="stk-row"><div><div class="sr-n">No trades yet</div><div class="sr-s">Paper trade to see performance</div></div><div class="sr-p" style="color:var(--text3)">₹0</div></div></div></div></div></div><div class="page" id="pg-logs"><div class="sub-tabs"><div class="sub-tab active" onclick='switchSubTab("signal-log-tab","activity-log-tab",this)'>📋 Signal Log</div><div class="sub-tab" onclick='switchSubTab("activity-log-tab","signal-log-tab",this)'>⚙️ Activity Log</div></div><div id="signal-log-tab" class="scroll-area"><div id="signal-log-panel"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No signal log yet</div><div class="empty-sub">Per-stock scan reasoning appears here once scanning starts</div></div></div></div><div id="activity-log-tab" class="scroll-area hidden"><div class="card"><div class="card-header"><span class="card-title">Activity Log</span> <span onclick="clearLog()" style="font-size:10px;color:var(--blue);cursor:pointer">Clear</span></div><div class="card-body" style="padding:10px"><div class="log-area" id="logArea" style="height:calc(100vh - 260px)"></div></div></div></div></div><div class="page" id="pg-setup"><div class="scroll-area"><div class="card"><div class="card-header"><span class="card-title">Angel One Connection</span> <span id="connStatus" style="font-size:10px;color:var(--text3)">Not connected</span></div><div class="card-body"><div class="field"><label class="field-lbl">Client Code</label><input class="field-inp" id="cfgClient" type="text" placeholder="Your Angel One client code" autocomplete="off"></div><div class="field"><label class="field-lbl">Password</label><input class="field-inp" id="cfgPass" type="password" placeholder="Your password"></div><div class="field"><label class="field-lbl">API Key</label><input class="field-inp" id="cfgApi" type="text" placeholder="Your API key" autocomplete="off"></div><div class="field"><label class="field-lbl">TOTP Secret (optional)</label><input class="field-inp" id="cfgTotp" type="text" placeholder="Auto 2FA — leave blank if manual" autocomplete="off"></div><button class="btn-primary" id="loginBtn" onclick="doLogin()">🔐 Connect Angel One</button></div></div><div class="card"><div class="card-header"><span class="card-title">Scan Settings</span></div><div class="card-body"><div class="field"><label class="field-lbl">Min Confidence %</label><input class="field-inp" id="cfgMinConf" type="number" value="60" min="40" max="90"></div><div class="field"><label class="field-lbl">Max Capital ₹</label><input class="field-inp" id="cfgMaxCap" type="number" value="30000" min="5000" step="5000" placeholder="e.g. 30000"></div><div class="field"><label class="field-lbl">Signal Type</label> <select class="field-inp" id="cfgType"><option value="BOTH">Both CE &amp; PE</option><option value="CE">CE Only (Bullish)</option><option value="PE">PE Only (Bearish)</option></select></div><div class="field" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><label class="field-lbl" style="margin-bottom:0">🔔 Notifications</label><div id="notifToggle" onclick="toggleNotifMute()" style="width:44px;height:24px;border-radius:12px;background:var(--green);position:relative;cursor:pointer;transition:background .2s"><div id="notifToggleDot" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;left:23px;transition:left .2s"></div></div></div><button class="btn-primary" style="background:var(--card2);color:var(--text);border:1px solid var(--border)" onclick="refreshFnoList()" id="verifyTokBtn">🔄 Refresh F&amp;O Stock List</button><div id="verifyTokResult" style="margin-top:10px;font-size:11px"></div></div></div></div></div></div><script>const S={connected:!1,scanning:!1,scanInt:null,signals:[],filterMode:"all",scannedCount:0,paperTrades:[],closedPaperTrades:[]};
 // ── NOTIFICATION SYSTEM ──────────────────────────────────
 var _notifGranted=false,_zoneAlerted={};
@@ -2857,7 +2929,8 @@ function v8RunBaselineTick(count){
     document.getElementById('v8BaselineRing').style.strokeDashoffset='0';
     setTimeout(function(){
       screenEl.style.display='none';
-      toast('✅ Baseline complete (mock) — dashboard not yet built');
+      document.getElementById('v8DashboardScreen').style.display='block';
+      v8RenderFeed();
     },500);
     return;
   }
@@ -2878,6 +2951,93 @@ function v8RunBaselineTick(count){
 
 document.getElementById('v8BaselineRetryBtn').onclick=function(){ v8StartBaselineDownload(true); };
 document.getElementById('v8BaselineRefreshCard').onclick=function(){ toast('🔄 Refresh F&O List (mock) — not wired to real refreshFnoList yet'); };
+
+// ===== Stage 4: Dashboard (mock, using mock's own 5 real sample cards verbatim) =====
+document.getElementById('v8LogBtn').onclick=function(){ toast('📋 Activity Log — not yet built'); };
+document.getElementById('v8GearBtn').onclick=function(){ toast('⚙️ Settings — not yet built'); };
+document.getElementById('v8Fab').onclick=function(){ toast('🖊️ Manual Check form — not yet built'); };
+
+function v8SwipeWrap(cardKey, innerHTML){
+  return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
+    + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
+    + '<div class="v8swipe-target">'+innerHTML+'</div></div>';
+}
+
+function v8RenderFeed(){
+  var feed=document.getElementById('v8FeedList');
+  feed.innerHTML =
+    v8SwipeWrap('ashokley','<div class="v8mcard" onclick="toast(\'Card detail — not yet built\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>ASHOKLEY</h2><span class="v8pill v8pill-ce">185 CE</span></div></div><span class="v8tier-badge clear-plus">🟢🤝 CLEAR+</span></div><div class="v8mcard-mid"><span>Entry ₹4.20</span><span class="v8ltp up">₹6.85 (+63%)</span></div><div class="v8mcard-tag ok">✅ Buyers building strong + Mahesh confirms</div></div>')
+  + v8SwipeWrap('sonacoms','<div class="v8mcard" onclick="toast(\'Card detail — not yet built\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>SONACOMS</h2><span class="v8pill v8pill-pe">620 PE</span></div></div><span class="v8tier-badge clear">🟢 CLEAR</span></div><div class="v8mcard-mid"><span>Entry ₹9.10</span><span class="v8ltp up">₹11.40 (+25%)</span></div><div class="v8mcard-tag ok">📈 Sellers building strong, fresh — no cross-check yet</div></div>')
+  + v8SwipeWrap('concor','<div class="v8mcard" onclick="toast(\'Card detail — not yet built\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span><div class="v8mcard-name-row"><h2>CONCOR</h2><span class="v8pill v8pill-ce">820 CE</span></div></div><span class="v8tier-badge mixed">🟡 MIXED</span></div><div class="v8mcard-mid"><span>Entry ₹6.50 · 2 lots</span><span class="v8ltp down">₹5.90 (−9%)</span></div><div class="v8mcard-tag warn">⚠️ Both sides showing buying — size down</div></div>')
+  + v8SwipeWrap('motherson','<div class="v8mcard dim" onclick="toast(\'Card detail — not yet built\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge auto">⚡ Auto</span><div class="v8mcard-name-row"><h2>MOTHERSON</h2><span class="v8pill v8pill-pe">175 PE</span></div></div><span class="v8tier-badge stale">🔴 STALE</span></div><div class="v8mcard-mid"><span>Entry ₹3.80</span><span class="v8ltp down">₹3.35 (−12%)</span></div><div class="v8mcard-tag warn">⚠️ Move looks late — urgency fading</div></div>')
+  + v8SwipeWrap('jublfood','<div class="v8mcard dim" onclick="toast(\'Card detail — not yet built\')"><div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span><div class="v8mcard-name-row"><h2>JUBLFOOD</h2><span class="v8pill v8pill-ce">510 CE</span></div></div><span class="v8tier-badge skip">🔒 SKIP</span></div><div class="v8mcard-mid"><span>Entry ₹11.60 · 2 lots</span><span class="v8ltp down">₹8.30 (−28%)</span></div><div class="v8mcard-tag skip">🚫 Call wall + Put wall both holding — pinned</div></div>');
+  v8AttachSwipeHandlers();
+}
+
+function v8AttachSwipeHandlers(){
+  document.querySelectorAll('.v8swipe-wrap').forEach(function(wrap){
+    var target=wrap.querySelector('.v8swipe-target');
+    if(target.dataset.swipeAttached) return;
+    target.dataset.swipeAttached='1';
+    var startX=0,currentX=0,dragging=false,moved=false;
+    var OPEN_X=-90;
+    target.addEventListener('touchstart',function(e){
+      startX=e.touches[0].clientX; dragging=true; moved=false;
+      target.classList.add('dragging');
+    },{passive:true});
+    target.addEventListener('touchmove',function(e){
+      if(!dragging) return;
+      currentX=e.touches[0].clientX-startX;
+      if(Math.abs(currentX)>8) moved=true;
+      if(currentX<0){ target.style.transform='translateX('+Math.max(currentX,OPEN_X)+'px)'; }
+    },{passive:true});
+    target.addEventListener('touchend',function(){
+      dragging=false;
+      target.classList.remove('dragging');
+      if(currentX<-35){
+        v8CloseAllSwipes(wrap);
+        target.style.transform='translateX('+OPEN_X+'px)';
+        target.classList.add('swipe-open');
+      } else {
+        target.style.transform='translateX(0)';
+        target.classList.remove('swipe-open');
+      }
+      currentX=0;
+    });
+    target.addEventListener('click',function(e){
+      if(moved){ e.stopPropagation(); e.preventDefault(); moved=false; return; }
+      if(target.classList.contains('swipe-open')){
+        e.stopPropagation(); e.preventDefault();
+        target.style.transform='translateX(0)';
+        target.classList.remove('swipe-open');
+      }
+    },true);
+  });
+}
+function v8CloseAllSwipes(exceptWrap){
+  document.querySelectorAll('.v8swipe-target.swipe-open').forEach(function(t){
+    if(exceptWrap && t.closest('.v8swipe-wrap')===exceptWrap) return;
+    t.style.transform='translateX(0)';
+    t.classList.remove('swipe-open');
+  });
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.v8swipe-wrap')){ v8CloseAllSwipes(null); }
+});
+function v8DeleteCard(btn){
+  var wrap=btn.closest('.v8swipe-wrap');
+  if(!wrap) return;
+  wrap.style.overflow='hidden';
+  wrap.style.maxHeight=wrap.offsetHeight+'px';
+  requestAnimationFrame(function(){
+    wrap.style.transition='max-height .25s ease, margin .25s ease, opacity .2s ease';
+    wrap.style.opacity='0';
+    wrap.style.maxHeight='0px';
+    wrap.style.marginBottom='0px';
+  });
+  setTimeout(function(){ wrap.remove(); },300);
+}
+
 
 </script>
 
