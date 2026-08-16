@@ -257,6 +257,20 @@
 .v8mood-pill.moderate .score,.v8mood-pill.moderate .tier-tag{color:#1d5fbf}
 .v8mood-pill.weak .score,.v8mood-pill.weak .tier-tag{color:#b8860b}
 .v8mood-pill.trap .score,.v8mood-pill.trap .tier-tag{color:#d93025}
+.v8form-group{margin:0 4px 10px}
+.v8form-group label{display:block;font-size:10.5px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.v8form-row{display:flex;gap:8px}
+.v8form-row .v8form-group{flex:1}
+.v8side-toggle{display:flex;gap:6px}
+.v8side-toggle button{flex:1;padding:9px 0;border-radius:9px;border:1px solid #e8e9ed;background:#fff;font-size:13px;font-weight:800;color:#6b7280;cursor:pointer}
+.v8side-toggle button.active.ce{background:#e6f6ec;color:#0f9d58;border-color:#0f9d58}
+.v8side-toggle button.active.pe{background:#fdeceb;color:#d93025;border-color:#d93025}
+.v8form-submit{width:100%;padding:12px 0;border-radius:11px;border:none;background:#7e22ce;color:#fff;font-size:14px;font-weight:800;margin:6px 4px 4px;cursor:pointer}
+.v8form-submit:active{opacity:.85}
+.v8loading-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:18px 0;font-size:12.5px;font-weight:700;color:#6b7280}
+.v8spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid #e5e7eb;border-top-color:#7e22ce;animation:v8spin2 .7s linear infinite}
+@keyframes v8spin2{to{transform:rotate(360deg)}}
+.v8new-tag{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.3px;background:#7e22ce;color:#fff;padding:2px 6px;border-radius:5px;margin-left:6px;text-transform:uppercase}
 </style></head><body><div class="splash" id="splashScreen">
   <button class="splash-setup-btn" id="splashSetupBtn">🔑</button>
   <div class="splash-title">NS-Signals</div>
@@ -366,6 +380,45 @@
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
+<div class="v8sheet-backdrop" id="v8FormBackdrop"></div>
+<div class="v8sheet" id="v8FormSheet">
+  <div class="v8sheet-handle"></div>
+  <div class="v8sheet-close" id="v8FormClose">✕</div>
+  <div id="v8FormView">
+    <div class="v8form-title">🖊️ Manual Check</div>
+    <div class="v8form-group">
+      <label>Stock</label>
+      <input class="v8form-input" id="v8MStock" placeholder="e.g. TATASTEEL" value="TATASTEEL">
+    </div>
+    <div class="v8form-row">
+      <div class="v8form-group">
+        <label>Strike</label>
+        <input class="v8form-input" id="v8MStrike" placeholder="e.g. 150" value="150">
+      </div>
+      <div class="v8form-group">
+        <label>Side</label>
+        <div class="v8side-toggle">
+          <button type="button" class="active ce" id="v8BtnCE">CE</button>
+          <button type="button" id="v8BtnPE">PE</button>
+        </div>
+      </div>
+    </div>
+    <div class="v8form-row">
+      <div class="v8form-group">
+        <label>Entry Price</label>
+        <input class="v8form-input" id="v8MEntry" placeholder="e.g. 5.20" value="5.20">
+      </div>
+      <div class="v8form-group">
+        <label>Lots</label>
+        <input class="v8form-input" id="v8MLots" placeholder="e.g. 2" value="2">
+      </div>
+    </div>
+    <button class="v8form-submit" id="v8SubmitManual">Analyse This Trade</button>
+  </div>
+  <div id="v8LoadingView" style="display:none">
+    <div class="v8loading-row"><div class="v8spinner"></div> Running Ramesh/Suresh/Mahesh check…</div>
+  </div>
+</div>
 <div class="v8sheet-backdrop" id="v8Backdrop"></div>
 <div class="v8sheet" id="v8Sheet">
   <div class="v8sheet-handle"></div>
@@ -3274,7 +3327,88 @@ document.getElementById('v8DefaultLot').oninput=function(){
   localStorage.setItem('v8mock-defaultlot', this.value);
 };
 
-document.getElementById('v8Fab').onclick=function(){ toast('🖊️ Manual Check form — not yet built'); };
+document.getElementById('v8Fab').onclick=v8OpenFormSheet;
+
+// ===== Stage 8: Manual Check form (mock, matches mock's full flow) =====
+var v8SelectedSide='CE';
+document.getElementById('v8BtnCE').onclick=function(){ v8SetSide('CE'); };
+document.getElementById('v8BtnPE').onclick=function(){ v8SetSide('PE'); };
+function v8SetSide(side){
+  v8SelectedSide=side;
+  document.getElementById('v8BtnCE').classList.toggle('active', side==='CE');
+  document.getElementById('v8BtnCE').classList.toggle('ce', side==='CE');
+  document.getElementById('v8BtnPE').classList.toggle('active', side==='PE');
+  document.getElementById('v8BtnPE').classList.toggle('pe', side==='PE');
+}
+function v8OpenFormSheet(){
+  document.getElementById('v8FormView').style.display='block';
+  document.getElementById('v8LoadingView').style.display='none';
+  document.getElementById('v8FormBackdrop').classList.add('show');
+  document.getElementById('v8FormSheet').classList.add('show');
+}
+function v8CloseFormSheet(){
+  document.getElementById('v8FormBackdrop').classList.remove('show');
+  document.getElementById('v8FormSheet').classList.remove('show');
+}
+document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
+document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
+
+document.getElementById('v8SubmitManual').onclick=function(){
+  var stock=document.getElementById('v8MStock').value||'TATASTEEL';
+  var strike=document.getElementById('v8MStrike').value||'150';
+  var entry=document.getElementById('v8MEntry').value||'5.20';
+  var lots=document.getElementById('v8MLots').value||'2';
+  document.getElementById('v8FormView').style.display='none';
+  document.getElementById('v8LoadingView').style.display='block';
+  setTimeout(function(){
+    v8CloseFormSheet();
+    setTimeout(function(){
+      v8AddManualCardToFeed(stock, strike, v8SelectedSide, entry, lots);
+    },320);
+  },1400);
+};
+
+var v8ManualCardCount=0;
+function v8AddManualCardToFeed(stock, strike, side, entry, lots){
+  v8ManualCardCount++;
+  var cardKey='manual_'+v8ManualCardCount;
+  var pillClass=side==='CE'?'v8pill-ce':'v8pill-pe';
+  var readLabel=side==='CE'?['Buyers Winning','green','Sellers Winning','red']:['Sellers Winning','red','Buyers Winning','green'];
+
+  v8CardDetails[cardKey]={
+    modeLabel:'🖊️ Manual Check',modeClass:'manual',
+    name:stock.toUpperCase(),strikeSide:strike+' '+side,pillClass:pillClass,
+    capCap:'₹—',capTime:'Now',capEntry:'₹'+entry,
+    ltp:'₹'+entry,chg:'₹0.00 (0.0%)',chgClass:'up',
+    spot:'₹—',spotChg:'— (—)',spotClass:'up',
+    lots:lots,pnl:'₹0',pnlClass:'up',confBadge:'📈 FRESH',
+    ceRead:readLabel[0],ceClass:readLabel[1],peRead:readLabel[2],peClass:readLabel[3],
+    strikeRange:strike,
+    ccCapsules:[{cls:'warn',txt:'📈 Fresh signal, building'},{cls:'warn',txt:'🧭 No cross-check yet'},{cls:'warn',txt:'✅ Take with normal size'}],
+    planTarget:'—',planStop:'—',planHold:'—',planExit:'—',
+    verdictEmoji:'📈',verdictTxt:stock.toUpperCase()+' '+strike+' '+side+' is showing a fresh buildup with no Mahesh cross-check yet — sample illustrative result, not live data.'
+  };
+
+  var wrap=document.createElement('div');
+  wrap.className='v8swipe-wrap';
+  wrap.dataset.key=cardKey;
+  wrap.innerHTML='<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div><div class="v8swipe-target"></div>';
+  var target=wrap.querySelector('.v8swipe-target');
+  var card=document.createElement('div');
+  card.className='v8mcard';
+  card.style.cursor='pointer';
+  card.onclick=function(){ v8OpenSheet(cardKey); };
+  card.innerHTML='<div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge manual">🖊️ Manual</span>'
+    +'<div class="v8mcard-name-row"><h2>'+stock.toUpperCase()+'</h2><span class="v8pill '+pillClass+'">'+strike+' '+side+'</span><span class="v8new-tag">New</span></div></div>'
+    +'<span class="v8tier-badge clear">🟢 CLEAR</span></div>'
+    +'<div class="v8mcard-mid"><span>Entry ₹'+entry+' · '+lots+' lots</span><span class="v8ltp up">₹'+entry+'</span></div>'
+    +'<div class="v8mcard-tag ok">📈 Fresh signal, no cross-check yet — sample result</div>';
+  target.appendChild(card);
+  var feed=document.getElementById('v8FeedList');
+  feed.insertBefore(wrap, feed.firstChild);
+  v8AttachSwipeHandlers();
+}
+
 
 function v8SwipeWrap(cardKey, innerHTML){
   return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
