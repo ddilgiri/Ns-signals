@@ -215,6 +215,48 @@
 .v8settings-section-title:first-of-type{margin-top:2px}
 .v8form-input{width:100%;padding:9px 11px;border-radius:9px;border:1px solid #e8e9ed;font-size:14px;font-weight:600;color:#14181f;background:#fff}
 .v8form-input:focus{outline:none;border-color:#7e22ce}
+.v8log-screen{position:fixed;inset:0;z-index:130;display:none;flex-direction:column;height:100vh;background:#fff}
+.v8log-screen.show{display:flex}
+.v8log-header{display:flex;align-items:center;gap:12px;padding:16px 16px 12px;border-bottom:1px solid #e8e9ed;background:#fff;flex-shrink:0}
+.v8log-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;flex:1;color:#14181f}
+.v8back-btn{width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:#14181f}
+.v8log-tabs{display:flex;background:#fff;border-bottom:1px solid #e8e9ed;flex-shrink:0}
+.v8log-tab{flex:1;text-align:center;padding:14px 0;font-size:14.5px;font-weight:800;color:#6b7280;cursor:pointer;border-bottom:2.5px solid transparent}
+.v8log-tab.active{color:#14181f;border-bottom-color:#7e22ce}
+.v8log-filter-row{display:flex;gap:6px;padding:12px 16px;overflow-x:auto;flex-shrink:0;background:#fff;border-bottom:1px solid #e8e9ed}
+.v8log-filter-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid #e8e9ed;background:#fff;color:#6b7280}
+.v8log-filter-chip.active{background:#14181f;color:#fff;border-color:#14181f}
+.v8log-list{flex:1;overflow-y:auto;padding:8px 16px 24px}
+.v8log-entry{display:flex;gap:10px;padding:12px 2px;border-bottom:1px solid #e8e9ed}
+.v8log-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.v8log-dot.signal{background:#0f9d58}
+.v8log-dot.scan{background:#1d5fbf}
+.v8log-dot.manual{background:#7e22ce}
+.v8log-dot.error{background:#d93025}
+.v8log-dot.trap{background:#b8860b}
+.v8log-content{flex:1;min-width:0}
+.v8log-text{font-size:14px;font-weight:600;color:#14181f;line-height:1.4}
+.v8log-time{font-size:11.5px;color:#6b7280;font-weight:600;margin-top:3px;font-family:'SF Mono','Courier New',monospace}
+.v8log-empty{text-align:center;padding:60px 20px;color:#6b7280;font-size:14px;font-weight:600}
+.v8stocks-search-row{padding:12px 16px;background:#fff;border-bottom:1px solid #e8e9ed;flex-shrink:0}
+.v8stocks-search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid #e8e9ed;font-size:15px;font-weight:600;color:#14181f;background:#f7f7f9}
+.v8stocks-search:focus{outline:none;border-color:#7e22ce}
+.v8stocks-table-head{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;padding:10px 14px;font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.2px;background:#fafafa;border-bottom:1px solid #e8e9ed;flex-shrink:0}
+.v8stocks-table-head .num{text-align:center}
+.v8stocks-list{flex:1;overflow-y:auto}
+.v8stock-row{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;align-items:center;padding:11px 14px;border-bottom:1px solid #e8e9ed;border-left:4px solid transparent}
+.v8stock-row.row-strong{background:#e6f6ec;border-left-color:#0f9d58}
+.v8stock-row.row-moderate{background:#e7f0fd;border-left-color:#1d5fbf}
+.v8stock-row.row-weak{background:#fdf3e0;border-left-color:#b8860b}
+.v8stock-row.row-trap{background:#fdeceb;border-left-color:#d93025}
+.v8stock-row .name{font-size:13.5px;font-weight:800;color:#14181f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v8mood-pill{display:flex;align-items:baseline;justify-content:center;gap:5px;border-radius:9px;padding:7px 4px;background:#fff}
+.v8mood-pill .score{font-size:15px;font-weight:700;font-family:'Space Grotesk',sans-serif}
+.v8mood-pill .tier-tag{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.2px}
+.v8mood-pill.strong .score,.v8mood-pill.strong .tier-tag{color:#0f9d58}
+.v8mood-pill.moderate .score,.v8mood-pill.moderate .tier-tag{color:#1d5fbf}
+.v8mood-pill.weak .score,.v8mood-pill.weak .tier-tag{color:#b8860b}
+.v8mood-pill.trap .score,.v8mood-pill.trap .tier-tag{color:#d93025}
 </style></head><body><div class="splash" id="splashScreen">
   <button class="splash-setup-btn" id="splashSetupBtn">🔑</button>
   <div class="splash-title">NS-Signals</div>
@@ -361,6 +403,34 @@
   <div class="v8settings-row">
     <div class="v8label-block"><span class="lbl">Scan cycle sound</span><span class="sub">Subtle tick every scan completion</span></div>
     <button class="v8toggle-switch" id="v8ToggleScanSound"><span class="knob"></span></button>
+  </div>
+</div>
+<div class="v8log-screen" id="v8LogScreenWrap">
+  <div class="v8log-header">
+    <button class="v8back-btn" id="v8LogBack">←</button>
+    <h1>Activity Log</h1>
+  </div>
+  <div class="v8log-tabs">
+    <div class="v8log-tab active" id="v8TabEvents">Events</div>
+    <div class="v8log-tab" id="v8TabStocks">All Stocks</div>
+  </div>
+  <div id="v8EventsView">
+    <div class="v8log-filter-row">
+      <button class="v8log-filter-chip active" data-filter="all">All</button>
+      <button class="v8log-filter-chip" data-filter="signal">Signals</button>
+      <button class="v8log-filter-chip" data-filter="trap">Weak/Trap</button>
+      <button class="v8log-filter-chip" data-filter="scan">Scans</button>
+      <button class="v8log-filter-chip" data-filter="manual">Manual</button>
+      <button class="v8log-filter-chip" data-filter="error">Errors</button>
+    </div>
+    <div class="v8log-list" id="v8LogList"></div>
+  </div>
+  <div id="v8StocksView" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="v8stocks-search-row">
+      <input class="v8stocks-search" id="v8StockSearch" placeholder="Search stock…">
+    </div>
+    <div class="v8stocks-table-head"><div>Stock</div><div class="num">CE</div><div class="num">PE</div></div>
+    <div class="v8stocks-list" id="v8StocksList"></div>
   </div>
 </div>
 </div>
@@ -3081,7 +3151,85 @@ document.getElementById('v8BaselineRetryBtn').onclick=function(){ v8StartBaselin
 document.getElementById('v8BaselineRefreshCard').onclick=function(){ toast('🔄 Refresh F&O List (mock) — not wired to real refreshFnoList yet'); };
 
 // ===== Stage 4: Dashboard (mock, using mock's own 5 real sample cards verbatim) =====
-document.getElementById('v8LogBtn').onclick=function(){ toast('📋 Activity Log — not yet built'); };
+document.getElementById('v8LogBtn').onclick=v8OpenLogScreen;
+
+// ===== Stage 7: Activity Log screen (mock, mock's own 16 log entries + 20 stock scores verbatim) =====
+var v8LogEntries=[
+  {type:'signal',text:'ASHOKLEY 185 CE flagged CLEAR+ — Mahesh confirmed',time:'11:14:02'},
+  {type:'trap',text:'SONACOMS 620 PE flagged OI_SPIKE — sudden jump after flat, possible squeeze trap',time:'11:12:47'},
+  {type:'scan',text:'Scan cycle completed (210 stocks, 4.1s)',time:'11:12:10'},
+  {type:'manual',text:'Manual check submitted: TATASTEEL 150 CE',time:'11:09:32'},
+  {type:'trap',text:'BAJFINANCE 7200 CE flagged EXHAUSTION — OI +340% off a real base, move already played out',time:'11:05:58'},
+  {type:'signal',text:'MOTHERSON 175 PE flagged STALE — urgency fading',time:'10:58:47'},
+  {type:'trap',text:'AXISBANK 1150 PE flagged THIN_SIGNAL — OI below liquidity gate, wall not trustworthy',time:'10:56:21'},
+  {type:'error',text:'Baseline download attempt 2 failed, retrying…',time:'10:55:19'},
+  {type:'trap',text:'MARUTI 11500 CE flagged SQUEEZE_URGENCY (unstable) — urgency spiking, case looks shaky',time:'10:55:03'},
+  {type:'scan',text:'Scan cycle completed (210 stocks, 3.8s)',time:'10:54:40'},
+  {type:'signal',text:'JUBLFOOD 510 CE flagged RANGE_LOCK — Call+Put wall holding, market pinned',time:'10:29:03'},
+  {type:'manual',text:'Manual check submitted: JUBLFOOD 510 CE',time:'10:28:51'},
+  {type:'signal',text:'CONCOR 820 CE flagged WALL_CRACKING — Case1 showing early cracks',time:'10:20:15'},
+  {type:'trap',text:'ICICIBANK 1080 PE flagged CHOP_RANGE — 20-candle efficiency 0.28, confidence reduced 15%',time:'10:11:40'},
+  {type:'scan',text:'Baseline download completed (210 stocks, 4m 02s)',time:'09:16:20'},
+  {type:'signal',text:'CONCOR 820 CE flagged MIXED — both CE and PE sides showing buying',time:'09:12:05'}
+];
+var v8LogFilterActive='all';
+function v8RenderLog(){
+  var list=document.getElementById('v8LogList');
+  var filtered=v8LogFilterActive==='all'?v8LogEntries:v8LogEntries.filter(function(e){return e.type===v8LogFilterActive;});
+  if(filtered.length===0){ list.innerHTML='<div class="v8log-empty">No entries for this filter yet.</div>'; return; }
+  list.innerHTML=filtered.map(function(e){
+    return '<div class="v8log-entry"><div class="v8log-dot '+e.type+'"></div><div class="v8log-content"><div class="v8log-text">'+e.text+'</div><div class="v8log-time">'+e.time+'</div></div></div>';
+  }).join('');
+}
+document.querySelectorAll('.v8log-filter-chip').forEach(function(chip){
+  chip.onclick=function(){
+    v8LogFilterActive=this.dataset.filter;
+    document.querySelectorAll('.v8log-filter-chip').forEach(function(c){c.classList.remove('active');});
+    this.classList.add('active');
+    v8RenderLog();
+  };
+});
+
+var v8AllStocksData=[
+  {name:'RELIANCE',ce:78,pe:35},{name:'TCS',ce:41,pe:58},{name:'HDFCBANK',ce:64,pe:29},{name:'INFY',ce:22,pe:71},
+  {name:'ICICIBANK',ce:52,pe:38},{name:'SBIN',ce:81,pe:18},{name:'ASHOKLEY',ce:88,pe:15},{name:'SONACOMS',ce:33,pe:69},
+  {name:'CONCOR',ce:61,pe:63},{name:'MOTHERSON',ce:28,pe:57},{name:'JUBLFOOD',ce:19,pe:66},{name:'TATASTEEL',ce:59,pe:44},
+  {name:'AXISBANK',ce:31,pe:53},{name:'BAJFINANCE',ce:76,pe:24},{name:'MARUTI',ce:73,pe:20},{name:'WIPRO',ce:45,pe:47},
+  {name:'ULTRACEMCO',ce:37,pe:55},{name:'HINDUNILVR',ce:49,pe:41},{name:'BHARTIARTL',ce:67,pe:32},{name:'KOTAKBANK',ce:43,pe:51}
+];
+function v8ScoreTier(v){ if(v>=75)return'strong'; if(v>=60)return'moderate'; if(v>=42)return'weak'; return'trap'; }
+function v8TierLabel(v){ var t=v8ScoreTier(v); return t.charAt(0).toUpperCase()+t.slice(1); }
+function v8RenderStocks(){
+  var q=(document.getElementById('v8StockSearch').value||'').toUpperCase().trim();
+  var filtered=q?v8AllStocksData.filter(function(s){return s.name.indexOf(q)>=0;}):v8AllStocksData;
+  var list=document.getElementById('v8StocksList');
+  if(filtered.length===0){ list.innerHTML='<div class="v8log-empty">No stocks match your search.</div>'; return; }
+  list.innerHTML=filtered.map(function(s){
+    var bestScore=Math.max(s.ce,s.pe);
+    var rowMood=v8ScoreTier(bestScore);
+    return '<div class="v8stock-row row-'+rowMood+'"><div class="name">'+s.name+'</div>'
+      +'<div class="v8mood-pill '+v8ScoreTier(s.ce)+'"><span class="score">'+s.ce+'</span><span class="tier-tag">'+v8TierLabel(s.ce)+'</span></div>'
+      +'<div class="v8mood-pill '+v8ScoreTier(s.pe)+'"><span class="score">'+s.pe+'</span><span class="tier-tag">'+v8TierLabel(s.pe)+'</span></div></div>';
+  }).join('');
+}
+document.getElementById('v8StockSearch').oninput=v8RenderStocks;
+document.getElementById('v8TabEvents').onclick=function(){ v8SwitchLogTab('events'); };
+document.getElementById('v8TabStocks').onclick=function(){ v8SwitchLogTab('stocks'); };
+function v8SwitchLogTab(tab){
+  document.getElementById('v8TabEvents').classList.toggle('active', tab==='events');
+  document.getElementById('v8TabStocks').classList.toggle('active', tab==='stocks');
+  document.getElementById('v8EventsView').style.display=tab==='events'?'block':'none';
+  document.getElementById('v8StocksView').style.display=tab==='stocks'?'flex':'none';
+  if(tab==='stocks') v8RenderStocks();
+}
+function v8OpenLogScreen(){
+  v8RenderLog();
+  document.getElementById('v8LogScreenWrap').classList.add('show');
+}
+document.getElementById('v8LogBack').onclick=function(){
+  document.getElementById('v8LogScreenWrap').classList.remove('show');
+};
+
 document.getElementById('v8GearBtn').onclick=v8OpenSettings;
 
 // ===== Stage 6: Settings sheet (mock, per confirmed pattern) =====
