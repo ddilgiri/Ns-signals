@@ -317,38 +317,6 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
   <div class="splash-progress-wrap"><div class="splash-progress-bar" id="splashProgress"></div></div>
   <div id="v8DebugTrail" style="margin-top:24px;font-size:9px;color:rgba(255,255,255,.5);text-align:left;max-width:280px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
 </div>
-<div class="v8setup-screen" id="v8SetupScreen" style="display:none">
-  <div class="v8setup-header">
-    <button class="v8setup-back" id="v8SetupBack">←</button>
-    <h1>Connection Setup</h1>
-  </div>
-  <div id="v8SetupFormView" style="display:flex;flex-direction:column">
-    <div class="v8setup-field">
-      <label>Client Code</label>
-      <input type="text" id="v8CfgClient" placeholder="Your Angel One client code" autocomplete="off">
-    </div>
-    <div class="v8setup-field">
-      <label>API Key</label>
-      <input type="text" id="v8CfgApi" placeholder="From Angel One SmartAPI dashboard" autocomplete="off">
-    </div>
-    <div class="v8setup-field">
-      <label>Password</label>
-      <input type="password" id="v8CfgPass" placeholder="Your Angel One password">
-    </div>
-    <div class="v8setup-field">
-      <label>TOTP Secret</label>
-      <input type="text" id="v8CfgTotp" placeholder="From your authenticator app setup" autocomplete="off">
-    </div>
-    <button class="v8setup-save-btn" id="v8LoginBtn">Save &amp; Connect</button>
-    <div id="v8SetupError" style="display:none;margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--red-bg);color:var(--red);font-size:12px;font-weight:700;text-align:center"></div>
-  </div>
-  <div id="v8SetupConnectedView" class="v8connected-state" style="display:none">
-    <div class="v8connected-icon">✓</div>
-    <div class="v8connected-title">Connected</div>
-    <div class="v8connected-sub" id="v8ConnStatus">NS-Signals will auto-connect using these saved credentials every time you open the app.</div>
-    <button class="v8edit-btn" id="v8SetupEdit">Edit Connection</button>
-  </div>
-</div>
 <div class="v8baseline-screen" id="v8BaselineScreen" style="display:none">
   <div id="v8BaselineProgressView" style="display:flex;flex-direction:column;height:100%">
     <div class="v8baseline-hero">
@@ -3100,49 +3068,6 @@ if(_v42RenderTrades) {
 console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 </script>
 <script>
-document.getElementById('v8SetupBack').onclick=function(){
-  document.getElementById('v8SetupScreen').style.display='none';
-};
-function v8RenderSetupState(){
-  var isConnected = !!localStorage.getItem('v8mock-client');
-  document.getElementById('v8SetupFormView').style.display = isConnected ? 'none' : 'flex';
-  document.getElementById('v8SetupConnectedView').style.display = isConnected ? 'flex' : 'none';
-  if(isConnected){
-    document.getElementById('v8CfgClient').value = localStorage.getItem('v8mock-client') || '';
-    document.getElementById('v8CfgApi').value = localStorage.getItem('v8mock-api') || '';
-    document.getElementById('v8CfgPass').value = localStorage.getItem('v8mock-pass') || '';
-    document.getElementById('v8CfgTotp').value = localStorage.getItem('v8mock-totp') || '';
-  }
-}
-document.getElementById('v8LoginBtn').onclick=function(){
-  var client=document.getElementById('v8CfgClient').value.trim();
-  var api=document.getElementById('v8CfgApi').value.trim();
-  var pass=document.getElementById('v8CfgPass').value.trim();
-  var totp=document.getElementById('v8CfgTotp').value.trim();
-  var errEl=document.getElementById('v8SetupError');
-  errEl.style.display='none';
-  if(!client||!api||!pass){
-    errEl.textContent='⚠️ Please fill Client ID, API Key and Password';
-    errEl.style.display='block';
-    return;
-  }
-  // Mock connect -- no real Angel One call yet, per explicit instruction.
-  localStorage.setItem('v8mock-client', client);
-  localStorage.setItem('v8mock-api', api);
-  localStorage.setItem('v8mock-pass', pass);
-  localStorage.setItem('v8mock-totp', totp);
-  v8RenderSetupState();
-  setTimeout(function(){
-    document.getElementById('v8SetupScreen').style.display='none';
-  }, 700);
-};
-document.getElementById('v8SetupEdit').onclick=function(){
-  localStorage.removeItem('v8mock-client');
-  localStorage.removeItem('v8mock-api');
-  localStorage.removeItem('v8mock-pass');
-  localStorage.removeItem('v8mock-totp');
-  v8RenderSetupState();
-};
 function v8Diag(msg){
   var el=document.getElementById('v8DebugTrail');
   var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
