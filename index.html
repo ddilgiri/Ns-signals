@@ -3411,9 +3411,6 @@ document.getElementById('v8SubmitManual').onclick=function(){
 
 var v8ManualCardCount=0;
 function v8AddManualCardToFeed(stock, strike, side, entry, lots){
-  v8ManualCardCount++;
-  var cardKey='manual_'+v8ManualCardCount;
-  var readLabel=side==='CE'?['Buyers Winning','green','Sellers Winning','red']:['Sellers Winning','red','Buyers Winning','green'];
   var entryNum=parseFloat(entry)||0;
   var lotsNum=parseInt(lots,10)||1;
   var lotSize=1;
@@ -3421,18 +3418,33 @@ function v8AddManualCardToFeed(stock, strike, side, entry, lots){
     var stk=NSE_STOCKS.find(function(x){return x.sym===stock.toUpperCase();});
     if(stk) lotSize=stk.lot;
   }
-  v8Signals.unshift({
-    key:cardKey,mode:'manual',name:stock.toUpperCase(),strike:parseFloat(strike)||0,type:side,
-    tier:'clear',tierLabel:'🟢 CLEAR',
-    entry:entryNum,spot:entryNum,ltp:entryNum,lots:lotsNum,lotSize:lotSize,dim:false,isNew:true,
-    ceRead:readLabel[0],ceClass:readLabel[1],peRead:readLabel[2],peClass:readLabel[3],strikeRange:String(strike),
-    ccCapsules:[{cls:'warn',txt:'📈 Fresh signal, building'},{cls:'warn',txt:'🧭 No cross-check yet'},{cls:'warn',txt:'✅ Take with normal size'}],
-    planTarget:'—',planStop:'—',planHold:'—',planExit:'—',
-    verdictEmoji:'📈',verdictTxt:stock.toUpperCase()+' '+strike+' '+side+' is showing a fresh buildup with no Mahesh cross-check yet — sample illustrative result, not live data.',
-    tag:'📈 Fresh signal, no cross-check yet — sample result',tagCls:'ok'
-  });
-  v8SaveSignals();
-  v8RenderFeed();
+  // Build a REAL signal object matching the shape the real scan engine produces,
+  // so it works correctly with real renderSignals()/buildCard()/paper-trade logic
+  // exactly like an auto-generated signal -- not a mock-only object.
+  var realSig={
+    id: stock.toUpperCase()+'_'+side+'_'+Date.now(),
+    sym: stock.toUpperCase(), type: side, strike: parseFloat(strike)||0,
+    lot: lotSize, score: 60, verdict: 'MODERATE',
+    spotPrice: entryNum, premium: entryNum, entryPremium: entryNum,
+    prevPremiumClose: 0, ts: Date.now(),
+    isExpiry: false, isCommodity: false,
+    isManualCheck: true, // NEW real field -- distinguishes manual from auto signals
+    v8Lots: lotsNum, // used by v8FromRealSignal to seed the lot stepper
+    ceWalls: [], peFloors: [], strikeFlags: [], bias: 'NEUTRAL',
+    rameshTrapped: false, sureshTrapped: false, staleMove: false
+  };
+  if(typeof computeLevels === 'function'){
+    try{ computeLevels(realSig); }catch(e){}
+  }
+  if(typeof S !== 'undefined' && S.signals){
+    S.signals.unshift(realSig);
+    S.signals.length>50 && S.signals.pop();
+  }
+  if(typeof renderSignals === 'function'){
+    renderSignals(); // real function (now wrapped) -- also triggers v8 sync automatically
+  } else {
+    v8SyncFromRealSignals();
+  }
 }
 
 
