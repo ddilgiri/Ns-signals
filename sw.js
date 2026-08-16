@@ -1,5 +1,8 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v2'; // bumped 2026-08-12 -- v1 was never invalidated across many index.html updates this session, likely serving stale cached HTML on user's phone (missing debug badges, old logic) despite fresh page reloads. Bump this version string on every future index.html change to force stale-cache invalidation.
+const CACHE = 'fno-v3'; // bumped -- fno-v2 was left unchanged since Aug 12 despite dozens of real
+// index.html fixes landing since (including the real login/splash wiring fix), causing the
+// same stale-cache trap documented in memory: phone kept serving old cached JS (mock forms,
+// dead functions) despite fresh reloads. Bump this on every future index.html change.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
