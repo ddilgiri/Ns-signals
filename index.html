@@ -3188,6 +3188,19 @@ function v8WatchRealBaseline(){
         if(statusTxt && statusTxt.textContent){
           var curStock=document.getElementById('v8BaselineCurrentStock');
           if(curStock) curStock.textContent=statusTxt.textContent;
+          // Real fix: v8BaselineCountNow (the big number in the ring) was never being
+          // updated -- extract the real "N/210" count from dlStatus's actual text.
+          var countMatch = statusTxt.textContent.match(/(\d+)\s*\/\s*210/);
+          if(countMatch){
+            var countEl=document.getElementById('v8BaselineCountNow');
+            if(countEl) countEl.textContent=countMatch[1];
+          }
+          // Real fix: attempt number should reflect the real "Pass X/3" text too.
+          var attemptMatch = statusTxt.textContent.match(/Pass\s*(\d+)\s*\/\s*3/);
+          if(attemptMatch){
+            var attemptEl=document.getElementById('v8BaselineAttemptStat');
+            if(attemptEl) attemptEl.textContent=attemptMatch[1];
+          }
         }
         if(!stillActive){
           clearInterval(poll);
