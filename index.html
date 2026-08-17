@@ -3770,6 +3770,13 @@ function v8DeleteCard(btn){
   if(typeof S !== 'undefined' && S.signals){
     S.signals = S.signals.filter(function(sig){ return sig.id !== key; });
   }
+  // If this card has a genuinely open real paper trade, close it too -- otherwise
+  // the trade-keeps-card-alive fallback in v8SyncFromRealSignals would resurrect
+  // this exact card on the very next scan sync, undoing the delete.
+  if(typeof S !== 'undefined' && S.paperTrades && typeof exitPaperTrade === 'function'){
+    var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
+    if(openTrade){ exitPaperTrade(openTrade.id); }
+  }
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -3940,10 +3947,11 @@ function v8FromRealSignal(sig){
 function v8SyncFromRealSignals(){
   if(typeof S === 'undefined' || !S.signals) return;
   var existingLots = {};
-  v8Signals.forEach(function(s){ existingLots[s.key] = s.lots; });
+  var previousCardsByKey = {};
+  v8Signals.forEach(function(s){ existingLots[s.key] = s.lots; previousCardsByKey[s.key] = s; });
   var showStale = localStorage.getItem('v8mock-showstale')==='1';
   var showMixed = localStorage.getItem('v8mock-showmixed')!=='0';
-  v8Signals = S.signals.map(function(sig){
+  var newSignals = S.signals.map(function(sig){
     var card = v8FromRealSignal(sig);
     if(existingLots[card.key] != null) card.lots = existingLots[card.key];
     return card;
@@ -3952,6 +3960,19 @@ function v8SyncFromRealSignals(){
     if(card.tier === 'mixed' && !showMixed) return false;
     return true;
   });
+  var newKeys = {};
+  newSignals.forEach(function(c){ newKeys[c.key] = true; });
+  // A signal that dropped out of this scan's S.signals should still show on the
+  // dashboard if it has a genuinely open real paper trade attached -- the trade
+  // itself is still real and open regardless of whether the stock re-qualifies.
+  if(typeof S.paperTrades !== 'undefined'){
+    S.paperTrades.forEach(function(pt){
+      if(!newKeys[pt.sigId] && previousCardsByKey[pt.sigId]){
+        newSignals.push(previousCardsByKey[pt.sigId]);
+      }
+    });
+  }
+  v8Signals = newSignals;
   v8SaveSignals();
   if(document.getElementById('v8DashboardScreen') && document.getElementById('v8DashboardScreen').style.display !== 'none'){
     v8RenderFeed();
