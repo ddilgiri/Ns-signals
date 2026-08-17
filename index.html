@@ -3962,13 +3962,21 @@ function v8FromRealSignal(sig){
   var t = v8DeriveTier(sig);
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
+  // Real fix: for an auto signal, v4AutoTrade() already creates a genuine paper trade
+  // with a real computed lot count (based on Max Capital setting) the moment the signal
+  // qualifies -- read that real lots value first, so the card and header stats reflect
+  // the actual auto-trade, matching the confirmed rule that signal card and trade are
+  // the same thing. Falls back to manual v8Lots (for Manual Check cards, which use a
+  // different real trade-creation path), then 0 if genuinely no trade exists yet.
+  var realTrade = (typeof S !== 'undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId === sig.id; }) : null;
+  var realLots = realTrade ? (realTrade.lots || 1) : (sig.v8Lots != null ? sig.v8Lots : 0);
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls,
     entry: sig.entryPremium || sig.premium || 0,
     spot: sig.spotPrice || 0,
     ltp: sig.premium || sig.entryPremium || 0,
-    lots: sig.v8Lots != null ? sig.v8Lots : 0,
+    lots: realLots,
     lotSize: sig.lot || 1,
     dim: (t.tier === 'stale' || t.tier === 'skip'),
     ceRead: wall ? (wall.strength === 'STRONG' ? 'Sellers Winning' : 'Buyers Winning') : '--',
