@@ -4004,10 +4004,24 @@ function v8SyncFromRealSignals(){
   var showStale = localStorage.getItem('v8mock-showstale')==='1';
   var showMixed = localStorage.getItem('v8mock-showmixed')!=='0';
   if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed);
+  // Build a quick lookup of which real signal ids have an open paper trade, so we
+  // know which cards to snapshot for persistence as we build them below.
+  var openTradeSigIds = {};
+  if(typeof S.paperTrades !== 'undefined'){
+    S.paperTrades.forEach(function(pt){ openTradeSigIds[pt.sigId] = pt; });
+  }
   var newSignals = S.signals.map(function(sig){
     var card = v8FromRealSignal(sig);
     if(typeof v8MDiag==='function') v8MDiag('sync: sig id='+sig.id+' sym='+sig.sym+' isManualCheck='+sig.isManualCheck+' -> tier='+card.tier);
     if(existingLots[card.key] != null) card.lots = existingLots[card.key];
+    // Real fix: if this signal has an open paper trade, snapshot its card data
+    // directly onto the trade object -- S.paperTrades is already saved to
+    // localStorage via savePaperTrades(), so this snapshot genuinely survives a
+    // full page reload, unlike v8Signals/previousCardsByKey which reset to empty
+    // on every fresh load.
+    if(openTradeSigIds[sig.id]){
+      openTradeSigIds[sig.id].v8CardSnapshot = card;
+    }
     return card;
   }).filter(function(card){
     if(card.tier === 'stale' && !showStale){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (stale, showStale off) key='+card.key); return false; }
@@ -4018,27 +4032,31 @@ function v8SyncFromRealSignals(){
   var newKeys = {};
   newSignals.forEach(function(c){ newKeys[c.key] = true; });
   // Any genuinely open real paper trade must have a visible card, regardless of
-  // whether its signal is currently in the filtered list. Real fix: this now covers
-  // ALL cases -- a signal auto-traded on its very first appearance (never previously
-  // rendered, so previousCardsByKey has nothing for it), a signal that dropped out
-  // of the latest scan, or one that got filtered by stale/mixed -- by building the
-  // card fresh from S.signals (bypassing the stale/mixed filter, since an open real
-  // trade should always be visible) if the underlying signal still exists there, only
-  // falling back to a previously-rendered card if the signal is genuinely gone too.
+  // whether its signal is currently in the filtered list. Real fix covers ALL cases,
+  // in order of preference: (1) signal still exists in this scan's S.signals --
+  // build fresh, bypassing stale/mixed filter since an open trade must stay visible;
+  // (2) a card was rendered earlier in this same browser session -- reuse it;
+  // (3) NEW: a persisted snapshot was saved onto the trade itself in a PAST session
+  // and survived reload via localStorage -- use that as the final real fallback,
+  // fixing the case where the app is freshly reopened and neither S.signals nor
+  // in-memory v8Signals have anything to reconstruct from.
   if(typeof S.paperTrades !== 'undefined'){
     S.paperTrades.forEach(function(pt){
       if(newKeys[pt.sigId]) return; // already showing
       var underlyingSig = S.signals.find(function(sig){ return sig.id === pt.sigId; });
-      var card = underlyingSig ? v8FromRealSignal(underlyingSig) : previousCardsByKey[pt.sigId];
+      var card = underlyingSig ? v8FromRealSignal(underlyingSig) : (previousCardsByKey[pt.sigId] || pt.v8CardSnapshot);
       if(card){
         if(existingLots[card.key] != null) card.lots = existingLots[card.key];
         newSignals.push(card);
         newKeys[card.key] = true;
-        if(typeof v8MDiag==='function') v8MDiag('sync: RESTORED card for open trade, sigId='+pt.sigId+' source='+(underlyingSig?'S.signals':'previousCard'));
+        if(!pt.v8CardSnapshot) pt.v8CardSnapshot = card; // save for future reloads too
+        var src = underlyingSig?'S.signals':(previousCardsByKey[pt.sigId]?'previousCard':'persistedSnapshot');
+        if(typeof v8MDiag==='function') v8MDiag('sync: RESTORED card for open trade, sigId='+pt.sigId+' source='+src);
       } else if(typeof v8MDiag==='function') {
-        v8MDiag('sync: could not restore card for open trade, sigId='+pt.sigId+' -- no real signal or previous card found');
+        v8MDiag('sync: could not restore card for open trade, sigId='+pt.sigId+' -- no real signal, previous card, or persisted snapshot found');
       }
     });
+    if(typeof savePaperTrades==='function'){ try{ savePaperTrades(); }catch(e){} }
   }
   v8Signals = newSignals;
   v8SaveSignals();
