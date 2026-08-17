@@ -3771,6 +3771,12 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real.rameshTrapped = oiAnalysisData.rameshTrapped||false;
           real.sureshTrapped = oiAnalysisData.sureshTrapped||false;
           real.strikeFlags = oiAnalysisData.strikeFlags||[];
+          // Real fix: extract this exact strike's real Case 1-8 classification
+          // (ceCase/peCase), now that the server sends it in chain[] -- needed for
+          // the confirmed buyer-perspective sentence logic.
+          var thisStrikeRow = chain.find(function(c){ return c.strike===typedStrike; });
+          real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
+          real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
         }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
@@ -3780,6 +3786,8 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       realSig.verdict = real.verdict || realSig.verdict;
       realSig.ceWalls = real.ceWalls || realSig.ceWalls;
       realSig.peFloors = real.peFloors || realSig.peFloors;
+      realSig.ceCase = real.ceCase!=null ? real.ceCase : realSig.ceCase;
+      realSig.peCase = real.peCase!=null ? real.peCase : realSig.peCase;
       realSig.rameshTrapped = real.rameshTrapped || false;
       realSig.sureshTrapped = real.sureshTrapped || false;
       realSig.strikeFlags = real.strikeFlags || realSig.strikeFlags;
@@ -3957,6 +3965,22 @@ function v8FmtOI(n){
   return String(n);
 }
 function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+// Real Case classification helper: server's classifyCase() returns 1/3/4/6/5/7/8/null
+// (see server.js) -- these map to your locked framework as:
+//   1, 3 = sellers winning (wall/floor holding)
+//   6    = buyers winning (wall/floor breaking)
+//   4    = building, OI up but direction unclear yet
+//   5, 7 = unwinding, no fresh positioning
+//   8    = short covering squeeze
+//   null = no data / too thin to classify
+function v8CaseGroup(c){
+  if(c===1||c===3) return 'SELLERS_WIN';
+  if(c===6) return 'BUYERS_WIN';
+  if(c===8) return 'SQUEEZE';
+  if(c===4) return 'BUILDING';
+  if(c===5||c===7) return 'UNWIND';
+  return 'NONE';
+}
 function v8DeriveTier(sig){
   if(sig.invalidStrike){
     var invalidStrikeVariants=[
@@ -3981,13 +4005,98 @@ function v8DeriveTier(sig){
     var staleDetail = '';
     var staleFlag = flags.find(function(f){ return (f.type||'').toUpperCase().indexOf('STALE')>=0; });
     if(staleFlag && staleFlag.detail) staleDetail = ' ('+staleFlag.detail+')';
+    var youSide = sig.type==='CE' ? 'Call' : 'Put';
     var staleVariants=[
       'The big move at '+sig.strike+' already happened and price has since gone flat'+staleDetail+' — urgency is fading. Entering now carries late-entry risk.',
-      sig.strike+' already made its move and has gone quiet'+staleDetail+' — this is a late entry, not a fresh one. Better to wait for the next real move.'
+      youSide+' buyers were winning at '+sig.strike+', but that move already happened and price has gone flat since. Late entry here is chasing, not fresh. Better to wait for the next confirmed move.'
     ];
     return {tier:'stale', tierLabel:'🔴 STALE', tagCls:'warn',
       verdictEmoji:'⚠️', verdictTxt:v8Pick(staleVariants)};
   }
+
+  // Real Case-based buyer-perspective logic -- only reachable when the server genuinely
+  // sent back ceCase/peCase for this strike (currently: Manual Check path only, since
+  // auto signals do not yet fetch per-strike Case data). Falls through to the existing
+  // wall/floor-strength logic below when this data is unavailable, so auto signals keep
+  // working exactly as before.
+  if(sig.ceCase!=null || sig.peCase!=null){
+    var ceGroup = v8CaseGroup(sig.ceCase);
+    var peGroup = v8CaseGroup(sig.peCase);
+    var yourGroup = sig.type==='CE' ? ceGroup : peGroup;
+    var otherGroup = sig.type==='CE' ? peGroup : ceGroup;
+    var yourLabel = sig.type==='CE' ? 'CE' : 'PE';
+    var otherLabel = sig.type==='CE' ? 'PE' : 'CE';
+
+    // Both squeezing at once -- #9
+    if(ceGroup==='SQUEEZE' && peGroup==='SQUEEZE'){
+      return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
+        verdictTxt:'Both Call and Put are showing short covering at '+sig.strike+' right now — a lot of forced buying on both sides, not real conviction. Very unstable, likely to reverse fast. Avoid or book instantly if taken.'};
+    }
+    // Squeeze on one side -- #7
+    if(yourGroup==='SQUEEZE' || otherGroup==='SQUEEZE'){
+      var squeezeOnYourSide = yourGroup==='SQUEEZE';
+      return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
+        verdictTxt: squeezeOnYourSide
+          ? 'Sharp move at '+sig.strike+' — but it\'s short covering, not fresh buying. Can work fast for a '+yourLabel+' buyer, but often reverses. Book quick, don\'t hold.'
+          : 'The move at '+sig.strike+' is a '+otherLabel+'-side squeeze, not something that helps a '+yourLabel+' buyer directly. Stay cautious.'};
+    }
+    // Both sides sellers winning -- range-lock, #4
+    if(ceGroup==='SELLERS_WIN' && peGroup==='SELLERS_WIN'){
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+        verdictTxt:'Sellers are controlling both sides at '+sig.strike+' — bad setup for a '+yourLabel+' buyer, no room to move '+(sig.type==='CE'?'up':'down')+'. Skip.'};
+    }
+    // Both sides buyers winning -- real conflict, #5
+    if(ceGroup==='BUYERS_WIN' && peGroup==='BUYERS_WIN'){
+      return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
+        verdictTxt:'Buyers are active on both Call and Put at '+sig.strike+' — real conflict, no clean edge for a '+yourLabel+' buyer right now. Size down or wait.'};
+    }
+    // Bullish agreement: CE buyers win + PE sellers win -- #3
+    if(ceGroup==='BUYERS_WIN' && peGroup==='SELLERS_WIN'){
+      if(sig.type==='CE'){
+        return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok', verdictEmoji:'✅',
+          verdictTxt:'Both sides agree this is bullish at '+sig.strike+' — good for a CE buyer, clean confirmed setup. Normal size is fine.'};
+      } else {
+        return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+          verdictTxt:'Both sides confirm bullish here — that\'s against a PE buyer. Better to skip PE at this strike.'};
+      }
+    }
+    // Bearish agreement: CE sellers win + PE buyers win -- #11
+    if(ceGroup==='SELLERS_WIN' && peGroup==='BUYERS_WIN'){
+      if(sig.type==='PE'){
+        return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok', verdictEmoji:'✅',
+          verdictTxt:'Both sides confirm bearish at '+sig.strike+' — good for a PE buyer, clean confirmed setup. Normal size is fine.'};
+      } else {
+        return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+          verdictTxt:'Both sides confirm bearish here — that\'s against a CE buyer. Better to skip CE at this strike.'};
+      }
+    }
+    // Your side confirmed, other side unclear -- #1/#2
+    if(yourGroup==='BUYERS_WIN' && (otherGroup==='UNWIND'||otherGroup==='BUILDING'||otherGroup==='NONE')){
+      return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok', verdictEmoji: sig.type==='CE'?'📈':'📉',
+        verdictTxt:yourLabel+' wall is breaking at '+sig.strike+' — buyers winning, good sign for a '+yourLabel+' buyer. But '+otherLabel+' side isn\'t confirming yet, so this is early. Watch closely.'};
+    }
+    if(yourGroup==='SELLERS_WIN' && (otherGroup==='UNWIND'||otherGroup==='BUILDING'||otherGroup==='NONE')){
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+        verdictTxt:yourLabel+' side shows sellers winning (wall/floor holding) at '+sig.strike+' — that works against a '+yourLabel+' buyer here. Not a good entry point right now. Wait.'};
+    }
+    // Other side confirmed, your side unclear
+    if(otherGroup==='BUYERS_WIN' || otherGroup==='SELLERS_WIN'){
+      return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok', verdictEmoji:'📊',
+        verdictTxt:otherLabel+' side shows '+(otherGroup==='BUYERS_WIN'?'buyers':'sellers')+' winning at '+sig.strike+' — no direct read for your '+yourLabel+' side yet. Nothing confirmed on '+yourLabel+'. Wait for a real '+yourLabel+'-side signal.'};
+    }
+    // Both unwinding, no fresh positioning -- #6
+    if(ceGroup==='UNWIND' && peGroup==='UNWIND'){
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+        verdictTxt:'No fresh positioning at '+sig.strike+' — nothing here supports a '+yourLabel+' buy right now. Wait for the next real move.'};
+    }
+    // Fallback: no classified case on either side, or too thin -- #8
+    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+      verdictTxt:'OI is too thin near '+sig.strike+' to trust any signal for a '+yourLabel+' buy. Skip until volume builds.'};
+  }
+
+  // Fallback: original wall/floor-strength logic, used when real Case data is not
+  // available (currently: all auto signals, since the scan engine does not yet fetch
+  // per-strike Case data the way Manual Check does).
   if(flagCount >= 2 || sig.verdict === 'WEAK' || rangeLocked){
     if(rangeLocked){
       var rangeVariants=[
@@ -4042,7 +4151,6 @@ function v8DeriveTier(sig){
     verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:v8Pick(clearVariants)};
 }
 
-// Converts one real S.signals entry into the v8 card data shape (compact + expanded views).
 function v8FromRealSignal(sig){
   var t = v8DeriveTier(sig);
   var wall = sig.ceWalls && sig.ceWalls[0];
