@@ -191,6 +191,7 @@
 .v8lot-row{display:flex;align-items:center;justify-content:space-between}
 .v8lot-row-lbl{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.3px}
 .v8lot-stepper{display:flex;align-items:center;gap:0;background:#fff;border:1px solid #e8e9ed;border-radius:8px;overflow:hidden}
+.v8mcard-lot-row{display:flex;align-items:center;justify-content:space-between;padding:0 10px 10px}
 .v8lot-stepper button{width:24px;height:24px;border:none;background:#f3f4f7;font-size:14px;font-weight:800;color:#1d5fbf;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;padding:0}
 .v8lot-stepper button:active{background:#e5e7eb}
 .v8lot-stepper .v8lot-val{min-width:26px;text-align:center;font-size:12px;font-weight:800;color:#1d5fbf;padding:0 2px}
@@ -4197,17 +4198,17 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
+    +'<div class="v8mcard-lot-row" onclick="event.stopPropagation()"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
+    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',-1)">−</button>'
+    +'<span class="v8lot-val">'+s.lots+'</span>'
+    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',1)">+</button></div></div>'
     +(v8ExpandedKey===s.key ? v8BuildExpandedHTML(s) : '')
     +'</div>';
 }
 function v8BuildExpandedHTML(s){
   var pnl=v8PnlOf(s);
   var pnlCls=pnl>=0?'up':'down';
-  return '<div class="v8section"><div class="v8lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
-    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',-1)">−</button>'
-    +'<span class="v8lot-val">'+s.lots+'</span>'
-    +'<button type="button" onclick="event.stopPropagation();v8ChangeLots(\''+s.key+'\',1)">+</button></div></div></div>'
-    +'<div class="v8section"><div class="v8metric-row"><div class="v8side-read ce"><span class="v8case-chip '+s.ceClass+'">'+s.ceRead+'</span></div>'
+  return '<div class="v8section"><div class="v8metric-row"><div class="v8side-read ce"><span class="v8case-chip '+s.ceClass+'">'+s.ceRead+'</span></div>'
     +'<div class="v8strike-badge">'+s.strikeRange+'</div><div class="v8side-read pe"><span class="v8case-chip '+s.peClass+'">'+s.peRead+'</span></div></div></div>'
     +'<div class="v8section"><div class="v8cc-wrap">'+s.ccCapsules.map(function(c){return '<span class="v8cc-capsule '+c.cls+'">'+c.txt+'</span>';}).join('')+'</div></div>'
     +'<div class="v8section"><div class="v8plan-row"><span class="v8plan-cap target">'+s.planTarget+'</span><span class="v8plan-cap stop">'+s.planStop+'</span>'
