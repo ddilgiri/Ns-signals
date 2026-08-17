@@ -4139,21 +4139,13 @@ async function v8TriggerRefreshFno(){
 }
 function v8RenderHeaderStats(){
   var capital=0, pnl=0;
-  if(typeof S !== 'undefined' && S.paperTrades && S.paperTrades.length){
-    // Real paper trades are now the authoritative source once the lot stepper has
-    // created any -- avoids showing two different Capital/P&L numbers.
-    S.paperTrades.forEach(function(pt){
-      var avgP = pt.avgPremium || pt.entryPremium || 0;
-      var lots = pt.lots || 1;
-      capital += avgP * (pt.lot||1) * lots * 1.2;
-      pnl += pt.pnl || 0;
-    });
-  } else {
-    v8Signals.forEach(function(s){
-      capital += s.entry * s.lots * s.lotSize;
-      pnl += v8PnlOf(s);
-    });
-  }
+  // Always sum from v8Signals -- the same source each card's own Entry/Spot/P&L/LTP
+  // values come from -- so the header total genuinely matches what's shown on screen,
+  // rather than switching to a different real-paper-trades source that could diverge.
+  v8Signals.forEach(function(s){
+    capital += s.entry * s.lots * s.lotSize;
+    pnl += v8PnlOf(s);
+  });
   var capEl=document.getElementById('v8CapitalVal');
   var pnlEl=document.getElementById('v8PnlVal');
   if(capEl) capEl.textContent=v8Fmt(capital);
