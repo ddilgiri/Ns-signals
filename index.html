@@ -4017,13 +4017,26 @@ function v8SyncFromRealSignals(){
   if(typeof v8MDiag==='function') v8MDiag('sync: after filter, newSignals.length='+newSignals.length);
   var newKeys = {};
   newSignals.forEach(function(c){ newKeys[c.key] = true; });
-  // A signal that dropped out of this scan's S.signals should still show on the
-  // dashboard if it has a genuinely open real paper trade attached -- the trade
-  // itself is still real and open regardless of whether the stock re-qualifies.
+  // Any genuinely open real paper trade must have a visible card, regardless of
+  // whether its signal is currently in the filtered list. Real fix: this now covers
+  // ALL cases -- a signal auto-traded on its very first appearance (never previously
+  // rendered, so previousCardsByKey has nothing for it), a signal that dropped out
+  // of the latest scan, or one that got filtered by stale/mixed -- by building the
+  // card fresh from S.signals (bypassing the stale/mixed filter, since an open real
+  // trade should always be visible) if the underlying signal still exists there, only
+  // falling back to a previously-rendered card if the signal is genuinely gone too.
   if(typeof S.paperTrades !== 'undefined'){
     S.paperTrades.forEach(function(pt){
-      if(!newKeys[pt.sigId] && previousCardsByKey[pt.sigId]){
-        newSignals.push(previousCardsByKey[pt.sigId]);
+      if(newKeys[pt.sigId]) return; // already showing
+      var underlyingSig = S.signals.find(function(sig){ return sig.id === pt.sigId; });
+      var card = underlyingSig ? v8FromRealSignal(underlyingSig) : previousCardsByKey[pt.sigId];
+      if(card){
+        if(existingLots[card.key] != null) card.lots = existingLots[card.key];
+        newSignals.push(card);
+        newKeys[card.key] = true;
+        if(typeof v8MDiag==='function') v8MDiag('sync: RESTORED card for open trade, sigId='+pt.sigId+' source='+(underlyingSig?'S.signals':'previousCard'));
+      } else if(typeof v8MDiag==='function') {
+        v8MDiag('sync: could not restore card for open trade, sigId='+pt.sigId+' -- no real signal or previous card found');
       }
     });
   }
