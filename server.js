@@ -11,8 +11,8 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // requests arrived at once with a cold/stale cache. This lock ensures only one
 // download happens at a time — concurrent callers wait for the same in-flight request.
 let _instrLoadPromise = null;
-async function ensureInstruments(reason) {
-  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
+async function ensureInstruments(reason, forceRefresh) {
+  if (!forceRefresh && SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
@@ -20,7 +20,7 @@ async function ensureInstruments(reason) {
   }
   _instrLoadPromise = (async () => {
     try {
-      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
+      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}${forceRefresh ? " (forced refresh)" : ""}...`, "INFO");
       const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:30000});
       SESSION._instruments = r.data;
       SESSION._instrFetchTime = Date.now();
@@ -1531,7 +1531,8 @@ app.post("/resolve-tokens",async(e,t)=>{try{await ensureInstruments("resolve-tok
 
 app.get("/fno-stock-list",async(req,res)=>{
   try{
-    await ensureInstruments("F&O list");
+    const forceRefresh = req.query.refresh === "1";
+    await ensureInstruments("F&O list", forceRefresh);
     const now=new Date();
     const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
     // Get unique stock names with future NFO options
