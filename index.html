@@ -3667,38 +3667,49 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   }
   v8MDiag('calling /oi-analysis...');
   {
+    var oiAnalysisData=null;
     try{
       var respB=await fetch(getServer()+'/oi-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
       v8MDiag('oi-analysis HTTP status: '+respB.status);
       var dataB=await respB.json();
       v8MDiag('oi-analysis response status field: '+(dataB?dataB.status:'no data')+' chain length: '+(dataB&&dataB.chain?dataB.chain.length:'n/a'));
-      if(dataB && dataB.status){
-        // Real strike validation: dataB.chain contains every genuinely tradeable strike
-        // in the current option chain window -- check the typed strike against it.
-        var typedStrike=parseFloat(strike);
-        var chain=dataB.chain||[];
-        var strikeExists=chain.some(function(c){ return c.strike===typedStrike; });
-        v8MDiag('typedStrike='+typedStrike+' strikeExists='+strikeExists+' chain sample: '+JSON.stringify(chain.slice(0,3).map(function(c){return c.strike;})));
-        if(chain.length && !strikeExists){
-          var nearby=chain.map(function(c){return c.strike;}).sort(function(a,b){return Math.abs(a-typedStrike)-Math.abs(b-typedStrike);}).slice(0,3).sort(function(a,b){return a-b;});
-          var msg=typedStrike+' is not a real strike for '+symUpper+'. Nearest available: '+nearby.join(', ');
-          v8MDiag('BLOCKED: '+msg);
-          if(typeof toast==='function') toast('❌ '+msg);
-          throw new Error(msg);
-        }
-        real.ceWalls = real.ceWalls && real.ceWalls.length ? real.ceWalls : (dataB.ceWalls||[]);
-        real.peFloors = real.peFloors && real.peFloors.length ? real.peFloors : (dataB.peFloors||[]);
-        real.rameshTrapped = real.rameshTrapped || dataB.rameshTrapped || false;
-        real.sureshTrapped = real.sureshTrapped || dataB.sureshTrapped || false;
-        real.strikeFlags = real.strikeFlags && real.strikeFlags.length ? real.strikeFlags : (dataB.strikeFlags||[]);
-      } else {
-        v8MDiag('oi-analysis did not return status:true, message: '+(dataB?dataB.message:'none') + ' -- continuing anyway since oi-analysis failure was never meant to block (only signal-analysis failure blocks)');
-      }
+      oiAnalysisData=dataB;
     }catch(e){
-      v8MDiag('EXCEPTION in oi-analysis block: '+e.message);
-      if(typeof addLog==='function') addLog('Manual oi-analysis error: '+e.message,'err');
-      throw e;
+      // Real fix: a genuine NETWORK/FETCH failure (e.g. timeout from contention with a
+      // live scan running concurrently, confirmed via diagnostic trail) must NOT abort
+      // card creation -- signal-analysis already succeeded with real data. This catch
+      // only covers the fetch/parse itself; strike validation runs separately below,
+      // outside this catch, so an invalid strike still correctly blocks per confirmed
+      // rule -- only a genuine network failure is treated as non-fatal.
+      v8MDiag('EXCEPTION in oi-analysis fetch (non-fatal): '+e.message+' -- continuing with signal-analysis data only');
+      if(typeof addLog==='function') addLog('Manual oi-analysis fetch error (non-fatal, continuing): '+e.message,'warn');
+    }
+    if(oiAnalysisData && oiAnalysisData.status){
+      var dataB=oiAnalysisData;
+      // Real strike validation: dataB.chain contains every genuinely tradeable strike
+      // in the current option chain window -- check the typed strike against it.
+      // This runs OUTSIDE the fetch try/catch above, so it still genuinely blocks
+      // when the strike is real but wrong, per confirmed rule -- only a network
+      // failure to reach oi-analysis at all is non-fatal, not a bad strike.
+      var typedStrike=parseFloat(strike);
+      var chain=dataB.chain||[];
+      var strikeExists=chain.some(function(c){ return c.strike===typedStrike; });
+      v8MDiag('typedStrike='+typedStrike+' strikeExists='+strikeExists+' chain sample: '+JSON.stringify(chain.slice(0,3).map(function(c){return c.strike;})));
+      if(chain.length && !strikeExists){
+        var nearby=chain.map(function(c){return c.strike;}).sort(function(a,b){return Math.abs(a-typedStrike)-Math.abs(b-typedStrike);}).slice(0,3).sort(function(a,b){return a-b;});
+        var msg=typedStrike+' is not a real strike for '+symUpper+'. Nearest available: '+nearby.join(', ');
+        v8MDiag('BLOCKED: '+msg);
+        if(typeof toast==='function') toast('❌ '+msg);
+        throw new Error(msg);
+      }
+      real.ceWalls = real.ceWalls && real.ceWalls.length ? real.ceWalls : (dataB.ceWalls||[]);
+      real.peFloors = real.peFloors && real.peFloors.length ? real.peFloors : (dataB.peFloors||[]);
+      real.rameshTrapped = real.rameshTrapped || dataB.rameshTrapped || false;
+      real.sureshTrapped = real.sureshTrapped || dataB.sureshTrapped || false;
+      real.strikeFlags = real.strikeFlags && real.strikeFlags.length ? real.strikeFlags : (dataB.strikeFlags||[]);
+    } else if(oiAnalysisData){
+      v8MDiag('oi-analysis did not return status:true, message: '+oiAnalysisData.message + ' -- continuing anyway since oi-analysis failure was never meant to block (only signal-analysis failure or a confirmed-invalid strike blocks)');
     }
   }
   v8MDiag('building real signal object and pushing to S.signals...');
