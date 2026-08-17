@@ -402,13 +402,13 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
     <div class="v8form-title">🖊️ Manual Check</div>
     <div class="v8form-group">
       <label>Stock</label>
-      <input class="v8form-input" id="v8MStock" placeholder="e.g. TATASTEEL" value="TATASTEEL" autocomplete="off" oninput="v8FilterStockSuggest()" onfocus="v8FilterStockSuggest()">
+      <input class="v8form-input" id="v8MStock" placeholder="e.g. TATASTEEL" value="" autocomplete="off" oninput="v8FilterStockSuggest()" onfocus="v8FilterStockSuggest()">
       <div class="v8stock-suggest" id="v8StockSuggest" style="display:none"></div>
     </div>
     <div class="v8form-row">
       <div class="v8form-group">
         <label>Strike</label>
-        <input class="v8form-input" id="v8MStrike" placeholder="e.g. 150" value="150">
+        <input class="v8form-input" id="v8MStrike" placeholder="e.g. 150" value="" autocomplete="off">
       </div>
       <div class="v8form-group">
         <label>Side</label>
@@ -421,11 +421,11 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
     <div class="v8form-row">
       <div class="v8form-group">
         <label>Entry Price</label>
-        <input class="v8form-input" id="v8MEntry" placeholder="e.g. 5.20" value="5.20">
+        <input class="v8form-input" id="v8MEntry" placeholder="e.g. 5.20" value="" autocomplete="off">
       </div>
       <div class="v8form-group">
         <label>Lots</label>
-        <input class="v8form-input" id="v8MLots" placeholder="e.g. 2" value="2">
+        <input class="v8form-input" id="v8MLots" placeholder="e.g. 2" value="" autocomplete="off">
       </div>
     </div>
     <button class="v8form-submit" id="v8SubmitManual">Analyse This Trade</button>
@@ -3590,11 +3590,15 @@ function v8MDiag(msg){
   console.log('[v8manualdiag]',msg);
 }
 document.getElementById('v8SubmitManual').onclick=function(){
-  var stock=document.getElementById('v8MStock').value||'TATASTEEL';
-  var strike=document.getElementById('v8MStrike').value||'150';
-  var entry=document.getElementById('v8MEntry').value||'5.20';
-  var lots=document.getElementById('v8MLots').value||'2';
+  var stock=document.getElementById('v8MStock').value.trim();
+  var strike=document.getElementById('v8MStrike').value.trim();
+  var entry=document.getElementById('v8MEntry').value.trim();
+  var lots=document.getElementById('v8MLots').value.trim()||'1';
   var side=v8SelectedSide;
+  if(!stock || !strike || !entry){
+    toast('⚠️ Please fill in Stock, Strike, and Entry Price');
+    return;
+  }
   // Per explicit confirmation: card appears on the dashboard IMMEDIATELY with the
   // user's typed data, no loading screen, no pending state. Real analysis then runs
   // in the background and updates this same card in place once it resolves.
