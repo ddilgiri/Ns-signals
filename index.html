@@ -3599,6 +3599,24 @@ document.getElementById('v8SubmitManual').onclick=function(){
     toast('⚠️ Please fill in Stock, Strike, and Entry Price');
     return;
   }
+  // Real validation: Strike, Entry Price, and Lots must genuinely be valid positive
+  // numbers -- previously only checked for non-empty, so garbage input (letters,
+  // negative values, zero) silently became 0/NaN downstream instead of a clear error.
+  var strikeNum=parseFloat(strike);
+  if(isNaN(strikeNum) || strikeNum<=0){
+    toast('⚠️ Strike must be a valid positive number');
+    return;
+  }
+  var entryNum=parseFloat(entry);
+  if(isNaN(entryNum) || entryNum<=0){
+    toast('⚠️ Entry Price must be a valid positive number');
+    return;
+  }
+  var lotsNum=parseInt(lots,10);
+  if(isNaN(lotsNum) || lotsNum<=0){
+    toast('⚠️ Lots must be a valid positive whole number');
+    return;
+  }
   // Per explicit confirmation: card appears on the dashboard IMMEDIATELY with the
   // user's typed data, no loading screen, no pending state. Real analysis then runs
   // in the background and updates this same card in place once it resolves.
