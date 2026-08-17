@@ -3776,34 +3776,63 @@ function v8LoadSignals(){
 
 // ===== REAL WIRING: derive tier badge + reasoning sentence from real signal fields =====
 // Locked rule (confirmed): checked top-to-bottom, first match wins.
+function v8FmtOI(n){
+  if(n==null) return '?';
+  if(n>=10000000) return (n/10000000).toFixed(1)+'Cr';
+  if(n>=100000) return (n/100000).toFixed(1)+'L';
+  if(n>=1000) return (n/1000).toFixed(0)+'K';
+  return String(n);
+}
 function v8DeriveTier(sig){
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
   var biasMatches = (sig.type === 'CE' && sig.bias === 'BULLISH') || (sig.type === 'PE' && sig.bias === 'BEARISH');
   var confirmingStrong = (sig.type === 'CE' && wall && wall.strength === 'STRONG') || (sig.type === 'PE' && floor && floor.strength === 'STRONG');
   var rangeLocked = wall && floor && wall.strength === 'STRONG' && floor.strength === 'STRONG' && !biasMatches;
-  var flagCount = (sig.strikeFlags || []).length;
+  var flags = sig.strikeFlags || [];
+  var flagCount = flags.length;
+  var side = sig.type==='CE' ? 'Buyers' : 'Sellers';
+  var confirmSide = sig.type==='CE' ? wall : floor;
+  var confirmLabel = sig.type==='CE' ? 'Call wall' : 'Put floor';
 
   if(sig.staleMove){
+    var staleDetail = '';
+    var staleFlag = flags.find(function(f){ return (f.type||'').toUpperCase().indexOf('STALE')>=0; });
+    if(staleFlag && staleFlag.detail) staleDetail = ' ('+staleFlag.detail+')';
     return {tier:'stale', tierLabel:'🔴 STALE', tagCls:'warn',
-      verdictEmoji:'⚠️', verdictTxt:'The big move at '+sig.strike+' already happened and price has since gone flat — urgency is fading. Entering now carries late-entry risk.'};
+      verdictEmoji:'⚠️', verdictTxt:'The big move at '+sig.strike+' already happened and price has since gone flat'+staleDetail+' — urgency is fading. Entering now carries late-entry risk.'};
   }
   if(flagCount >= 2 || sig.verdict === 'WEAK' || rangeLocked){
-    var reason = rangeLocked ? 'Call wall and Put wall are both holding at '+sig.strike+' — sellers winning both sides, market pinned in range.'
-      : 'Multiple caution flags on this strike — no clear direction to trade right now.';
-    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip',
-      verdictEmoji:'⚠️', verdictTxt:reason+' No clear direction to trade right now.'};
+    if(rangeLocked){
+      var reason='Call wall at '+wall.strike+' ('+v8FmtOI(wall.oi)+' OI) and Put floor at '+floor.strike+' ('+v8FmtOI(floor.oi)+' OI) are both holding strong — sellers winning both sides, market pinned in range.';
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:reason};
+    }
+    if(flagCount >= 2){
+      var flagNames = flags.slice(0,2).map(function(f){ return (f.label||f.type||'').replace(/_/g,' '); }).filter(Boolean);
+      var flagText = flagNames.length ? flagNames.join(' + ') : 'Multiple caution flags';
+      var detailText = flags[0] && flags[0].detail ? ' — '+flags[0].detail : '';
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+        verdictTxt:flagText+' on this strike'+detailText+'. No clear direction to trade right now.'};
+    }
+    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
+      verdictTxt:'Verdict came in WEAK on this scan — signal does not clear the confidence bar. Skip for now.'};
   }
   if(sig.rameshTrapped || sig.sureshTrapped){
+    var trapWho = sig.rameshTrapped && sig.sureshTrapped ? 'Both Call and Put sides' : sig.rameshTrapped ? 'Call side' : 'Put side';
+    var trapDetail = '';
+    if(wall && floor) trapDetail = ' (Call wall '+wall.strike+' at '+v8FmtOI(wall.oi)+' OI, Put floor '+floor.strike+' at '+v8FmtOI(floor.oi)+' OI)';
     return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn',
-      verdictEmoji:'⚠️', verdictTxt:'Both CE and PE sides showing buying at '+sig.strike+' — the signal is fighting itself. If taking this, size down and use a tight stop.'};
+      verdictEmoji:'⚠️', verdictTxt:trapWho+' showing conflicting buildup at '+sig.strike+trapDetail+' — the signal is fighting itself. If taking this, size down and use a tight stop.'};
   }
   if(sig.verdict !== 'WEAK' && confirmingStrong && biasMatches){
+    var confDetail = confirmSide ? confirmLabel+' at '+confirmSide.strike+' holding strong at '+v8FmtOI(confirmSide.oi)+' OI' : confirmLabel+' confirmed';
+    var scoreNote = sig.score!=null ? ' (score '+Math.round(sig.score)+'%)' : '';
     return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok',
-      verdictEmoji:'✅', verdictTxt:(sig.type==='CE'?'Buyers':'Sellers')+' building strong at '+sig.strike+', and Mahesh cross-check confirms the move — clean take with normal size.'};
+      verdictEmoji:'✅', verdictTxt:side+' building strong at '+sig.strike+scoreNote+' — '+confDetail+', and Mahesh cross-check confirms the move. Clean take with normal size.'};
   }
+  var freshDetail = confirmSide ? confirmLabel+' at '+confirmSide.strike+' ('+(confirmSide.strength||'building')+', '+v8FmtOI(confirmSide.oi)+' OI)' : 'fresh move';
   return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok',
-    verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:(sig.type==='CE'?'Buyers':'Sellers')+' building strong at '+sig.strike+' — fresh move, no Mahesh cross-check yet. Reasonable entry, watch for confirmation.'};
+    verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:side+' building at '+sig.strike+' — '+freshDetail+', no Mahesh cross-check yet. Reasonable entry, watch for confirmation.'};
 }
 
 // Converts one real S.signals entry into the v8 card data shape (compact + expanded views).
