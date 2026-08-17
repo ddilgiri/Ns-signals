@@ -3397,19 +3397,37 @@ document.querySelectorAll('.v8log-filter-chip').forEach(function(chip){
   };
 });
 
-var v8AllStocksData=[
-  {name:'RELIANCE',ce:78,pe:35},{name:'TCS',ce:41,pe:58},{name:'HDFCBANK',ce:64,pe:29},{name:'INFY',ce:22,pe:71},
-  {name:'ICICIBANK',ce:52,pe:38},{name:'SBIN',ce:81,pe:18},{name:'ASHOKLEY',ce:88,pe:15},{name:'SONACOMS',ce:33,pe:69},
-  {name:'CONCOR',ce:61,pe:63},{name:'MOTHERSON',ce:28,pe:57},{name:'JUBLFOOD',ce:19,pe:66},{name:'TATASTEEL',ce:59,pe:44},
-  {name:'AXISBANK',ce:31,pe:53},{name:'BAJFINANCE',ce:76,pe:24},{name:'MARUTI',ce:73,pe:20},{name:'WIPRO',ce:45,pe:47},
-  {name:'ULTRACEMCO',ce:37,pe:55},{name:'HINDUNILVR',ce:49,pe:41},{name:'BHARTIARTL',ce:67,pe:32},{name:'KOTAKBANK',ce:43,pe:51}
-];
+var v8AllStocksData=[];
+var v8AllStocksLoading=false;
+async function v8LoadAllStockScores(){
+  if(v8AllStocksLoading) return;
+  v8AllStocksLoading=true;
+  var list=document.getElementById('v8StocksList');
+  if(list) list.innerHTML='<div class="v8log-empty">Loading real scan data…</div>';
+  try{
+    var resp=await fetch(getServer()+'/all-stock-scores');
+    var data=await resp.json();
+    if(data && data.status){
+      v8AllStocksData=(data.stocks||[]).map(function(s){
+        return {name:s.sym, ce:s.ce!=null?s.ce:0, pe:s.pe!=null?s.pe:0};
+      });
+    } else {
+      v8AllStocksData=[];
+    }
+  }catch(e){
+    v8AllStocksData=[];
+    if(typeof addLog==='function') addLog('All Stocks fetch error: '+e.message,'err');
+  }
+  v8AllStocksLoading=false;
+  v8RenderStocks();
+}
 function v8ScoreTier(v){ if(v>=75)return'strong'; if(v>=60)return'moderate'; if(v>=42)return'weak'; return'trap'; }
 function v8TierLabel(v){ var t=v8ScoreTier(v); return t.charAt(0).toUpperCase()+t.slice(1); }
 function v8RenderStocks(){
   var q=(document.getElementById('v8StockSearch').value||'').toUpperCase().trim();
   var filtered=q?v8AllStocksData.filter(function(s){return s.name.indexOf(q)>=0;}):v8AllStocksData;
   var list=document.getElementById('v8StocksList');
+  if(!v8AllStocksData.length){ list.innerHTML='<div class="v8log-empty">No scan data yet — run a scan first, then check back here.</div>'; return; }
   if(filtered.length===0){ list.innerHTML='<div class="v8log-empty">No stocks match your search.</div>'; return; }
   list.innerHTML=filtered.map(function(s){
     var bestScore=Math.max(s.ce,s.pe);
@@ -3427,7 +3445,7 @@ function v8SwitchLogTab(tab){
   document.getElementById('v8TabStocks').classList.toggle('active', tab==='stocks');
   document.getElementById('v8EventsView').style.display=tab==='events'?'block':'none';
   document.getElementById('v8StocksView').style.display=tab==='stocks'?'flex':'none';
-  if(tab==='stocks') v8RenderStocks();
+  if(tab==='stocks') v8LoadAllStockScores();
 }
 function v8OpenLogScreen(){
   v8RenderLog();
