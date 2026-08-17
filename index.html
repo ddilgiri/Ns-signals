@@ -4061,12 +4061,21 @@ function v8RenderFeed(){
   var feed=document.getElementById('v8FeedList');
   if(!v8Signals.length){
     var marketOpen=(typeof getMarketStatus==='function') ? getMarketStatus().nseOpen : false;
-    feed.innerHTML='<div class="v8empty-state">'
-      +'<div class="v8empty-icon">🎯</div>'
-      +'<div class="v8empty-title">No signals yet</div>'
-      +'<div class="v8empty-sub">'+(marketOpen?'Tap Scan to start scanning F&amp;O stocks':'Market is closed — scan will auto-start when it opens')+'</div>'
-      +'<button class="v8empty-scan-btn" id="v8EmptyScanBtn" onclick="v8TriggerScan()">▶ Scan Now</button>'
-      +'</div>';
+    var isScanning=(typeof S!=='undefined') && S.scanning;
+    if(isScanning){
+      feed.innerHTML='<div class="v8empty-state">'
+        +'<div class="v8empty-icon" style="animation:v8pulse 1.5s infinite">🔍</div>'
+        +'<div class="v8empty-title">Scanning F&amp;O stocks…</div>'
+        +'<div class="v8empty-sub">'+((typeof S!=='undefined' && S.scannedCount)?S.scannedCount+' stocks checked so far':'Starting scan…')+' — signals will appear here as they qualify</div>'
+        +'</div>';
+    } else {
+      feed.innerHTML='<div class="v8empty-state">'
+        +'<div class="v8empty-icon">🎯</div>'
+        +'<div class="v8empty-title">No signals yet</div>'
+        +'<div class="v8empty-sub">'+(marketOpen?'Tap Scan to start scanning F&amp;O stocks':'Market is closed — scan will auto-start when it opens')+'</div>'
+        +'<button class="v8empty-scan-btn" id="v8EmptyScanBtn" onclick="v8TriggerScan()">▶ Scan Now</button>'
+        +'</div>';
+    }
     return;
   }
   feed.innerHTML = v8Signals.map(function(s){
