@@ -3370,14 +3370,34 @@ var v8OrigAddLog = window.addLog;
 window.addLog = function(text, type, html){
   if(typeof v8OrigAddLog === 'function') v8OrigAddLog(text, type, html);
   var cat = v8CategorizeLog(String(text||''), type);
-  v8LogEntries.unshift({
+  var entry = {
     type: cat,
     text: String(text||'').replace(/<[^>]*>/g,''),
     time: (new Date()).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
-  });
+  };
+  v8LogEntries.unshift(entry);
   if(v8LogEntries.length>300) v8LogEntries.length=300;
   var badge=document.querySelector('.v8log-btn-badge');
   if(badge) badge.style.display='block';
+  // Live tick: if the Activity Log screen is currently open on the Events tab,
+  // prepend this entry directly to the DOM right now, instead of only showing up
+  // the next time the screen is manually reopened.
+  var logScreen=document.getElementById('v8LogScreenWrap');
+  var eventsView=document.getElementById('v8EventsView');
+  if(logScreen && logScreen.classList.contains('show') && eventsView && eventsView.style.display!=='none'){
+    if(v8LogFilterActive==='all' || v8LogFilterActive===entry.type){
+      var list=document.getElementById('v8LogList');
+      if(list){
+        var emptyMsg=list.querySelector('.v8log-empty');
+        if(emptyMsg) emptyMsg.remove();
+        var row=document.createElement('div');
+        row.className='v8log-entry';
+        row.innerHTML='<div class="v8log-dot '+entry.type+'"></div><div class="v8log-content"><div class="v8log-text">'+entry.text+'</div><div class="v8log-time">'+entry.time+'</div></div>';
+        list.insertBefore(row, list.firstChild);
+        while(list.children.length>300) list.removeChild(list.lastChild);
+      }
+    }
+  }
 };
 var v8LogFilterActive='all';
 function v8RenderLog(){
