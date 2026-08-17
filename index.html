@@ -3612,6 +3612,13 @@ document.getElementById('v8SubmitManual').onclick=function(){
 
 var v8ManualCardCount=0;
 function v8CreateInstantSignal(stock, strike, side, entry, lots){
+  // Per confirmed decision: Manual Check is not allowed outside market hours at all --
+  // no card, no deferred/pending state. Checked here, before any card is created.
+  if(typeof getMarketStatus==='function' && !getMarketStatus().nseOpen){
+    if(typeof toast==='function') toast('⏰ Market is closed — manual check only runs 9:15 AM–3:40 PM IST');
+    v8MDiag('BLOCKED: market closed, no card created');
+    return null;
+  }
   var symUpper=stock.toUpperCase();
   var entryNum=parseFloat(entry)||0;
   var lotsNum=parseInt(lots,10)||1;
