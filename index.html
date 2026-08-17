@@ -3637,16 +3637,21 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   v8MDiag('liveSpot='+liveSpot);
 
   // REAL analysis: call the same endpoints the auto scanner uses, for this specific stock/strike.
-  // If this genuinely fails, STOP here and tell the user why -- do not silently fall through
-  // to a placeholder card with fake score/verdict, which is what happened before.
+  // Per explicit confirmation: the card must ALWAYS render even if this genuinely fails --
+  // market-closed and stock-not-found are real, legitimate hard blocks (nothing to show),
+  // but a NETWORK/fetch failure on signal-analysis (e.g. timeout from scan contention) now
+  // retries once, then falls back to a real, clearly-labeled Analysis Pending card using
+  // the user's typed data, instead of blocking entirely.
   var real={};
+  var analysisFailed=false;
+  var analysisFailReason='';
   if(!token){
     v8MDiag('BLOCKED: no token found for '+symUpper);
     if(typeof toast==='function') toast('⚠️ '+symUpper+' not found in F&O stock list');
     throw new Error('Stock not found in F&O list: '+symUpper);
   }
-  v8MDiag('calling /signal-analysis...');
-  try{
+  async function v8TrySignalAnalysis(attemptLabel){
+    v8MDiag('calling /signal-analysis ('+attemptLabel+')...');
     var respA=await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({symbolToken:String(token),sym:symUpper,exchange:'NSE',isIndex:isIndexSym,spotPrice:liveSpot,type:side})});
     v8MDiag('signal-analysis HTTP status: '+respA.status);
@@ -3654,16 +3659,31 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
     v8MDiag('signal-analysis response status field: '+(dataA?dataA.status:'no data')+' message: '+(dataA?dataA.message:'none'));
     if(!dataA || !dataA.status){
       var msg=(dataA && dataA.message) ? dataA.message : 'Signal analysis failed';
-      v8MDiag('BLOCKED: '+msg);
+      // A real, non-network rejection (e.g. market closed detected server-side, hard block)
+      // still stops here -- only a genuine fetch/network exception below is retried.
+      v8MDiag('BLOCKED (real server rejection, not retried): '+msg);
       if(typeof toast==='function') toast('❌ '+msg);
       throw new Error(msg);
     }
-    real=dataA;
+    return dataA;
+  }
+  try{
+    real = await v8TrySignalAnalysis('attempt 1');
     v8MDiag('signal-analysis succeeded, score='+real.score+' verdict='+real.verdict);
   }catch(e){
-    v8MDiag('EXCEPTION in signal-analysis: '+e.message);
-    if(typeof addLog==='function') addLog('Manual signal-analysis error: '+e.message,'err');
-    throw e;
+    v8MDiag('EXCEPTION in signal-analysis attempt 1: '+e.message);
+    if(e.message==='Market closed' || e.message.indexOf('not found')>=0){ throw e; } // real hard blocks, no retry
+    try{
+      v8MDiag('retrying signal-analysis once (network failure, non-fatal)...');
+      real = await v8TrySignalAnalysis('attempt 2, retry');
+      v8MDiag('signal-analysis succeeded on retry, score='+real.score+' verdict='+real.verdict);
+    }catch(e2){
+      v8MDiag('EXCEPTION in signal-analysis attempt 2 (final, non-fatal): '+e2.message);
+      if(typeof addLog==='function') addLog('Manual signal-analysis error after retry (non-fatal, card will show as pending): '+e2.message,'warn');
+      analysisFailed=true;
+      analysisFailReason=e2.message;
+      if(typeof toast==='function') toast('⚠️ Analysis unavailable right now — card added with your entered data, will retry on next scan');
+    }
   }
   v8MDiag('calling /oi-analysis...');
   {
@@ -3720,11 +3740,13 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   var realSig={
     id: symUpper+'_'+side+'_'+Date.now(),
     sym: symUpper, type: side, strike: parseFloat(strike)||0,
-    lot: lotSize, score: real.score!=null ? real.score : 60, verdict: real.verdict || 'MODERATE',
+    lot: lotSize, score: analysisFailed ? null : (real.score!=null ? real.score : 60), verdict: analysisFailed ? 'PENDING' : (real.verdict || 'MODERATE'),
     spotPrice: liveSpot, premium: entryNum, entryPremium: entryNum,
     prevPremiumClose: 0, ts: Date.now(),
     isExpiry: false, isCommodity: false,
     isManualCheck: true, // real field -- distinguishes manual from auto signals
+    analysisPending: analysisFailed, // real field -- true when signal-analysis genuinely failed after retry
+    analysisFailReason: analysisFailReason,
     v8Lots: lotsNum, // used by v8FromRealSignal to seed the lot stepper
     ceWalls: real.ceWalls||[], peFloors: real.peFloors||[], strikeFlags: real.strikeFlags||[],
     bias: real.bias || 'NEUTRAL',
@@ -3911,6 +3933,10 @@ function v8FmtOI(n){
   return String(n);
 }
 function v8DeriveTier(sig){
+  if(sig.analysisPending){
+    return {tier:'pending', tierLabel:'⏳ PENDING', tagCls:'warn',
+      verdictEmoji:'⏳', verdictTxt:'Real analysis could not complete right now'+(sig.analysisFailReason?' ('+sig.analysisFailReason+')':'')+' — this card shows your entered data only. It will get a real score on the next successful scan.'};
+  }
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
   var biasMatches = (sig.type === 'CE' && sig.bias === 'BULLISH') || (sig.type === 'PE' && sig.bias === 'BEARISH');
