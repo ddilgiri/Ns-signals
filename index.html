@@ -3956,10 +3956,15 @@ function v8FmtOI(n){
   if(n>=1000) return (n/1000).toFixed(0)+'K';
   return String(n);
 }
+function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function v8DeriveTier(sig){
   if(sig.invalidStrike){
+    var invalidStrikeVariants=[
+      sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.',
+      sig.strike+' does not exist in '+sig.sym+'\'s real option chain right now — please pick a real strike and try again.'
+    ];
     return {tier:'skip', tierLabel:'🔒 INVALID STRIKE', tagCls:'skip',
-      verdictEmoji:'❌', verdictTxt:sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.'};
+      verdictEmoji:'❌', verdictTxt:v8Pick(invalidStrikeVariants)};
   }
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
@@ -3976,40 +3981,65 @@ function v8DeriveTier(sig){
     var staleDetail = '';
     var staleFlag = flags.find(function(f){ return (f.type||'').toUpperCase().indexOf('STALE')>=0; });
     if(staleFlag && staleFlag.detail) staleDetail = ' ('+staleFlag.detail+')';
+    var staleVariants=[
+      'The big move at '+sig.strike+' already happened and price has since gone flat'+staleDetail+' — urgency is fading. Entering now carries late-entry risk.',
+      sig.strike+' already made its move and has gone quiet'+staleDetail+' — this is a late entry, not a fresh one. Better to wait for the next real move.'
+    ];
     return {tier:'stale', tierLabel:'🔴 STALE', tagCls:'warn',
-      verdictEmoji:'⚠️', verdictTxt:'The big move at '+sig.strike+' already happened and price has since gone flat'+staleDetail+' — urgency is fading. Entering now carries late-entry risk.'};
+      verdictEmoji:'⚠️', verdictTxt:v8Pick(staleVariants)};
   }
   if(flagCount >= 2 || sig.verdict === 'WEAK' || rangeLocked){
     if(rangeLocked){
-      var reason='Call wall at '+wall.strike+' ('+v8FmtOI(wall.oi)+' OI) and Put floor at '+floor.strike+' ('+v8FmtOI(floor.oi)+' OI) are both holding strong — sellers winning both sides, market pinned in range.';
-      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:reason};
+      var rangeVariants=[
+        'Call wall at '+wall.strike+' ('+v8FmtOI(wall.oi)+' OI) and Put floor at '+floor.strike+' ('+v8FmtOI(floor.oi)+' OI) are both holding strong — sellers winning both sides, market pinned in range.',
+        'Both sides are locked here — Call wall at '+wall.strike+' and Put floor at '+floor.strike+' are equally strong. Sellers control both directions, so price is stuck in a range. Skip.'
+      ];
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:v8Pick(rangeVariants)};
     }
     if(flagCount >= 2){
       var flagNames = flags.slice(0,2).map(function(f){ return (f.label||f.type||'').replace(/_/g,' '); }).filter(Boolean);
       var flagText = flagNames.length ? flagNames.join(' + ') : 'Multiple caution flags';
       var detailText = flags[0] && flags[0].detail ? ' — '+flags[0].detail : '';
-      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-        verdictTxt:flagText+' on this strike'+detailText+'. No clear direction to trade right now.'};
+      var flagVariants=[
+        flagText+' on this strike'+detailText+'. No clear direction to trade right now.',
+        'This strike is showing '+flagText.toLowerCase()+detailText+' — too many warning signs to trust right now. Better to skip.'
+      ];
+      return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:v8Pick(flagVariants)};
     }
-    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-      verdictTxt:'Verdict came in WEAK on this scan — signal does not clear the confidence bar. Skip for now.'};
+    var weakVariants=[
+      'Verdict came in WEAK on this scan — signal does not clear the confidence bar. Skip for now.',
+      'This scan\'s confidence score is too low to act on — not strong enough to trust yet. Skip for now.'
+    ];
+    return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:v8Pick(weakVariants)};
   }
   if(sig.rameshTrapped || sig.sureshTrapped){
     var trapWho = sig.rameshTrapped && sig.sureshTrapped ? 'Both Call and Put sides' : sig.rameshTrapped ? 'Call side' : 'Put side';
     var trapDetail = '';
     if(wall && floor) trapDetail = ' (Call wall '+wall.strike+' at '+v8FmtOI(wall.oi)+' OI, Put floor '+floor.strike+' at '+v8FmtOI(floor.oi)+' OI)';
+    var mixedVariants=[
+      trapWho+' showing conflicting buildup at '+sig.strike+trapDetail+' — the signal is fighting itself. If taking this, size down and use a tight stop.',
+      'Mixed signals here — '+trapWho.toLowerCase()+' at '+sig.strike+' looks active in both directions'+trapDetail+', which usually means a trap. If you still take it, use small size and a tight stop.'
+    ];
     return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn',
-      verdictEmoji:'⚠️', verdictTxt:trapWho+' showing conflicting buildup at '+sig.strike+trapDetail+' — the signal is fighting itself. If taking this, size down and use a tight stop.'};
+      verdictEmoji:'⚠️', verdictTxt:v8Pick(mixedVariants)};
   }
   if(sig.verdict !== 'WEAK' && confirmingStrong && biasMatches){
     var confDetail = confirmSide ? confirmLabel+' at '+confirmSide.strike+' holding strong at '+v8FmtOI(confirmSide.oi)+' OI' : confirmLabel+' confirmed';
     var scoreNote = sig.score!=null ? ' (score '+Math.round(sig.score)+'%)' : '';
+    var clearPlusVariants=[
+      side+' building strong at '+sig.strike+scoreNote+' — '+confDetail+', and Mahesh cross-check confirms the move. Clean take with normal size.',
+      'Strong setup at '+sig.strike+scoreNote+' — '+side.toLowerCase()+' are clearly in control, '+confDetail+', and the cross-check agrees. Good to take at normal size.'
+    ];
     return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok',
-      verdictEmoji:'✅', verdictTxt:side+' building strong at '+sig.strike+scoreNote+' — '+confDetail+', and Mahesh cross-check confirms the move. Clean take with normal size.'};
+      verdictEmoji:'✅', verdictTxt:v8Pick(clearPlusVariants)};
   }
   var freshDetail = confirmSide ? confirmLabel+' at '+confirmSide.strike+' ('+(confirmSide.strength||'building')+', '+v8FmtOI(confirmSide.oi)+' OI)' : 'fresh move';
+  var clearVariants=[
+    side+' building at '+sig.strike+' — '+freshDetail+', no Mahesh cross-check yet. Reasonable entry, watch for confirmation.',
+    'Early but reasonable signal at '+sig.strike+' — '+side.toLowerCase()+' are stepping in ('+freshDetail+'), just no second confirmation yet. Worth watching closely.'
+  ];
   return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok',
-    verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:side+' building at '+sig.strike+' — '+freshDetail+', no Mahesh cross-check yet. Reasonable entry, watch for confirmation.'};
+    verdictEmoji: sig.type==='CE'?'📈':'📉', verdictTxt:v8Pick(clearVariants)};
 }
 
 // Converts one real S.signals entry into the v8 card data shape (compact + expanded views).
