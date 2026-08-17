@@ -399,6 +399,18 @@ function logSignal(sym,type,score,verdict,ltp,breakdown){
   return entry.id;
 }
 
+// Real store of every scanned stock's latest CE/PE score, regardless of whether it
+// qualified as a signal -- powers the Activity Log "All Stocks" tab with genuine live
+// data instead of hardcoded sample numbers. Kept in memory only, resets on server restart
+// (matches how SESSION.signals and other live-scan state already behave).
+const LATEST_SCORES={};
+function recordStockScore(sym,type,score,verdict){
+  if(!sym||!type)return;
+  const key=sym.toUpperCase();
+  if(!LATEST_SCORES[key])LATEST_SCORES[key]={};
+  LATEST_SCORES[key][type]={score:Math.round(score),verdict,ts:Date.now()};
+}
+
 const ANGEL_API="https://apiconnect.angelbroking.com";
 
 function generateTOTP(e){if(!e||e.trim().length<16)return"";try{const t=e.trim().replace(/\s+/g,"").toUpperCase();return speakeasy.totp({secret:t,encoding:"base32",digits:6,step:30,time:Math.floor(Date.now()/1e3)})}catch(e){return log(`TOTP generation failed: ${e.message}`,"WARN"),""}}
@@ -1393,6 +1405,7 @@ app.post("/signal-analysis",async(e,t)=>{
   }let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
+  recordStockScore(s,i,E,C);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
   (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,naresStaleDowngrade,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
@@ -1574,6 +1587,20 @@ app.get("/fno-stock-list",async(req,res)=>{
 });
 
 app.get("/token-list",async(e,t)=>{try{await ensureInstruments("token list");const e={};SESSION._instruments.forEach(t=>{if("NSE"!==t.exch_seg)return;const a=(t.symbol||"").replace("-EQ","").toUpperCase();e[a]||(e[a]=String(t.token))}),log("Token list served: "+Object.keys(e).length+" NSE symbols","INFO"),t.json({status:!0,tokens:e,count:Object.keys(e).length})}catch(e){log("token-list error: "+e.message,"WARN"),t.status(500).json({status:!1,message:e.message})}})
+app.get("/all-stock-scores",(req,res)=>{
+  try{
+    const rows=Object.entries(LATEST_SCORES).map(([sym,sides])=>({
+      sym,
+      ce:sides.CE?sides.CE.score:null,
+      ceVerdict:sides.CE?sides.CE.verdict:null,
+      pe:sides.PE?sides.PE.score:null,
+      peVerdict:sides.PE?sides.PE.verdict:null
+    })).filter(r=>r.ce!=null||r.pe!=null).sort((a,b)=>a.sym.localeCompare(b.sym));
+    res.json({status:true,stocks:rows,count:rows.length});
+  }catch(e){
+    res.status(500).json({status:false,message:e.message});
+  }
+});
 
 
 // ─── AUTO SERVER-SIDE SCAN (additive, does not touch existing scan/login code) ───
