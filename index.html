@@ -3605,6 +3605,9 @@ document.getElementById('v8SubmitManual').onclick=async function(){
     v8MDiag('CAUGHT ERROR: '+(err && err.message ? err.message : String(err)));
     if(typeof addLog==='function') addLog('Manual check error: '+err.message,'err');
     toast('⚠️ Manual check failed — check Activity Log');
+  }finally{
+    v8ManualCheckInProgress = false; // always release the scan pause, even on a hard-block error
+    v8MDiag('scan pause released');
   }
   v8MDiag('closing form sheet now');
   v8MDiag('done -- tap X to close and check the trail above');
@@ -3613,6 +3616,19 @@ document.getElementById('v8SubmitManual').onclick=async function(){
 var v8ManualCardCount=0;
 async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   v8MDiag('function started');
+  v8ManualCheckInProgress = true; // real flag -- blocks the next scan tick from starting
+  // If a scan pass is ALREADY mid-flight right now (not just the next tick), wait briefly
+  // for it to genuinely finish, since pausing future ticks alone doesn't free up a request
+  // that's already in progress. Real S._scanInProgress flag, capped wait so this never hangs.
+  if(typeof S !== 'undefined' && S._scanInProgress){
+    v8MDiag('scan currently mid-pass, waiting up to 8s for it to finish...');
+    var waitedMs = 0;
+    while(S._scanInProgress && waitedMs < 8000){
+      await new Promise(function(r){ setTimeout(r, 300); });
+      waitedMs += 300;
+    }
+    v8MDiag('done waiting, scanInProgress now='+S._scanInProgress+' waited='+waitedMs+'ms');
+  }
   var symUpper=stock.toUpperCase();
   var entryNum=parseFloat(entry)||0;
   var lotsNum=parseInt(lots,10)||1;
@@ -4096,7 +4112,13 @@ function v8SyncFromRealSignals(){
 // last-completed timestamp afterward, used to drive the V8 "Last Scan" stat for real.
 var v8OrigRunScan = window.runScan;
 var v8LastScanCompletedAt = null;
+var v8ManualCheckInProgress = false; // real flag, set/cleared around manual check network calls
 window.runScan = async function(){
+  if(v8ManualCheckInProgress){
+    if(typeof v8MDiag==='function') v8MDiag('scan tick skipped -- manual check in progress, freeing server for it');
+    if(typeof addLog==='function') addLog('Scan tick paused — manual check in progress','');
+    return;
+  }
   if(typeof v8OrigRunScan === 'function') await v8OrigRunScan.apply(this, arguments);
   v8LastScanCompletedAt = Date.now();
 };
