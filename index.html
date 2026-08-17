@@ -1239,7 +1239,7 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     await bulkDownload();
     e.disabled=false;
   }
-  S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(runScan,25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
+  S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(function(){window.runScan()},25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
   // RE-ENTRY GUARD (2026-08-13): setInterval(runScan, 25000) fires on a fixed clock with no
   // awareness of whether the previous 210-stock pass has actually finished. Candle 403/429
