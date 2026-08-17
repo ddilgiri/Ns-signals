@@ -3651,9 +3651,20 @@ function v8CreateInstantSignal(stock, strike, side, entry, lots){
     S.signals.length>50 && S.signals.pop();
     v8MDiag('instant signal pushed to S.signals, new length: '+S.signals.length);
   }
+  // Real fix per confirmed requirement: Manual Check now creates a genuine paper trade
+  // immediately, matching the typed lot count -- signal card and trade are the same
+  // thing. Mark as already auto-traded FIRST so v4AutoTrade (which fires inside the
+  // renderSignals call below) does not also try to trade this signal separately.
+  if(typeof _autoTraded !== 'undefined') _autoTraded[realSig.id] = true;
+  if(typeof addPaperTrade === 'function'){
+    for(var i=0; i<lotsNum; i++){
+      try{ addPaperTrade({stopPropagation:function(){}}, realSig.id); }catch(e){ v8MDiag('addPaperTrade call '+i+' failed: '+e.message); break; }
+    }
+    v8MDiag('created real paper trade with '+lotsNum+' lot(s) via real addPaperTrade()');
+  }
   if(typeof renderSignals === 'function'){ renderSignals(); }
   else if(typeof v8SyncFromRealSignals === 'function'){ v8SyncFromRealSignals(); }
-  toast('📋 Added — analysing '+symUpper+' now...');
+  toast('📋 '+lotsNum+' lot(s) added — analysing '+symUpper+' now...');
   return realSig;
 }
 async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, entry, lots){
