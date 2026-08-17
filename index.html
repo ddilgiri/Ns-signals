@@ -3727,15 +3727,30 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       }catch(e){
         v8MDiag('oi-analysis fetch failed (non-fatal): '+e.message);
       }
+      var typedStrike=parseFloat(strike);
+      var strikeIsValid=true;
       if(oiAnalysisData && oiAnalysisData.status){
-        real.ceWalls = oiAnalysisData.ceWalls||[];
-        real.peFloors = oiAnalysisData.peFloors||[];
-        real.rameshTrapped = oiAnalysisData.rameshTrapped||false;
-        real.sureshTrapped = oiAnalysisData.sureshTrapped||false;
-        real.strikeFlags = oiAnalysisData.strikeFlags||[];
+        var chain=oiAnalysisData.chain||[];
+        var strikeExists=chain.some(function(c){ return c.strike===typedStrike; });
+        v8MDiag('typedStrike='+typedStrike+' strikeExists='+strikeExists+' chain length='+chain.length);
+        if(chain.length && !strikeExists){
+          strikeIsValid=false;
+          var nearby=chain.map(function(c){return c.strike;}).sort(function(a,b){return Math.abs(a-typedStrike)-Math.abs(b-typedStrike);}).slice(0,3).sort(function(a,b){return a-b;});
+          var msg=typedStrike+' is not a real strike for '+symUpper+'. Nearest available: '+nearby.join(', ');
+          v8MDiag('INVALID STRIKE: '+msg);
+          if(typeof toast==='function') toast('❌ '+msg);
+          if(typeof addLog==='function') addLog('Manual check: invalid strike -- '+msg,'warn');
+        } else {
+          real.ceWalls = oiAnalysisData.ceWalls||[];
+          real.peFloors = oiAnalysisData.peFloors||[];
+          real.rameshTrapped = oiAnalysisData.rameshTrapped||false;
+          real.sureshTrapped = oiAnalysisData.sureshTrapped||false;
+          real.strikeFlags = oiAnalysisData.strikeFlags||[];
+        }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
       // no new card, no separate pending state, just the real values arriving.
+      realSig.invalidStrike = !strikeIsValid; // real flag -- card verdict reflects this honestly
       realSig.score = real.score!=null ? real.score : realSig.score;
       realSig.verdict = real.verdict || realSig.verdict;
       realSig.ceWalls = real.ceWalls || realSig.ceWalls;
@@ -3917,6 +3932,10 @@ function v8FmtOI(n){
   return String(n);
 }
 function v8DeriveTier(sig){
+  if(sig.invalidStrike){
+    return {tier:'skip', tierLabel:'🔒 INVALID STRIKE', tagCls:'skip',
+      verdictEmoji:'❌', verdictTxt:sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.'};
+  }
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
   var biasMatches = (sig.type === 'CE' && sig.bias === 'BULLISH') || (sig.type === 'PE' && sig.bias === 'BEARISH');
