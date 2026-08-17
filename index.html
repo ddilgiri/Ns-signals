@@ -431,6 +431,7 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
   </div>
   <div id="v8LoadingView" style="display:none">
     <div class="v8loading-row"><div class="v8spinner"></div> Running Ramesh/Suresh/Mahesh check…</div>
+    <div id="v8ManualDebugTrail" style="margin-top:14px;font-size:9px;color:#6b7280;text-align:left;max-height:200px;overflow-y:auto;font-family:monospace;white-space:pre-wrap;padding:0 16px"></div>
   </div>
 </div>
 <div class="v8sheet-backdrop" id="v8SettingsBackdrop"></div>
@@ -3581,6 +3582,12 @@ function v8CloseFormSheet(){
 document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
 document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
 
+function v8MDiag(msg){
+  var el=document.getElementById('v8ManualDebugTrail');
+  var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
+  if(el) el.textContent += '['+time+'] '+msg+'\n';
+  console.log('[v8manualdiag]',msg);
+}
 document.getElementById('v8SubmitManual').onclick=async function(){
   var stock=document.getElementById('v8MStock').value||'TATASTEEL';
   var strike=document.getElementById('v8MStrike').value||'150';
@@ -3588,17 +3595,24 @@ document.getElementById('v8SubmitManual').onclick=async function(){
   var lots=document.getElementById('v8MLots').value||'2';
   document.getElementById('v8FormView').style.display='none';
   document.getElementById('v8LoadingView').style.display='block';
+  var trailEl=document.getElementById('v8ManualDebugTrail');
+  if(trailEl) trailEl.textContent='';
+  v8MDiag('submit clicked: stock='+stock+' strike='+strike+' side='+v8SelectedSide+' entry='+entry+' lots='+lots);
   try{
     await v8AddManualCardToFeed(stock, strike, v8SelectedSide, entry, lots);
+    v8MDiag('v8AddManualCardToFeed completed successfully');
   }catch(err){
+    v8MDiag('CAUGHT ERROR: '+(err && err.message ? err.message : String(err)));
     if(typeof addLog==='function') addLog('Manual check error: '+err.message,'err');
     toast('⚠️ Manual check failed — check Activity Log');
   }
-  v8CloseFormSheet();
+  v8MDiag('closing form sheet now');
+  v8MDiag('done -- tap X to close and check the trail above');
 };
 
 var v8ManualCardCount=0;
 async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
+  v8MDiag('function started');
   var symUpper=stock.toUpperCase();
   var entryNum=parseFloat(entry)||0;
   var lotsNum=parseInt(lots,10)||1;
@@ -3607,52 +3621,69 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
     var stk=NSE_STOCKS.find(function(x){return x.sym===symUpper;});
     if(stk){ lotSize=stk.lot; token=stk.token; }
   }
+  v8MDiag('NSE_STOCKS lookup: token='+token+' lotSize='+lotSize);
   if(!token && typeof IDX_LIST!=='undefined'){
     var idx=IDX_LIST.find(function(x){return x.sym===symUpper;});
     if(idx){ lotSize=idx.lot; token=idx.token; isIndexSym=true; }
   }
+  var marketOpenCheck=(typeof getMarketStatus==='function') ? getMarketStatus().nseOpen : 'getMarketStatus missing';
+  v8MDiag('market open check: '+marketOpenCheck);
   if(typeof getMarketStatus==='function' && !getMarketStatus().nseOpen){
+    v8MDiag('BLOCKED: market closed');
     if(typeof toast==='function') toast('⏰ Market is closed — manual analysis runs only during market hours (9:15 AM–3:30 PM IST)');
     throw new Error('Market closed');
   }
   var liveSpot=(typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[symUpper]) ? LIVE_PRICES[symUpper] : entryNum;
+  v8MDiag('liveSpot='+liveSpot);
 
   // REAL analysis: call the same endpoints the auto scanner uses, for this specific stock/strike.
   // If this genuinely fails, STOP here and tell the user why -- do not silently fall through
   // to a placeholder card with fake score/verdict, which is what happened before.
   var real={};
   if(!token){
+    v8MDiag('BLOCKED: no token found for '+symUpper);
     if(typeof toast==='function') toast('⚠️ '+symUpper+' not found in F&O stock list');
     throw new Error('Stock not found in F&O list: '+symUpper);
   }
+  v8MDiag('calling /signal-analysis...');
   try{
     var respA=await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({symbolToken:String(token),sym:symUpper,exchange:'NSE',isIndex:isIndexSym,spotPrice:liveSpot,type:side})});
+    v8MDiag('signal-analysis HTTP status: '+respA.status);
     var dataA=await respA.json();
+    v8MDiag('signal-analysis response status field: '+(dataA?dataA.status:'no data')+' message: '+(dataA?dataA.message:'none'));
     if(!dataA || !dataA.status){
       var msg=(dataA && dataA.message) ? dataA.message : 'Signal analysis failed';
+      v8MDiag('BLOCKED: '+msg);
       if(typeof toast==='function') toast('❌ '+msg);
       throw new Error(msg);
     }
     real=dataA;
+    v8MDiag('signal-analysis succeeded, score='+real.score+' verdict='+real.verdict);
   }catch(e){
+    v8MDiag('EXCEPTION in signal-analysis: '+e.message);
     if(typeof addLog==='function') addLog('Manual signal-analysis error: '+e.message,'err');
     throw e;
   }
+  v8MDiag('calling /oi-analysis...');
   {
     try{
       var respB=await fetch(getServer()+'/oi-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
+      v8MDiag('oi-analysis HTTP status: '+respB.status);
       var dataB=await respB.json();
+      v8MDiag('oi-analysis response status field: '+(dataB?dataB.status:'no data')+' chain length: '+(dataB&&dataB.chain?dataB.chain.length:'n/a'));
       if(dataB && dataB.status){
         // Real strike validation: dataB.chain contains every genuinely tradeable strike
         // in the current option chain window -- check the typed strike against it.
         var typedStrike=parseFloat(strike);
         var chain=dataB.chain||[];
         var strikeExists=chain.some(function(c){ return c.strike===typedStrike; });
+        v8MDiag('typedStrike='+typedStrike+' strikeExists='+strikeExists+' chain sample: '+JSON.stringify(chain.slice(0,3).map(function(c){return c.strike;})));
         if(chain.length && !strikeExists){
           var nearby=chain.map(function(c){return c.strike;}).sort(function(a,b){return Math.abs(a-typedStrike)-Math.abs(b-typedStrike);}).slice(0,3).sort(function(a,b){return a-b;});
           var msg=typedStrike+' is not a real strike for '+symUpper+'. Nearest available: '+nearby.join(', ');
+          v8MDiag('BLOCKED: '+msg);
           if(typeof toast==='function') toast('❌ '+msg);
           throw new Error(msg);
         }
@@ -3661,12 +3692,16 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
         real.rameshTrapped = real.rameshTrapped || dataB.rameshTrapped || false;
         real.sureshTrapped = real.sureshTrapped || dataB.sureshTrapped || false;
         real.strikeFlags = real.strikeFlags && real.strikeFlags.length ? real.strikeFlags : (dataB.strikeFlags||[]);
+      } else {
+        v8MDiag('oi-analysis did not return status:true, message: '+(dataB?dataB.message:'none') + ' -- continuing anyway since oi-analysis failure was never meant to block (only signal-analysis failure blocks)');
       }
     }catch(e){
+      v8MDiag('EXCEPTION in oi-analysis block: '+e.message);
       if(typeof addLog==='function') addLog('Manual oi-analysis error: '+e.message,'err');
       throw e;
     }
   }
+  v8MDiag('building real signal object and pushing to S.signals...');
 
   // Build a REAL signal object matching the shape the real scan engine produces,
   // so it works correctly with real renderSignals()/buildCard()/paper-trade logic
@@ -3692,10 +3727,16 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
   if(typeof S !== 'undefined' && S.signals){
     S.signals.unshift(realSig);
     S.signals.length>50 && S.signals.pop();
+    v8MDiag('pushed to S.signals, new length: '+S.signals.length);
+  } else {
+    v8MDiag('S or S.signals is undefined -- could not push!');
   }
   if(typeof renderSignals === 'function'){
+    v8MDiag('calling real renderSignals()...');
     renderSignals(); // real function (now wrapped) -- also triggers v8 sync automatically
+    v8MDiag('renderSignals() returned, v8Signals length now: '+v8Signals.length);
   } else {
+    v8MDiag('renderSignals not a function, calling v8SyncFromRealSignals directly');
     v8SyncFromRealSignals();
   }
   toast(token ? '✅ Analysis complete' : '⚠️ Stock not found in F&O list — added with basic data only');
