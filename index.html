@@ -113,7 +113,10 @@
 .v8mcard{background:#fff;border-radius:13px;border:1px solid #e8e9ed;box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0;cursor:pointer}
 .v8mcard.dim{opacity:.7}
 .v8mcard-head{padding:9px 12px 7px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.v8mcard-id{display:flex;flex-direction:column;gap:3px}
+.v8mcard-logo-wrap{width:34px;height:34px;flex-shrink:0;border-radius:9px;overflow:hidden;background:#f3f4f7;position:relative}
+.v8mcard-logo{width:100%;height:100%;object-fit:contain;background:#fff}
+.v8mcard-logo-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:linear-gradient(135deg,#7e22ce,#1d5fbf)}
+.v8mcard-id{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
 .v8mode-badge{display:inline-flex;align-items:center;gap:3px;font-size:8px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:999px;width:fit-content}
 .v8mode-badge.auto{background:#e7f0fd;color:#1d5fbf}
 .v8mode-badge.manual{background:#f4e9fb;color:#7e22ce}
@@ -3591,13 +3594,27 @@ async function v8AddManualCardToFeed(stock, strike, side, entry, lots){
         body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
       var dataB=await respB.json();
       if(dataB && dataB.status){
+        // Real strike validation: dataB.chain contains every genuinely tradeable strike
+        // in the current option chain window -- check the typed strike against it.
+        var typedStrike=parseFloat(strike);
+        var chain=dataB.chain||[];
+        var strikeExists=chain.some(function(c){ return c.strike===typedStrike; });
+        if(chain.length && !strikeExists){
+          var nearby=chain.map(function(c){return c.strike;}).sort(function(a,b){return Math.abs(a-typedStrike)-Math.abs(b-typedStrike);}).slice(0,3).sort(function(a,b){return a-b;});
+          var msg=typedStrike+' is not a real strike for '+symUpper+'. Nearest available: '+nearby.join(', ');
+          if(typeof toast==='function') toast('❌ '+msg);
+          throw new Error(msg);
+        }
         real.ceWalls = real.ceWalls && real.ceWalls.length ? real.ceWalls : (dataB.ceWalls||[]);
         real.peFloors = real.peFloors && real.peFloors.length ? real.peFloors : (dataB.peFloors||[]);
         real.rameshTrapped = real.rameshTrapped || dataB.rameshTrapped || false;
         real.sureshTrapped = real.sureshTrapped || dataB.sureshTrapped || false;
         real.strikeFlags = real.strikeFlags && real.strikeFlags.length ? real.strikeFlags : (dataB.strikeFlags||[]);
       }
-    }catch(e){ if(typeof addLog==='function') addLog('Manual oi-analysis error: '+e.message,'warn'); }
+    }catch(e){
+      if(typeof addLog==='function') addLog('Manual oi-analysis error: '+e.message,'err');
+      throw e;
+    }
   }
 
   // Build a REAL signal object matching the shape the real scan engine produces,
@@ -3948,12 +3965,23 @@ window.renderSignals = function(){
   }catch(e){}
 };
 
+function v8Initials(sym){
+  var s=(sym||'').replace(/[^A-Z]/g,'');
+  return s.length>=2 ? s.substring(0,2) : (s+'X').substring(0,2);
+}
+function v8LogoHTML(sym){
+  var initials=v8Initials(sym);
+  var url='https://images.dhan.co/symbol/'+encodeURIComponent(sym)+'.png';
+  return '<div class="v8mcard-logo-wrap"><img class="v8mcard-logo" src="'+url+'" alt="'+sym+'" '
+    +'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">'
+    +'<div class="v8mcard-logo-fallback" style="display:none">'+initials+'</div></div>';
+}
 function v8BuildCompactCard(s){
   var pnl=v8PnlOf(s);
   var pnlCls=pnl>=0?'up':'down';
   var spotCls='up'; // spot direction vs prior close -- mock has no prior-close tracking yet, default up
   return '<div class="v8mcard'+(s.dim?' dim':'')+'" onclick="v8ToggleExpand(\''+s.key+'\')">'
-    +'<div class="v8mcard-head"><div class="v8mcard-id"><span class="v8mode-badge '+s.mode+'">'+(s.mode==='auto'?'⚡ Auto':'🖊️ Manual')+'</span>'
+    +'<div class="v8mcard-head">'+v8LogoHTML(s.name)+'<div class="v8mcard-id"><span class="v8mode-badge '+s.mode+'">'+(s.mode==='auto'?'⚡ Auto':'🖊️ Manual')+'</span>'
     +'<div class="v8mcard-name-row"><h2>'+s.name+'</h2><span class="v8pill '+(s.type==='CE'?'v8pill-ce':'v8pill-pe')+'">'+s.strike+' '+s.type+'</span>'+(s.isNew?'<span class="v8new-tag">New</span>':'')+'</div></div>'
     +'<span class="v8tier-badge '+s.tier+'">'+s.tierLabel+'</span></div>'
     +'<div class="v8mcard-mid">'
