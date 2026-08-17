@@ -4003,15 +4003,18 @@ function v8SyncFromRealSignals(){
   v8Signals.forEach(function(s){ existingLots[s.key] = s.lots; previousCardsByKey[s.key] = s; });
   var showStale = localStorage.getItem('v8mock-showstale')==='1';
   var showMixed = localStorage.getItem('v8mock-showmixed')!=='0';
+  if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed);
   var newSignals = S.signals.map(function(sig){
     var card = v8FromRealSignal(sig);
+    if(typeof v8MDiag==='function') v8MDiag('sync: sig id='+sig.id+' sym='+sig.sym+' isManualCheck='+sig.isManualCheck+' -> tier='+card.tier);
     if(existingLots[card.key] != null) card.lots = existingLots[card.key];
     return card;
   }).filter(function(card){
-    if(card.tier === 'stale' && !showStale) return false;
-    if(card.tier === 'mixed' && !showMixed) return false;
+    if(card.tier === 'stale' && !showStale){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (stale, showStale off) key='+card.key); return false; }
+    if(card.tier === 'mixed' && !showMixed){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (mixed, showMixed off) key='+card.key); return false; }
     return true;
   });
+  if(typeof v8MDiag==='function') v8MDiag('sync: after filter, newSignals.length='+newSignals.length);
   var newKeys = {};
   newSignals.forEach(function(c){ newKeys[c.key] = true; });
   // A signal that dropped out of this scan's S.signals should still show on the
