@@ -3130,6 +3130,16 @@ window.doLogin = async function(){
   }
   v8Diag('after real login, S.connected='+(typeof S!=='undefined'?S.connected:'S undefined'));
   if(typeof S !== 'undefined' && S.connected){
+    // Real fix: showPage('setup', null) (called by v8OpenRealSetup during the
+    // login-only view) genuinely kills trade price polling via stopTradesPricePolling(),
+    // and V8 never routes through the real 'trades' tab that would otherwise restart it
+    // -- confirmed via user report that LTP on snapshot-based cards (e.g. SUNPHARMA)
+    // never updates despite a real, working live price feed. Explicitly restart here,
+    // right after login is confirmed, so it is genuinely alive for the rest of the
+    // session regardless of what showPage() calls happened before this point.
+    if(typeof startTradesPricePolling==='function'){
+      try{ startTradesPricePolling(); v8Diag('trade price polling explicitly (re)started after login'); }catch(e){ v8Diag('trade price polling restart failed: '+e.message); }
+    }
     setTimeout(function(){
       v8Diag('setTimeout fired, returning to splash');
       var splash=document.getElementById('splashScreen');
