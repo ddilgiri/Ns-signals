@@ -1454,6 +1454,7 @@ app.post("/live-trade-prices",async(req,res)=>{
   if(!isAuthenticated())return res.status(401).json({status:false,message:"Not authenticated"});
   const{trades}=req.body;
   if(!trades||!trades.length)return res.json({status:true,prices:{}});
+  const debugMisses=[]; // real diagnostic: exact reason each trade's price lookup failed
   try{
     await ensureInstruments("live trade prices");
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
@@ -1475,7 +1476,12 @@ app.post("/live-trade-prices",async(req,res)=>{
         const s2=inst.symbol.toUpperCase();
         return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);
       });
-      if(!matches.length){log(`live-trade-prices: no instrument for ${key}`,"WARN");continue;}
+      if(!matches.length){
+        log(`live-trade-prices: no instrument for ${key}`,"WARN");
+        const symCandidates=SESSION._instruments.filter(inst=>inst.exch_seg==="NFO"&&inst.instrumenttype?.includes("OPT")&&(inst.name?.toUpperCase()===sym||inst.symbol?.toUpperCase().startsWith(sym))).length;
+        debugMisses.push({key,reason:"no matching instrument",symCandidatesFound:symCandidates,searchedStrike:strike,searchedType:type});
+        continue;
+      }
       const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp).sort((a,b)=>a._exp-b._exp);
       // Match same expiry logic as getExpiryType: if dte<0 use next month, else current month
       const nowIST=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
@@ -1533,7 +1539,7 @@ app.post("/live-trade-prices",async(req,res)=>{
       }catch(bErr){log(`live-trade-prices batch error: ${bErr.message}`,"WARN");}
     }
     log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}`,"OK");
-    res.json({status:true,prices});
+    res.json({status:true,prices,debugMisses});
   }catch(err){log(`live-trade-prices error: ${err.message}`,"ERR");res.status(500).json({status:false,message:err.message});}
 });
 
