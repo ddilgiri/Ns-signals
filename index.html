@@ -259,16 +259,21 @@
 .v8log-filter-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid #e8e9ed;background:#fff;color:#6b7280}
 .v8log-filter-chip.active{background:#14181f;color:#fff;border-color:#14181f}
 .v8log-list{flex:1;overflow-y:auto;padding:8px 16px 24px}
-.v8log-entry{display:flex;gap:10px;padding:12px 2px;border-bottom:1px solid #e8e9ed}
-.v8log-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.v8log-entry{display:flex;align-items:baseline;gap:7px;padding:5px 2px}
+.v8log-dot{display:none}
 .v8log-dot.signal{background:#0f9d58}
 .v8log-dot.scan{background:#1d5fbf}
 .v8log-dot.manual{background:#7e22ce}
 .v8log-dot.error{background:#d93025}
 .v8log-dot.trap{background:#b8860b}
-.v8log-content{flex:1;min-width:0}
-.v8log-text{font-size:10px;font-weight:600;color:#14181f;line-height:1.4}
-.v8log-time{font-size:9.5px;color:#6b7280;font-weight:600;margin-top:3px;font-family:'SF Mono','Courier New',monospace}
+.v8log-content{flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.v8log-text{font-size:10.5px;font-weight:600;line-height:1.4}
+.v8log-time{font-size:9px;font-weight:700;font-family:'SF Mono','Courier New',monospace;flex-shrink:0}
+.v8log-entry.signal .v8log-time,.v8log-entry.signal .v8log-text{color:#0f9d58}
+.v8log-entry.scan .v8log-time,.v8log-entry.scan .v8log-text{color:#1d5fbf}
+.v8log-entry.manual .v8log-time,.v8log-entry.manual .v8log-text{color:#7e22ce}
+.v8log-entry.error .v8log-time,.v8log-entry.error .v8log-text{color:#d93025}
+.v8log-entry.trap .v8log-time,.v8log-entry.trap .v8log-text{color:#b8860b}
 .v8log-empty{text-align:center;padding:60px 20px;color:#6b7280;font-size:14px;font-weight:600}
 .v8stocks-search-row{padding:12px 16px;background:#fff;border-bottom:1px solid #e8e9ed;flex-shrink:0}
 .v8stocks-search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid #e8e9ed;font-size:15px;font-weight:600;color:#14181f;background:#f7f7f9}
@@ -3395,8 +3400,8 @@ window.addLog = function(text, type, html){
         var emptyMsg=list.querySelector('.v8log-empty');
         if(emptyMsg) emptyMsg.remove();
         var row=document.createElement('div');
-        row.className='v8log-entry';
-        row.innerHTML='<div class="v8log-dot '+entry.type+'"></div><div class="v8log-content"><div class="v8log-text">'+entry.text+'</div><div class="v8log-time">'+entry.time+'</div></div>';
+        row.className='v8log-entry '+entry.type;
+        row.innerHTML='<div class="v8log-dot '+entry.type+'"></div><div class="v8log-content"><span class="v8log-time">'+entry.time+'</span><span class="v8log-text">'+entry.text+'</span></div>';
         list.insertBefore(row, list.firstChild);
         while(list.children.length>300) list.removeChild(list.lastChild);
       }
@@ -3409,7 +3414,7 @@ function v8RenderLog(){
   var filtered=v8LogFilterActive==='all'?v8LogEntries:v8LogEntries.filter(function(e){return e.type===v8LogFilterActive;});
   if(filtered.length===0){ list.innerHTML='<div class="v8log-empty">No entries for this filter yet.</div>'; return; }
   list.innerHTML=filtered.map(function(e){
-    return '<div class="v8log-entry"><div class="v8log-dot '+e.type+'"></div><div class="v8log-content"><div class="v8log-text">'+e.text+'</div><div class="v8log-time">'+e.time+'</div></div></div>';
+    return '<div class="v8log-entry '+e.type+'"><div class="v8log-dot '+e.type+'"></div><div class="v8log-content"><span class="v8log-time">'+e.time+'</span><span class="v8log-text">'+e.text+'</span></div></div>';
   }).join('');
 }
 document.querySelectorAll('.v8log-filter-chip').forEach(function(chip){
