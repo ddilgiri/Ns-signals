@@ -4171,12 +4171,18 @@ function v8FromRealSignal(sig){
   // different real trade-creation path), then 0 if genuinely no trade exists yet.
   var realTrade = (typeof S !== 'undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId === sig.id; }) : null;
   var realLots = realTrade ? (realTrade.lots || 1) : (sig.v8Lots != null ? sig.v8Lots : 0);
+  // Real fix: prefer the live currentPremium from the real open trade (updated every
+  // 15s by refreshOpenTradePrices) over sig.premium, which is a stale snapshot frozen
+  // at the moment this signal was last scored -- confirmed via user report that
+  // SUNPHARMA's LTP never updated despite a real, working live price feed underneath.
+  var liveLtp = (realTrade && realTrade.currentPremium) ? realTrade.currentPremium : (sig.premium || sig.entryPremium || 0);
+  var liveSpot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[sig.sym]) ? LIVE_PRICES[sig.sym] : (sig.spotPrice || 0);
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls,
     entry: sig.entryPremium || sig.premium || 0,
-    spot: sig.spotPrice || 0,
-    ltp: sig.premium || sig.entryPremium || 0,
+    spot: liveSpot,
+    ltp: liveLtp,
     lots: realLots,
     lotSize: sig.lot || 1,
     dim: (t.tier === 'stale' || t.tier === 'skip'),
