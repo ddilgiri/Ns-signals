@@ -516,6 +516,7 @@ app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
 
 const BIAS_CACHE={},BIAS_TTL=3e5;
+const OI_CACHE={},OI_CACHE_TTL=15e3;
 // Minimum absolute OI (contracts) for a strike to be trusted as a real wall/floor signal.
 // A strike can look "STRONG" purely relative to a thin trading day's average OI (W) while
 // still being genuinely low-liquidity in absolute terms -- easy to move, easy to fake a
@@ -1044,6 +1045,16 @@ app.post("/oi-analysis",async(e,t)=>{
   const{symbol:a,spotPrice:s,expiry:n,rsi:rsiVal,aboveVwap:aboveVwapVal,clientPriorChain}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
+  // Real fix: OI chain data is identical regardless of which side (CE/PE) is being scored,
+  // but scanSymbol() calls /signal-analysis once per side, each independently re-fetching
+  // this same data -- confirmed real, measurable duplication. Short-lived cache (15s, well
+  // under the 25s scan-cycle interval and the CE-then-PE gap within one stock's scan) lets
+  // the second call reuse the first's real result instead of hitting Angel One again.
+  const _oiCacheKey=a.toUpperCase()+"|"+o;
+  const _oiCached=OI_CACHE[_oiCacheKey];
+  if(_oiCached && Date.now()-_oiCached.fetchTime<OI_CACHE_TTL){
+    return t.json(_oiCached.data);
+  }
   try{await ensureInstruments("OI analysis");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
 const _expiryEnd=new Date(c);_expiryEnd.setHours(15,30,0,0);
 const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){
@@ -1094,6 +1105,7 @@ ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expir
   const _isIndexSym=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"].includes(i);
 const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,totalCeOI:T,totalPeOI:y},exInfoForGamma,_vixForGamma,_isIndexSym);
   const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
+  OI_CACHE[_oiCacheKey]={data:oiResult,fetchTime:Date.now()};
   // Save OI snapshot for trend tracking
   // Mahesh confirmation: OI direction + LTP direction at Ramesh wall / Suresh floor
   try{
