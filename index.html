@@ -249,8 +249,9 @@
 .v8form-input:focus{outline:none;border-color:#7e22ce}
 .v8log-screen{position:fixed;inset:0;z-index:130;display:none;flex-direction:column;height:100vh;background:#fff}
 .v8log-screen.show{display:flex}
-.v8log-header{display:flex;align-items:center;gap:12px;padding:16px 16px 12px;border-bottom:1px solid #e8e9ed;background:#fff;flex-shrink:0}
-.v8log-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;flex:1;color:#14181f}
+.v8log-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 16px 12px;border-bottom:1px solid #e8e9ed;background:#fff;flex-shrink:0}
+.v8log-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:#14181f}
+.v8log-close-btn{width:32px;height:32px;border-radius:50%;background:#f3f4f7;border:none;font-size:15px;color:#14181f;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .v8back-btn{width:34px;height:34px;border-radius:50%;background:#fff;border:1px solid #e8e9ed;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;color:#14181f}
 .v8log-tabs{display:flex;background:#fff;border-bottom:1px solid #e8e9ed;flex-shrink:0}
 .v8log-tab{flex:1;text-align:center;padding:14px 0;font-size:14.5px;font-weight:800;color:#6b7280;cursor:pointer;border-bottom:2.5px solid transparent}
@@ -259,16 +260,16 @@
 .v8log-filter-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid #e8e9ed;background:#fff;color:#6b7280}
 .v8log-filter-chip.active{background:#14181f;color:#fff;border-color:#14181f}
 .v8log-list{flex:1;overflow-y:auto;padding:8px 16px 24px}
-.v8log-entry{display:flex;align-items:baseline;gap:7px;padding:5px 2px}
+.v8log-entry{display:flex;align-items:baseline;gap:7px;padding:5px 2px;overflow:hidden}
 .v8log-dot{display:none}
 .v8log-dot.signal{background:#0f9d58}
 .v8log-dot.scan{background:#1d5fbf}
 .v8log-dot.manual{background:#7e22ce}
 .v8log-dot.error{background:#d93025}
 .v8log-dot.trap{background:#b8860b}
-.v8log-content{flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
-.v8log-text{font-size:10.5px;font-weight:600;line-height:1.4}
-.v8log-time{font-size:9px;font-weight:700;font-family:'SF Mono','Courier New',monospace;flex-shrink:0}
+.v8log-content{flex:1;min-width:0;display:flex;align-items:baseline;gap:7px;overflow:hidden;white-space:nowrap}
+.v8log-text{font-size:10.5px;font-weight:600;line-height:1.4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.v8log-time{font-size:10.5px;font-weight:600;line-height:1.4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;flex-shrink:0}
 .v8log-entry.signal .v8log-time,.v8log-entry.signal .v8log-text{color:#0f9d58}
 .v8log-entry.scan .v8log-time,.v8log-entry.scan .v8log-text{color:#1d5fbf}
 .v8log-entry.manual .v8log-time,.v8log-entry.manual .v8log-text{color:#7e22ce}
@@ -488,8 +489,8 @@ body.v8-login-only #pg-setup .btn-primary{background:#7e22ce!important;border-ra
 </div>
 <div class="v8log-screen" id="v8LogScreenWrap">
   <div class="v8log-header">
-    <button class="v8back-btn" id="v8LogBack">←</button>
     <h1>Activity Log</h1>
+    <button class="v8log-close-btn" id="v8LogBack">✕</button>
   </div>
   <div class="v8log-tabs">
     <div class="v8log-tab active" id="v8TabEvents">Events</div>
@@ -4260,7 +4261,7 @@ function v8SyncFromRealSignals(){
         card = {
           key: pt.sigId, mode: 'manual', name: pt.sym, strike: pt.strike, type: pt.type,
           tier: 'unknown', tierLabel: '❔ NO DATA', tagCls: 'warn',
-          entry: realEntry, spot: pt.spotPrice || 0, ltp: realLtp,
+          entry: realEntry, spot: (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[pt.sym]) || 0, ltp: realLtp,
           lots: pt.lots || 1, lotSize: pt.lot || 1, dim: true,
           ceRead: '--', ceClass: 'green', peRead: '--', peClass: 'red', strikeRange: '--',
           ccCapsules: [],
