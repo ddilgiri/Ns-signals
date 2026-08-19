@@ -597,6 +597,11 @@ async function refreshOpenTradePrices(){
     var r=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:payload})});
     var data=await r.json();
     if(!data.status)return;
+    if(data.debugMisses && data.debugMisses.length && typeof addLog==='function'){
+      data.debugMisses.forEach(function(m){
+        addLog('🔍 Live price miss: '+m.key+' -- '+m.reason+' (symCandidatesFound='+m.symCandidatesFound+', searchedStrike='+m.searchedStrike+', searchedType='+m.searchedType+')','warn');
+      });
+    }
     openTrades.forEach(function(trade){
       var key=trade.sym+"_"+trade.strike+"_"+trade.type;
       var ltp=data.prices[key];
