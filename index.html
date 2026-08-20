@@ -2352,6 +2352,18 @@ function v4AutoTrade(sig) {
   if(!_autoTradeEnabled) return;
   if(!sig || !sig.id) return;
   if(_autoTraded[sig.id]) return; // already created
+  // Real fix: auto-trade was firing on ANY qualifying signal regardless of verdict --
+  // confirmed via Activity Log showing GLENMARK/COFORGE/BANDHANBNK/MOTILALOFS all
+  // auto-traded at WEAK (50-56%). WEAK signals are meant to stay hidden candidates
+  // (per the dashboard WEAK filter), but once auto-traded into an open position they
+  // bypass that filter entirely -- an open trade must always show, by design, so a
+  // WEAK auto-trade was showing up on the dashboard exactly like a real qualified one.
+  // Gate at the source instead: only STRONG and MODERATE verdicts get auto-traded.
+  // Deliberately does NOT set _autoTraded here when skipping a WEAK verdict -- signals
+  // are re-scored every scan cycle (separate fix), so a WEAK signal that later improves
+  // to MODERATE/STRONG must still get a chance to auto-trade on that later pass, not be
+  // permanently excluded just because its first-ever score was WEAK.
+  if(sig.verdict!=='STRONG' && sig.verdict!=='MODERATE') return;
   _autoTraded[sig.id] = true;
 
   var prem = sig.premium || 0;
