@@ -4072,7 +4072,7 @@ function v8CaseGroup(c){
   if(c===5||c===7) return 'UNWIND';
   return 'NONE';
 }
-function v8DeriveTier(sig){
+function v8DeriveTier(sig, realTrade){
   if(sig.invalidStrike){
     var invalidStrikeVariants=[
       sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.',
@@ -4097,6 +4097,23 @@ function v8DeriveTier(sig){
     var staleFlag = flags.find(function(f){ return (f.type||'').toUpperCase().indexOf('STALE')>=0; });
     if(staleFlag && staleFlag.detail) staleDetail = ' ('+staleFlag.detail+')';
     var youSide = sig.type==='CE' ? 'Call' : 'Put';
+    if(realTrade){
+      // Real fix: this exact same staleMove flag was previously showing the fresh-entry
+      // "late-entry risk" warning on cards the user already holds an open position in --
+      // nonsensical when the trade shows real profit, since you're not entering, you're
+      // already in. Text now honestly describes what THIS scan found on the underlying
+      // stock (price action has gone flat/range-compressed since the earlier move) without
+      // implying an entry decision, and folds in the trade's actual live P&L so it reads
+      // as a status update on a held position, not entry advice.
+      var pnlNow = realTrade.pnl || 0;
+      var pnlTxt = pnlNow>0 ? ('up ₹'+Math.abs(Math.round(pnlNow)).toLocaleString('en-IN')+' so far') : pnlNow<0 ? ('down ₹'+Math.abs(Math.round(pnlNow)).toLocaleString('en-IN')+' so far') : 'flat so far';
+      var staleTradeVariants=[
+        sig.sym+' at '+sig.strike+' — the stock\'s price swing has compressed since the earlier move'+staleDetail+'. This is a status read on your open position, not an entry call: you\'re '+pnlTxt+'. Watch for the next real move to decide hold vs exit.',
+        'Price action on '+sig.sym+' near '+sig.strike+' has gone quiet since the earlier move'+staleDetail+'. Your open position is '+pnlTxt+' — this scan isn\'t telling you to enter (you already are), just that the underlying isn\'t showing fresh momentum right now.'
+      ];
+      return {tier:'stale', tierLabel:'🔴 STALE', tagCls:'warn',
+        verdictEmoji:'⚠️', verdictTxt:v8Pick(staleTradeVariants)};
+    }
     var staleVariants=[
       'The big move at '+sig.strike+' already happened and price has since gone flat'+staleDetail+' — urgency is fading. Entering now carries late-entry risk.',
       youSide+' buyers were winning at '+sig.strike+', but that move already happened and price has gone flat since. Late entry here is chasing, not fresh. Better to wait for the next confirmed move.'
@@ -4243,9 +4260,6 @@ function v8DeriveTier(sig){
 }
 
 function v8FromRealSignal(sig){
-  var t = v8DeriveTier(sig);
-  var wall = sig.ceWalls && sig.ceWalls[0];
-  var floor = sig.peFloors && sig.peFloors[0];
   // Real fix: for an auto signal, v4AutoTrade() already creates a genuine paper trade
   // with a real computed lot count (based on Max Capital setting) the moment the signal
   // qualifies -- read that real lots value first, so the card and header stats reflect
@@ -4253,6 +4267,9 @@ function v8FromRealSignal(sig){
   // the same thing. Falls back to manual v8Lots (for Manual Check cards, which use a
   // different real trade-creation path), then 0 if genuinely no trade exists yet.
   var realTrade = (typeof S !== 'undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId === sig.id; }) : null;
+  var t = v8DeriveTier(sig, realTrade);
+  var wall = sig.ceWalls && sig.ceWalls[0];
+  var floor = sig.peFloors && sig.peFloors[0];
   var realLots = realTrade ? (realTrade.lots || 1) : (sig.v8Lots != null ? sig.v8Lots : 0);
   // Real fix: prefer the live currentPremium from the real open trade (updated every
   // 15s by refreshOpenTradePrices) over sig.premium, which is a stale snapshot frozen
