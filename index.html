@@ -592,7 +592,7 @@ function stopTradesPricePolling(){
 async function refreshOpenTradePrices(){
   var openTrades=S.paperTrades.filter(function(t){return t.status==="OPEN"||!t.status;});
   if(!openTrades.length||!S.connected)return;
-  var payload=openTrades.map(function(t){return{symbol:t.sym,strike:t.strike,type:t.type};});
+  var payload=openTrades.map(function(t){return{symbol:t.sym,strike:t.strike,type:t.type,expiry:t.expiry||null};});
   try{
     var r=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:payload})});
     var data=await r.json();
@@ -603,9 +603,16 @@ async function refreshOpenTradePrices(){
       });
     }
     openTrades.forEach(function(trade){
-      var key=trade.sym+"_"+trade.strike+"_"+trade.type;
+      var key=trade.sym+"_"+trade.strike+"_"+trade.type+"_"+(trade.expiry||"");
+      if(data.expired && data.expired[key]){
+        trade.priceExpired=true;
+        var nowElExp=document.getElementById("tnow-"+trade.id);
+        if(nowElExp)nowElExp.innerHTML="<span style='color:var(--text3)'>Expired</span>";
+        return;
+      }
       var ltp=data.prices[key];
       if(ltp===undefined||ltp<=0)return;
+      trade.priceExpired=false;
       trade.currentPremium=ltp;
       var lots=trade.lots||1;
       var avgPrem=trade.avgPremium||trade.entryPremium||0;
@@ -682,26 +689,37 @@ var _pChgInit=_pHasPrevClose?(_pSign+_pDiff.toFixed(2)+" ("+_pSign+_pPct.toFixed
   // Build list of unique symbols from signals + trades
   var allItems=[],seen={};
   S.signals.forEach(function(sig){
-    var k=sig.sym+"_"+sig.strike+"_"+sig.type;
+    var k=sig.sym+"_"+sig.strike+"_"+sig.type+"_"+(sig.expiry||"");
     if(sig.sym&&sig.strike&&sig.type&&!seen[k]){
       seen[k]=true;
-      allItems.push({src:"sig",id:sig.id,sym:sig.sym,strike:sig.strike,type:sig.type,premium:sig.premium});
+      allItems.push({src:"sig",id:sig.id,sym:sig.sym,strike:sig.strike,type:sig.type,expiry:sig.expiry||null,premium:sig.premium});
     }
   });
   S.paperTrades.forEach(function(tr){
-    var k=tr.sym+"_"+tr.strike+"_"+tr.type;
+    var k=tr.sym+"_"+tr.strike+"_"+tr.type+"_"+(tr.expiry||"");
     if(!seen[k]){
       seen[k]=true;
-      allItems.push({src:"trade",id:tr.id,sym:tr.sym,strike:tr.strike,type:tr.type,premium:tr.currentPremium});
+      allItems.push({src:"trade",id:tr.id,sym:tr.sym,strike:tr.strike,type:tr.type,expiry:tr.expiry||null,premium:tr.currentPremium});
     }
   });
   if(!allItems.length)return;
   try{
-    var resp=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:allItems.map(function(x){return{symbol:x.sym,strike:x.strike,type:x.type};})})});
+    var resp=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:allItems.map(function(x){return{symbol:x.sym,strike:x.strike,type:x.type,expiry:x.expiry};})})});
     var data=await resp.json();
     if(!data.status)return;
     allItems.forEach(function(item){
-      var k=item.sym+"_"+item.strike+"_"+item.type;
+      var k=item.sym+"_"+item.strike+"_"+item.type+"_"+(item.expiry||"");
+      if(data.expired && data.expired[k]){
+        if(item.src==="trade"){
+          var trExp=S.paperTrades.find(function(t){return t.id===item.id;});
+          if(trExp){
+            trExp.priceExpired=true;
+            var nowElExp2=document.getElementById("tnow-"+trExp.id);
+            if(nowElExp2)nowElExp2.innerHTML="<span style='color:var(--text3)'>Expired</span>";
+          }
+        }
+        return;
+      }
       var ltp=data.prices[k];
       if(!ltp||ltp<=0)return;
       if(item.src==="sig"){
@@ -737,7 +755,8 @@ el.className=baseClass+" "+(dayHasPrevClose?(dayDiff>0?"price-up":dayDiff<0?"pri
       }
       // Update paper trade live premium (also handled by refreshOpenTradePrices but keep in sync)
       S.paperTrades.forEach(function(tr){
-        if(tr.sym===item.sym&&tr.strike===item.strike&&tr.type===item.type){
+        if(tr.sym===item.sym&&tr.strike===item.strike&&tr.type===item.type&&(tr.expiry||null)===(item.expiry||null)){
+          tr.priceExpired=false;
           tr.currentPremium=ltp;
           var lots=tr.lots||1;
           var avg=tr.avgPremium||tr.entryPremium||0;
@@ -1375,7 +1394,7 @@ if(g.score<l){continue}var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{va
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
 if(u=f.atmStrike||0,f.chain&&f.chain.length)for(var h=f.chain.slice().sort(function(e,t){return Math.abs(e.strike-s)-Math.abs(t.strike-s)}),k=0;k<h.length;k++){var E="CE"===v?h[k].CE_ltp||0:h[k].PE_ltp||0;if(E>0){y=E,u=h[k].strike,pPrevClose=("CE"===v?h[k].CE_prevClose:h[k].PE_prevClose)||0;break}}g.ceWalls&&g.ceWalls.length||(g.ceWalls=f.ceWalls||[]),g.peFloors&&g.peFloors.length||(g.peFloors=f.peFloors||[]),g.ceSignal||(g.ceSignal=f.ceSignal||null),g.peSignal||(g.peSignal=f.peSignal||null),g.rameshTrapped||(g.rameshTrapped=f.rameshTrapped||!1),g.atmCeOIChange=f.atmCeOIChange||0,g.atmPeOIChange=f.atmPeOIChange||0,g.strikeFlags=f.strikeFlags||[]}}catch(t){addLog("OI fetch "+e+": "+t.message,"warn")}if(!y&&u)try{var _sExp=(function(){var now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));function lastTueOf(yr,mn){var last=new Date(yr,mn,0);var diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}var todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());var curLastTue=lastTueOf(now.getFullYear(),now.getMonth()+1);var dte=Math.round((curLastTue-todayMid)/86400000);var _idxList=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];var _isIdx=_idxList.includes(e.toUpperCase());return(_isIdx?(dte<0):(dte<=5))?"NEXT_MONTH":"MONTHLY";})();var L=await fetch(getServer()+"/option-ltp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,strike:u,type:v,expiry:_sExp})}),T=await L.json();T.status&&T.ltp&&(y=parseFloat(T.ltp));if(!y)addLog("Fallback /option-ltp also empty for "+e+" "+v+" "+u+": "+(T.message||JSON.stringify(T).slice(0,100)),"warn");}catch(_fbErr){addLog("Fallback /option-ltp threw for "+e+" "+v+" "+u+": "+_fbErr.message,"warn");}if(u>0&&s>0){var N=Math.abs(u-s)/s;if(N>.2){addLog("Skip "+e+" "+v+" — strike "+u+" too far from spot "+Math.round(s)+" ("+(100*N).toFixed(0)+"%)","warn");continue}}if(!u){addLog("Skip "+e+" — no valid strike found","warn");continue}if(!y){addLog("Skip "+e+" "+v+" — zero premium at scan time [oiStatus:"+(f?f.status:"no-f")+" chainLen:"+(f&&f.chain?f.chain.length:"n/a")+" atmStrike:"+(f?f.atmStrike:"n/a")+" u:"+u+"]","warn");continue}if(S.signals.some(function(t){return t.sym===e&&t.type===v&&t.strike===u})){addLog("Skip dup: "+e+" "+v+" "+u+" (exists)","warn");continue}if(S.paperTrades.some(function(pt){return pt.sym===e&&pt.type===v&&pt.strike===u&&"OPEN"===pt.status})){addLog("Skip: "+e+" "+v+" "+u+" — already an open paper trade, use the live flag badge on that card instead of a fresh signal","warn");continue}if(y>0){var C=y*o*1.2;if(C>r){addLog("Skip "+e+" — capital ₹"+Math.round(C/1e3)+"K > limit ₹"+Math.round(r/1e3)+"K","");continue}}if(g.naresStaleDowngrade)addLog("Naresh: "+e+" "+v+" downgraded STRONG→MODERATE — urgency faded (STALE), likely late entry","warn");var _matchedRow=(f&&f.chain)?f.chain.find(function(r){return r.strike===u;}):null;
-var x=Object.assign({},g,{gammaBlast:g.gammaBlast||null,id:e+"_"+v+"_"+Date.now(),sym:e,type:v,lot:o,token:String(t),score:g.score,initialScore:g.score,verdict:g.verdict,spotPrice:s,premium:y,entryPremium:y,prevPremiumClose:pPrevClose,strike:u,isExpiry:!!g.isExpiryDay,isCommodity:!1,ts:Date.now(),ceCase:_matchedRow?_matchedRow.ceCase:null,peCase:_matchedRow?_matchedRow.peCase:null});computeLevels(x);
+var x=Object.assign({},g,{gammaBlast:g.gammaBlast||null,id:e+"_"+v+"_"+Date.now(),sym:e,type:v,lot:o,token:String(t),score:g.score,initialScore:g.score,verdict:g.verdict,spotPrice:s,premium:y,entryPremium:y,prevPremiumClose:pPrevClose,strike:u,expiry:(f&&f.expiry)||null,isExpiry:!!g.isExpiryDay,isCommodity:!1,ts:Date.now(),ceCase:_matchedRow?_matchedRow.ceCase:null,peCase:_matchedRow?_matchedRow.peCase:null});computeLevels(x);
 // Block signal if roadblock detected after level computation
 var hasRoadblock=v4Roadblock&&v4Roadblock(x);
 if(hasRoadblock){
@@ -2330,6 +2349,7 @@ function v4AutoTrade(sig) {
     sym: sig.sym,
     strike: sig.strike,
     type: sig.type,
+    expiry: sig.expiry || null,
     lot: lotSize,
     lots: 1, // always start with 1 lot
     lotPrices: [prem],
@@ -2934,6 +2954,11 @@ function v42OpenModal() {
     '</div>' +
 
     '<div class="v42-field">' +
+    '<label class="v42-label">Expiry (e.g. 28AUG2025)</label>' +
+    '<input class="v42-input" id="v42-expiry" type="text" placeholder="DDMMMYYYY">' +
+    '</div>' +
+
+    '<div class="v42-field">' +
     '<label class="v42-label">Target ₹</label>' +
     '<input class="v42-input" id="v42-target" type="number" step="0.05" placeholder="e.g. 50.00">' +
     '</div>' +
@@ -2978,10 +3003,12 @@ function v42SubmitTrade() {
   var target = parseFloat(document.getElementById('v42-target').value||0) || null;
   var stop = parseFloat(document.getElementById('v42-stop').value||0) || null;
   var note = (document.getElementById('v42-note').value||'').trim();
+  var expiry = (document.getElementById('v42-expiry').value||'').trim().toUpperCase() || null;
 
   if(!sym) { toast('⚠️ Enter symbol'); return; }
   if(!strike) { toast('⚠️ Enter strike price'); return; }
   if(!entry) { toast('⚠️ Enter entry premium'); return; }
+  if(!expiry) { toast('⚠️ Enter expiry (e.g. 28AUG2025)'); return; }
 
   // Get lot size from NSE_STOCKS
   var lotSize = 1;
@@ -3001,6 +3028,7 @@ function v42SubmitTrade() {
     sym: sym,
     strike: strike,
     type: v42Type,
+    expiry: expiry,
     lot: lotSize,
     lots: v42Lots,
     lotPrices: Array(v42Lots).fill(entry),
