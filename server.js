@@ -1398,7 +1398,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const{symbolToken:a,sym:s,exchange:n="NSE",isIndex:o=!1,spotPrice:r,type:i}=e.body;
   try{const[e,o,l,c,u]=await Promise.allSettled([axios.post(`http://localhost:${PORT}/market-bias`,{symbolToken:a,exchange:n},{headers:{"Content-Type":"application/json"}}),Promise.resolve({data:FII_DII_CACHE.data||{instBias:"NEUTRAL",fiiNet:0,diiNet:0,fiiBuy:0,fiiSell:0,diiBuy:0,diiSell:0}}),
     Promise.resolve({data:VIX_CACHE.data||{vix:null,regime:"UNKNOWN",premiumBuyable:true,guidance:""}}),
-    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bias:p.bias||"NEUTRAL",staleMove:p.staleMove||!1,chopRange:p.chopRange||!1,ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],strikeFlags:h?.strikeFlags||[]};
+    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bias:p.bias||"NEUTRAL",staleMove:p.staleMove||!1,chopRange:p.chopRange||!1,ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],strikeFlags:h?.strikeFlags||[],expiry:h?.expiry||null};
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
@@ -1447,8 +1447,11 @@ if(h.status&&h.data?.fetched?.length){const N=h.data.fetched[0],A=parseFloat(N.l
 // ═══════════════════════════════════════════════════════
 // LIVE TRADE PRICES — batch LTP for all open paper trades
 // POST /live-trade-prices
-// Body: { trades: [{symbol, strike, type}] }
-// Returns: { status:true, prices: {"NBCC_109_CE": 4.25, ...} }
+// Body: { trades: [{symbol, strike, type, expiry}] }  -- expiry is the raw string (e.g. "28AUG2025")
+// the trade was actually created with. When present, matching is STRICT: only that exact
+// expiry's contract is ever priced. If that contract is no longer live, the key is returned
+// in `expired` instead of silently substituting a different month's price at the same strike.
+// Returns: { status:true, prices: {"NBCC_109_CE_28AUG2025": 4.25, ...}, expired: {"...": true} }
 // ═══════════════════════════════════════════════════════
 app.post("/live-trade-prices",async(req,res)=>{
   if(!isAuthenticated())return res.status(401).json({status:false,message:"Not authenticated"});
@@ -1459,22 +1462,22 @@ app.post("/live-trade-prices",async(req,res)=>{
     await ensureInstruments("live trade prices");
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
     function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
-    const tokenMap={};const tokenToKey={};const now=new Date();
+    const tokenMap={};const tokenToKey={};const now=new Date();const expired={};
     for(const trade of trades){
       const sym=(trade.symbol||"").toUpperCase();
       const strike=parseFloat(trade.strike);
       const type=(trade.type||"CE").toUpperCase();
-      const key=`${sym}_${strike}_${type}`;
+      const wantExpiry=trade.expiry?String(trade.expiry).trim().toUpperCase():null;
+      const key=`${sym}_${strike}_${type}_${wantExpiry||""}`;
       const matches=SESSION._instruments.filter(inst=>{
         if(inst.exch_seg!=="NFO")return false;
         if(!inst.instrumenttype?.includes("OPT"))return false;
-        const exp=parseExp(inst.expiry);if(!exp)return false;const _expEnd=new Date(exp);_expEnd.setHours(15,30,0,0);if(_expEnd<now)return false;
+        const exp=parseExp(inst.expiry);if(!exp)return false;
         const is=Math.round(parseFloat(inst.strike));
         if(!(is===Math.round(100*strike)||is===Math.round(strike)))return false;
         if(!inst.symbol?.toUpperCase().endsWith(type))return false;
-        if(inst.name?.toUpperCase()===sym)return true;
-        const s2=inst.symbol.toUpperCase();
-        return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);
+        if(!(inst.name?.toUpperCase()===sym||(()=>{const s2=inst.symbol.toUpperCase();return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);})()))return false;
+        return true;
       });
       if(!matches.length){
         log(`live-trade-prices: no instrument for ${key}`,"WARN");
@@ -1482,48 +1485,30 @@ app.post("/live-trade-prices",async(req,res)=>{
         debugMisses.push({key,reason:"no matching instrument",symCandidatesFound:symCandidates,searchedStrike:strike,searchedType:type});
         continue;
       }
-      const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp).sort((a,b)=>a._exp-b._exp);
-      // Match same expiry logic as getExpiryType: if dte<0 use next month, else current month
-      const nowIST=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
-      function lastTueOf2(yr,mn){const last=new Date(yr,mn,0);const diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}
-      const todayMid2=new Date(nowIST.getFullYear(),nowIST.getMonth(),nowIST.getDate());
-      const curLastTue2=lastTueOf2(nowIST.getFullYear(),nowIST.getMonth()+1);
-      const dte2=Math.round((curLastTue2-todayMid2)/86400000);
       let best;
-      // Indices use current month till expiry day; stocks switch 5 days before
-      // NIFTY: always nearest contract (weekly) — sorted[0]
-      // BANKNIFTY/FINNIFTY/MIDCPNIFTY: current month till expiry passed (dte<0)
-      // STOCKS: next month 5 days before expiry (dte<=5)
-      const _NIFTY_IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
-      if(sym==="NIFTY"){
-        best=sorted[0]; // always nearest weekly contract
-      } else if(_NIFTY_IDXLIST.includes(sym)){
-        if(dte2<0){
-          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
-          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
-          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[0];
-        } else {
-          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
-          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
-          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+      if(wantExpiry){
+        // STRICT: only ever match the exact expiry the trade was created with.
+        // Never silently fall back to a different month's contract at the same strike —
+        // that produces a real-looking but wrong price with no indication the month changed.
+        best=matches.find(inst=>String(inst.expiry).trim().toUpperCase()===wantExpiry);
+        if(!best){
+          expired[key]=true;
+          debugMisses.push({key,reason:"exact expiry not found (likely expired)",symCandidatesFound:matches.length,searchedStrike:strike,searchedType:type,wantExpiry});
+          continue;
         }
+        const expDate=parseExp(best.expiry);
+        if(expDate){const expEnd=new Date(expDate);expEnd.setHours(15,30,0,0);if(expEnd<now){expired[key]=true;continue;}}
       } else {
-        // STOCKS — next month 5 days before
-        if(dte2<=5){
-          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
-          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
-          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
-        } else {
-          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
-          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
-          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
-        }
+        // Legacy fallback path (no expiry supplied by caller) — nearest live contract.
+        const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp&&(()=>{const e=new Date(i._exp);e.setHours(15,30,0,0);return e>=now;})()).sort((a,b)=>a._exp-b._exp);
+        if(!sorted.length){expired[key]=true;continue;}
+        best=sorted[0];
       }
       tokenMap[key]=String(best.token);
       tokenToKey[String(best.token)]=key;
     }
     const tokens=Object.values(tokenMap);
-    if(!tokens.length)return res.json({status:true,prices:{}});
+    if(!tokens.length)return res.json({status:true,prices:{},expired,debugMisses});
     const prices={};const BATCH=50;
     for(let i=0;i<tokens.length;i+=BATCH){
       const batch=tokens.slice(i,i+BATCH);
@@ -1538,8 +1523,8 @@ app.post("/live-trade-prices",async(req,res)=>{
         }
       }catch(bErr){log(`live-trade-prices batch error: ${bErr.message}`,"WARN");}
     }
-    log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}`,"OK");
-    res.json({status:true,prices,debugMisses});
+    log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}, expired=${Object.keys(expired).length}`,"OK");
+    res.json({status:true,prices,expired,debugMisses});
   }catch(err){log(`live-trade-prices error: ${err.message}`,"ERR");res.status(500).json({status:false,message:err.message});}
 });
 
