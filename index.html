@@ -4245,7 +4245,7 @@ function v8FromRealSignal(sig){
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls,
-    entry: sig.entryPremium || sig.premium || 0,
+    entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
     ltp: liveLtp,
     lots: realLots,
@@ -4446,7 +4446,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mcard-name-row"><h2>'+s.name+'</h2><span class="v8pill '+(s.type==='CE'?'v8pill-ce':'v8pill-pe')+'">'+s.strike+' '+s.type+'</span>'+(s.isNew?'<span class="v8new-tag">New</span>':'')+'</div></div>'
     +'<span class="v8tier-badge '+s.tier+'">'+s.tierLabel+'</span></div>'
     +'<div class="v8mcard-mid">'
-    +'<div class="v8mid-item"><span class="v8mid-lbl">Entry</span><span class="v8entry-val">'+v8Fmt(s.entry)+'</span></div>'
+    +'<div class="v8mid-item"><span class="v8mid-lbl">'+(s.lots>1?'Avg':'Entry')+'</span><span class="v8entry-val">'+v8Fmt(s.entry)+'</span></div>'
     +'<div class="v8mid-item center"><span class="v8mid-lbl">Spot</span><span class="v8spot-val '+spotCls+'">'+v8Fmt(s.spot)+'</span></div>'
     +'<div class="v8mid-item center"><span class="v8mid-lbl">P&amp;L</span><span class="v8pnl-val '+pnlCls+'">'+v8Fmt(pnl)+'</span></div>'
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
