@@ -649,8 +649,8 @@ function getExpiryType(e){
     }
     return"MONTHLY";
   }
-  // STOCKS only — switch to next month 5 days before expiry
-  if(dte<=5){
+  // STOCKS only — switch to next month 4 days before expiry
+  if(dte<=4){
     log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
   }
