@@ -89,7 +89,7 @@
 .v8stat-card.manual .v8stat-val{color:var(--purple)}
 .v8stat-card.pulse .v8stat-val{color:var(--blue);font-size:12px}
 .v8stat-card.scan .v8stat-val{color:var(--amber);font-size:11px}
-.v8scan-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:4px}
+.v8scan-dot{display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;color:var(--green);margin-right:4px;vertical-align:middle}
 .v8scan-dot.scanning{animation:v8pulse 1.5s infinite}
 .v8stat-card.capital .v8stat-val{color:var(--blue)}
 .v8stat-card.pnl .v8stat-val.up{color:var(--green)}
@@ -397,7 +397,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
     <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
-    <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
+    <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
   <div id="v8FeedList"></div>
 </div>
