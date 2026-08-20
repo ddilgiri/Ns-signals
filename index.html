@@ -3644,6 +3644,15 @@ function v8SetSide(side){
 function v8OpenFormSheet(){
   document.getElementById('v8FormView').style.display='block';
   document.getElementById('v8LoadingView').style.display='none';
+  // Real fix: clear every field on open, not just Lots -- previously Stock/Strike/Entry
+  // and the CE/PE side selection all carried over from the last entry, showing stale
+  // data on every reopen.
+  document.getElementById('v8MStock').value='';
+  document.getElementById('v8MStrike').value='';
+  document.getElementById('v8MEntry').value='';
+  var suggestBox=document.getElementById('v8StockSuggest');
+  if(suggestBox){ suggestBox.style.display='none'; suggestBox.innerHTML=''; }
+  v8SetSide('CE');
   var defaultLot = localStorage.getItem('v8mock-defaultlot') || '1';
   document.getElementById('v8MLots').value = defaultLot;
   document.getElementById('v8FormBackdrop').classList.add('show');
