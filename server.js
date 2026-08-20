@@ -1164,16 +1164,16 @@ function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&
   // on cards (still visible in strikeFlags) -- only their consequence of blocking scoreSignal()
   // outright has been removed. STALE_MOVE and CHOP_RANGE (added same day as this gate, but not
   // targeted by this request) are untouched below.
-  // STALE_MOVE (2026-08-08): the big OI+LTP move already happened and price has since gone flat --
-  // a Case2/6 buying read right now is describing exhaustion of a move already behind us, not a
-  // fresh entry opportunity. Per user spec: block when staleMove is true AND the current side's
-  // relevant OI Case would otherwise be treated as fresh buying (Case2/6). Uses e.staleMove (from
-  // /market-bias, computed on 15-min candles already fetched -- no new API calls).
-  if(!n&&e.staleMove&&Array.isArray(e.strikeFlags)){
-    const atmEntryForStale=e.strikeFlags.find(sf=>sf.strikesAway===0&&Array.isArray(sf.flags));
-    const looksFresh=atmEntryForStale&&atmEntryForStale.flags.some(f=>f.side===t&&f.type==="FRESH_SIGNAL");
-    if(looksFresh){n=!0;o=`Move already stale on ${t} side — Case reads as Fresh Signal, but the big OI/LTP move already happened per recent candles and price has since gone flat; this looks like exhaustion of a completed move, not a fresh entry`;}
-  }
+  // STALE_MOVE (2026-08-08, hard-block REMOVED 2026-08-20 per user decision): originally blocked
+  // scoreSignal() outright when staleMove was true and the Case read as fresh buying, on the theory
+  // that a Case2/6 read after the big move already happened was exhaustion, not fresh entry. User
+  // flagged the real problem with this: a stock that looks "stale" by this narrow 2-window candle-
+  // range check can still turn into a genuinely good signal shortly after -- the hard block was
+  // silently preventing the scan from ever surfacing it at all, same failure mode as the earlier
+  // Squeeze/Exhaustion/Thin/RANGE_LOCK removal above. staleMove is still computed on every scan and
+  // still shown on cards (via strikeFlags / the STALE tier badge in the UI) so the information isn't
+  // lost -- it just no longer prevents the signal from being generated and scored.
+  // (Block intentionally removed -- do not re-add without a fresh explicit decision.)
   // CHOP_RANGE (2026-08-08): a chopping/range-bound stock (low net-move efficiency vs total range
   // over the last ~20 candles) has much lower edge than the same Case score on a genuinely
   // trending stock. Per user spec: "reduce confidence / suggest skip even if Case is valid" --
