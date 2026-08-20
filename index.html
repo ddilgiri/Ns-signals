@@ -1330,7 +1330,22 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     return stk?{stk:stk,reason:"volume",score:v.volRatio,detail:"Vol "+v.volRatio.toFixed(1)+"x"}:null;
   }).filter(Boolean);
   S.lastScanVolSpikes=[]; // consumed — will repopulate from this cycle's scans
-  var allCandidates=priceMovers.concat(oiMovers,volMovers);
+  // Visible-card priority (2026-08-20): any stock currently showing a card on the
+  // dashboard -- either a live signal or an open paper trade -- competes for a priority
+  // slot alongside price/OI/volume movers, same PRIORITY_MAX cap, so no extra fixed load
+  // is added per cycle. This bounds how stale a VISIBLE card can get (it can't get stuck
+  // waiting behind 200+ other stocks in the rotation) without force-scanning every visible
+  // stock every cycle, which would scale badly against the shared 350ms Angel One gate as
+  // the number of open cards grows. Deliberately low score so genuine movers still win a
+  // slot first if both are competing -- this is a staleness bound, not an override.
+  var visibleCardSyms={};
+  (S.signals||[]).forEach(function(sig){visibleCardSyms[sig.sym]=1;});
+  (S.paperTrades||[]).filter(function(pt){return pt.status==='OPEN';}).forEach(function(pt){visibleCardSyms[pt.sym]=1;});
+  var visibleMovers=Object.keys(visibleCardSyms).map(function(sym){
+    var stk=NSE_STOCKS.find(function(s){return s.sym===sym;});
+    return stk?{stk:stk,reason:"visible",score:0.01,detail:"card visible"}:null;
+  }).filter(Boolean);
+  var allCandidates=priceMovers.concat(oiMovers,volMovers,visibleMovers);
   var seenSyms={},moverCandidates=[];
   allCandidates.sort(function(a,b){return b.score-a.score;}).forEach(function(c){
     if(!seenSyms[c.stk.sym] && moverCandidates.length<PRIORITY_MAX){
