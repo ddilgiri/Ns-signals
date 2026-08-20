@@ -886,6 +886,9 @@ var _trc=null;try{var _traw=localStorage.getItem("fxo_scan_cache_"+tr.sym);if(_t
         }catch(err){}
       }
       savePaperTrades();
+      if(typeof v8SyncFromRealSignals==='function'){
+        try{ v8SyncFromRealSignals(); }catch(e){}
+      }
     }finally{
       _oiRefreshLock=!1;
     }
@@ -954,6 +957,9 @@ async function refreshSignalOI(forceDuringScan){
     }
     savePaperTrades();
     addLog("OI refreshed — Ramesh/Suresh updated","");
+    if(typeof v8SyncFromRealSignals==='function'){
+      try{ v8SyncFromRealSignals(); }catch(e){}
+    }
   }finally{
     _oiRefreshLock=!1;
   }
