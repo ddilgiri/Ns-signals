@@ -1286,7 +1286,7 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     await bulkDownload();
     e.disabled=false;
   }
-  S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(function(){window.runScan()},25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
+  S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",window._avoidedToday={},addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(function(){window.runScan()},25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
   // RE-ENTRY GUARD (2026-08-13): setInterval(runScan, 25000) fires on a fixed clock with no
   // awareness of whether the previous 210-stock pass has actually finished. Candle 403/429
@@ -1405,7 +1405,17 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
       if(_movePct<0.15){addLog("Skip "+e+" — flat ("+_movePct.toFixed(2)+"% from prev close), no candle fetch","");return;}
     }
   }
-  for(var l=parseInt(document.getElementById("cfgMinConf").value||"60"),r=parseInt(document.getElementById("cfgMaxCap")?document.getElementById("cfgMaxCap").value:"30000")||3e4,d=document.getElementById("cfgType").value||"BOTH",c="CE"===d?["CE"]:"PE"===d?["PE"]:["CE","PE"],p=0;p<c.length&&S.scanning;p++){var v=c[p];try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");if("AVOID"===g.verdict||"TRAP"===g.verdict)continue;
+  for(var l=parseInt(document.getElementById("cfgMinConf").value||"60"),r=parseInt(document.getElementById("cfgMaxCap")?document.getElementById("cfgMaxCap").value:"30000")||3e4,d=document.getElementById("cfgType").value||"BOTH",c="CE"===d?["CE"]:"PE"===d?["PE"]:["CE","PE"],p=0;p<c.length&&S.scanning;p++){var v=c[p];
+  // Real fix (2026-08-20): once a stock+side genuinely scores AVOID (<42%, covers user's
+  // "under 40%" request) today, stop re-checking it for the rest of the trading day --
+  // skip BEFORE the /signal-analysis call, saving a real API call each cycle, not just
+  // hiding it after the fact. Different from WEAK, which keeps re-scanning since WEAK can
+  // genuinely improve; AVOID here is a deliberate per-day exclusion the user asked for.
+  // Resets naturally on next login/day since window._avoidedToday is reset at scan start.
+  window._avoidedToday=window._avoidedToday||{};
+  var _avoidKey=e+"_"+v;
+  if(window._avoidedToday[_avoidKey]){continue;}
+  try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");if("AVOID"===g.verdict||"TRAP"===g.verdict){if("AVOID"===g.verdict){window._avoidedToday[_avoidKey]=true;addLog("🚫 "+e+" "+v+" "+g.score+"% AVOID — excluded from scanning for rest of today","warn");}continue;}
 var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorage.getItem("fxo_scan_cache_"+e);if(_rawCache){var _parsedCache=JSON.parse(_rawCache);if(_parsedCache&&_parsedCache.chain&&_parsedCache.chain.length&&isCacheFromToday(_parsedCache.ts))_cachedChain=_parsedCache.chain;}}catch(_ce){}
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
