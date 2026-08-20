@@ -4329,7 +4329,7 @@ function v8FromRealSignal(sig){
     spot: liveSpot,
     ltp: liveLtp,
     lots: realLots,
-    lotSize: sig.lot || 1,
+    lotSize: (realTrade && realTrade.lot) ? realTrade.lot : (sig.lot || 1),
     dim: (t.tier === 'stale' || t.tier === 'skip'),
     ceRead: wall ? (wall.strength === 'STRONG' ? 'Sellers Winning' : 'Buyers Winning') : '--',
     ceClass: wall && wall.strength === 'STRONG' ? 'red' : 'green',
