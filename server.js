@@ -125,13 +125,13 @@ function getExpiryWeekInfo(symbol){
     }
   } else {
     // BANKNIFTY, FINNIFTY, MIDCPNIFTY: monthly, current month till expiry day
-    // Stocks: monthly, but roll to NEXT month 5 days before expiry (matches getExpiryType logic)
+    // Stocks: monthly, but roll to NEXT month 4 days before expiry (matches getExpiryType logic)
     const curMonthLastTue=lastWeekdayOfMonth(2);
     const dteToCurMonth=Math.round((curMonthLastTue-now)/86400000);
     const INDICES_LIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
     const isIndexSym=INDICES_LIST.includes(sym);
-    if(!isIndexSym && dteToCurMonth<=5){
-      // Stock within 5 days of expiry — use NEXT month's last Tuesday instead
+    if(!isIndexSym && dteToCurMonth<=4){
+      // Stock within 4 days of expiry — use NEXT month's last Tuesday instead
       const nextMonthDate=new Date(year,month+1,1);
       const nm=nextMonthDate.getMonth(),ny=nextMonthDate.getFullYear();
       const lastDayNext=new Date(ny,nm+1,0);
