@@ -629,6 +629,14 @@ async function refreshOpenTradePrices(){
       if(cardEl){cardEl.className="trade-card sig-card "+(trade.type==="PE"?"bearish":"bullish");}
     });
     savePaperTrades();
+    // Real fix: v8SyncFromRealSignals only ever runs reactively (e.g. during a scan's
+    // renderSignals call) -- for manual trades not currently being actively re-scanned
+    // (like a STALE/CLEAR snapshot card), nothing was telling the V8 dashboard to redraw
+    // after this real 15s price update, so the card stayed visually frozen even though
+    // trade.currentPremium was genuinely updating in the background the whole time.
+    if(typeof v8SyncFromRealSignals==='function'){
+      try{ v8SyncFromRealSignals(); }catch(e){}
+    }
   }catch(err){console.warn("live-trade-prices fetch failed:",err.message);}
 }
 // ─────────────────────────────────────────────────────────
