@@ -4262,7 +4262,7 @@ function v8FromRealSignal(sig){
   var liveSpot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[sig.sym]) ? LIVE_PRICES[sig.sym] : (sig.spotPrice || 0);
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
-    tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls,
+    tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict,
     entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
     ltp: liveLtp,
@@ -4296,7 +4296,8 @@ function v8SyncFromRealSignals(){
   v8Signals.forEach(function(s){ existingLots[s.key] = s.lots; previousCardsByKey[s.key] = s; });
   var showStale = localStorage.getItem('v8mock-showstale')==='1';
   var showMixed = localStorage.getItem('v8mock-showmixed')!=='0';
-  if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed);
+  var showWeak = localStorage.getItem('v8mock-showweak')==='1';
+  if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed+' showWeak='+showWeak);
   // Build a quick lookup of which real signal ids have an open paper trade, so we
   // know which cards to snapshot for persistence as we build them below.
   var openTradeSigIds = {};
@@ -4319,6 +4320,11 @@ function v8SyncFromRealSignals(){
   }).filter(function(card){
     if(card.tier === 'stale' && !showStale){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (stale, showStale off) key='+card.key); return false; }
     if(card.tier === 'mixed' && !showMixed){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (mixed, showMixed off) key='+card.key); return false; }
+    // WEAK verdict hidden by default per user decision -- the underlying signal keeps
+    // getting rescanned every cycle (fixed separately), so if it genuinely improves past
+    // WEAK on a later scan it reappears automatically; this only hides the current view,
+    // it never stops the re-evaluation.
+    if(card.rawVerdict === 'WEAK' && !showWeak){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (weak, showWeak off) key='+card.key); return false; }
     return true;
   });
   if(typeof v8MDiag==='function') v8MDiag('sync: after filter, newSignals.length='+newSignals.length);
