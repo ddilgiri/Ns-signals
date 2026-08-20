@@ -416,7 +416,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8form-row">
       <div class="v8form-group">
         <label>Strike</label>
-        <input class="v8form-input" id="v8MStrike" placeholder="e.g. 150" value="" autocomplete="off">
+        <input class="v8form-input" id="v8MStrike" type="number" inputmode="decimal" placeholder="e.g. 150" value="" autocomplete="off">
       </div>
       <div class="v8form-group">
         <label>Side</label>
@@ -429,11 +429,11 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8form-row">
       <div class="v8form-group">
         <label>Entry Price</label>
-        <input class="v8form-input" id="v8MEntry" placeholder="e.g. 5.20" value="" autocomplete="off">
+        <input class="v8form-input" id="v8MEntry" type="number" inputmode="decimal" step="0.05" placeholder="e.g. 5.20" value="" autocomplete="off">
       </div>
       <div class="v8form-group">
         <label>Lots</label>
-        <input class="v8form-input" id="v8MLots" placeholder="e.g. 2" value="" autocomplete="off">
+        <input class="v8form-input" id="v8MLots" type="number" inputmode="numeric" placeholder="e.g. 2" value="" autocomplete="off">
       </div>
     </div>
     <button class="v8form-submit" id="v8SubmitManual">Analyse This Trade</button>
