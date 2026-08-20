@@ -2364,6 +2364,14 @@ function v4AutoTrade(sig) {
   // to MODERATE/STRONG must still get a chance to auto-trade on that later pass, not be
   // permanently excluded just because its first-ever score was WEAK.
   if(sig.verdict!=='STRONG' && sig.verdict!=='MODERATE') return;
+  // Same gap as WEAK above, applies here too: roadblock is computed independently of
+  // verdict (opposite-side OI building against the signal), so a STRONG/MODERATE signal
+  // can still be roadblock-flagged. Don't auto-trade into a real position while that
+  // condition holds -- once traded it would bypass the dashboard's roadblock filter the
+  // same way WEAK auto-trades used to bypass the WEAK filter. Not marked _autoTraded
+  // here either, for the same reason: if roadblock clears on a later re-scan, this
+  // signal should still get a chance to auto-trade then.
+  if(sig.roadblock) return;
   _autoTraded[sig.id] = true;
 
   var prem = sig.premium || 0;
@@ -4306,7 +4314,7 @@ function v8FromRealSignal(sig){
   var liveSpot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[sig.sym]) ? LIVE_PRICES[sig.sym] : (sig.spotPrice || 0);
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
-    tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict,
+    tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict, rawRoadblock: !!sig.roadblock,
     entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
     ltp: liveLtp,
@@ -4341,7 +4349,8 @@ function v8SyncFromRealSignals(){
   var showStale = localStorage.getItem('v8mock-showstale')==='1';
   var showMixed = localStorage.getItem('v8mock-showmixed')!=='0';
   var showWeak = localStorage.getItem('v8mock-showweak')==='1';
-  if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed+' showWeak='+showWeak);
+  var showRoadblock = localStorage.getItem('v8mock-showroadblock')==='1';
+  if(typeof v8MDiag==='function') v8MDiag('sync: S.signals.length='+S.signals.length+' showStale='+showStale+' showMixed='+showMixed+' showWeak='+showWeak+' showRoadblock='+showRoadblock);
   // Build a quick lookup of which real signal ids have an open paper trade, so we
   // know which cards to snapshot for persistence as we build them below.
   var openTradeSigIds = {};
@@ -4369,6 +4378,13 @@ function v8SyncFromRealSignals(){
     // WEAK on a later scan it reappears automatically; this only hides the current view,
     // it never stops the re-evaluation.
     if(card.rawVerdict === 'WEAK' && !showWeak){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (weak, showWeak off) key='+card.key); return false; }
+    // Roadblock (opposite-side OI building against the signal, or trap risk detected
+    // after level computation) hidden from view by default, same pattern as WEAK -- the
+    // signal keeps getting re-scanned every cycle so if the roadblock condition clears
+    // on a later scan it reappears automatically. Does not affect open trades below,
+    // which always show regardless (a real position stays visible even if the
+    // underlying signal is currently roadblock-flagged).
+    if(card.rawRoadblock && !showRoadblock){ if(typeof v8MDiag==='function') v8MDiag('sync: FILTERED OUT (roadblock, showRoadblock off) key='+card.key); return false; }
     return true;
   });
   if(typeof v8MDiag==='function') v8MDiag('sync: after filter, newSignals.length='+newSignals.length);
