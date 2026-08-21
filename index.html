@@ -4019,6 +4019,23 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
           real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
         }
+        // Real fix: /oi-analysis returns the raw expiry string used to resolve the
+        // option chain (e.g. "28AUG2025"), but a Manual Check signal was created with
+        // NO expiry at all (addPaperTrade's trade object has no expiry field either,
+        // since it existed before this analysis ever ran). Without it, every future
+        // /live-trade-prices call for this trade falls back to the legacy no-expiry
+        // path, which was confirmed via a real broker screenshot to NOT keep the LTP
+        // genuinely fresh -- capture it here and backfill both the signal and the
+        // already-created trade so future price refreshes use the strict exact-match
+        // path like every other trade already does.
+        if(oiAnalysisData.expiry){
+          realSig.expiry = oiAnalysisData.expiry;
+          if(typeof S !== 'undefined' && S.paperTrades){
+            var _tradeToPatch = S.paperTrades.find(function(pt){ return pt.sigId === realSig.id; });
+            if(_tradeToPatch){ _tradeToPatch.expiry = oiAnalysisData.expiry; if(typeof savePaperTrades==='function') savePaperTrades(); }
+          }
+          v8MDiag('expiry backfilled onto signal and trade: '+oiAnalysisData.expiry);
+        }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
       // no new card, no separate pending state, just the real values arriving.
