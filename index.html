@@ -613,6 +613,8 @@ async function refreshOpenTradePrices(){
   var openTrades=S.paperTrades.filter(function(t){return t.status==="OPEN"||!t.status;});
   if(!openTrades.length||!S.connected)return;
   var payload=openTrades.map(function(t){return{symbol:t.sym,strike:t.strike,type:t.type,expiry:t.expiry||null};});
+  var _premieDiag=payload.find(function(p){return p.symbol==='PREMIERENE';});
+  if(_premieDiag && typeof addLog==='function') addLog('🔬 DIAG live-trade-prices payload for PREMIERENE: '+JSON.stringify(_premieDiag),'warn');
   try{
     var r=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:payload})});
     var data=await r.json();
@@ -621,6 +623,11 @@ async function refreshOpenTradePrices(){
       data.debugMisses.forEach(function(m){
         addLog('🔍 Live price miss: '+m.key+' -- '+m.reason+' (symCandidatesFound='+m.symCandidatesFound+', searchedStrike='+m.searchedStrike+', searchedType='+m.searchedType+')','warn');
       });
+    }
+    var _premieKey=(openTrades.find(function(t){return t.sym==='PREMIERENE';})||{});
+    if(_premieKey.sym && typeof addLog==='function'){
+      var _pk=_premieKey.sym+"_"+_premieKey.strike+"_"+_premieKey.type+"_"+(_premieKey.expiry||"");
+      addLog('🔬 DIAG server response for PREMIERENE key ['+_pk+']: price='+data.prices[_pk]+' expired='+(data.expired&&data.expired[_pk])+' -- all price keys returned: '+Object.keys(data.prices).join(', '),'warn');
     }
     openTrades.forEach(function(trade){
       var key=trade.sym+"_"+trade.strike+"_"+trade.type+"_"+(trade.expiry||"");
@@ -1453,9 +1460,24 @@ var x=Object.assign({},g,{gammaBlast:g.gammaBlast||null,id:_existingSig?_existin
 // PREMIERENE's Spot genuinely updated every scan (proving this loop DOES reach manual
 // signals) while LTP stayed frozen, because the trade object's own .expiry stayed null
 // forever. Patch the trade directly here too, every scan, not just once at creation.
+// TEMPORARY DIAGNOSTIC LOGGING per user request -- traces every step of this exact
+// chain so the real break point is visible in Activity Log within a few scan cycles,
+// instead of guessing further from static code reading. Remove once root cause found.
+if(e==='PREMIERENE'){
+  addLog('🔬 DIAG '+e+' '+v+': f.expiry='+(f?JSON.stringify(f.expiry):'f is null/undefined')+' -> x.expiry='+x.expiry,'warn');
+}
 if(x.expiry && typeof S!=='undefined' && S.paperTrades){
   var _tradeBackfill = S.paperTrades.find(function(pt){ return pt.sigId===x.id && !pt.expiry; });
-  if(_tradeBackfill){ _tradeBackfill.expiry = x.expiry; if(typeof savePaperTrades==='function') savePaperTrades(); }
+  if(e==='PREMIERENE'){
+    addLog('🔬 DIAG '+e+': looking for trade with sigId='+x.id+' -- found match: '+(!!_tradeBackfill)+' -- total open trades: '+S.paperTrades.length+' -- their sigIds: '+S.paperTrades.map(function(pt){return pt.sigId;}).join(','),'warn');
+  }
+  if(_tradeBackfill){
+    _tradeBackfill.expiry = x.expiry;
+    if(typeof savePaperTrades==='function') savePaperTrades();
+    if(e==='PREMIERENE'){ addLog('🔬 DIAG '+e+': BACKFILLED trade.expiry = '+x.expiry,'ok'); }
+  }
+} else if(e==='PREMIERENE'){
+  addLog('🔬 DIAG '+e+': backfill block skipped entirely -- x.expiry is falsy ('+x.expiry+') or S.paperTrades unavailable','err');
 }
 // Real fix: a signal that already exists is now RE-EVALUATED every scan, not skipped.
 // Previously "already exists" meant permanently frozen at whatever verdict/flags it had
