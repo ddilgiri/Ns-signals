@@ -108,6 +108,9 @@
 .v8swipe-delete-bg{position:absolute;inset:0;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:13px}
 .v8swipe-delete-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .v8swipe-delete-bg .v8del-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
+.v8swipe-close-bg{position:absolute;inset:0;background:var(--green);display:flex;align-items:stretch;justify-content:flex-start;border-radius:13px}
+.v8swipe-close-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.v8swipe-close-bg .v8close-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
 .v8swipe-target{position:relative;background:var(--card);touch-action:pan-y;transition:transform .25s ease}
 .v8swipe-target.dragging{transition:none}
 .v8mcard{background:var(--card);border-radius:13px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0;cursor:pointer}
@@ -395,13 +398,26 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   </div>
   <div class="v8summary-strip">
     <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
-    <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
+    <div class="v8stat-card capital" id="v8CapitalCard" onclick="v8OpenHistorySheet()" style="cursor:pointer"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
+<div class="v8sheet-backdrop" id="v8HistoryBackdrop"></div>
+<div class="v8sheet" id="v8HistorySheet">
+  <div class="v8sheet-handle"></div>
+  <div class="v8sheet-close" id="v8HistoryClose">✕</div>
+  <div style="padding:0 4px 4px">
+    <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px">Trade history</div>
+    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total realized P&amp;L</div>
+      <div id="v8HistoryTotalPnl" style="font-size:22px;font-weight:800">₹0</div>
+    </div>
+    <div id="v8HistoryList"></div>
+  </div>
+</div>
 <div class="v8sheet-backdrop" id="v8FormBackdrop"></div>
 <div class="v8sheet" id="v8FormSheet">
   <div class="v8sheet-handle"></div>
@@ -3724,6 +3740,67 @@ function v8CloseFormSheet(){
 document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
 document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
 
+function v8FmtCapital(n){
+  n = Math.round(n||0);
+  if(n>=1e5) return '₹'+(n/1e5).toFixed(1)+'L';
+  if(n>=1e3) return '₹'+Math.round(n/1e3)+'K';
+  return '₹'+n;
+}
+function v8FmtHistoryDate(dateStr, exitDateStr){
+  // exitDate/date are stored as toLocaleDateString('en-IN') strings (DD/MM/YYYY), no
+  // time component preserved -- real trades only have a date, not a precise time, so
+  // the history list shows Today/Yesterday/date without a clock time (unlike the
+  // original mock which assumed a timestamp that isn't actually stored anywhere).
+  var raw = exitDateStr || dateStr;
+  if(!raw) return '';
+  var parts = raw.split('/');
+  if(parts.length!==3) return raw;
+  var d = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+  var today = new Date(); today.setHours(0,0,0,0);
+  var yest = new Date(today); yest.setDate(yest.getDate()-1);
+  var dOnly = new Date(d); dOnly.setHours(0,0,0,0);
+  if(dOnly.getTime()===today.getTime()) return 'Today';
+  if(dOnly.getTime()===yest.getTime()) return 'Yesterday';
+  if(d.getFullYear()===today.getFullYear()) return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+}
+function v8RenderHistorySheet(){
+  var listEl = document.getElementById('v8HistoryList');
+  var totalEl = document.getElementById('v8HistoryTotalPnl');
+  if(!listEl || typeof S === 'undefined' || !S.closedPaperTrades) return;
+  var trades = S.closedPaperTrades.slice().reverse(); // newest first
+  var totalPnl = trades.reduce(function(sum,t){ return sum+(t.pnl||0); },0);
+  totalEl.textContent = (totalPnl>=0?'+':'-')+'₹'+Math.abs(Math.round(totalPnl)).toLocaleString('en-IN');
+  totalEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)';
+  if(!trades.length){
+    listEl.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">No closed trades yet</div>';
+    return;
+  }
+  listEl.innerHTML = trades.map(function(t){
+    var pnl = t.pnl||0;
+    var capital = (t.avgPremium||t.entryPremium||0) * (t.lot||1) * (t.lots||1) * 1.2;
+    var dateLabel = v8FmtHistoryDate(t.date, t.exitDate);
+    return '<div style="display:flex;align-items:center;gap:6px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+      +'<span style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap">'+t.sym+' '+t.strike+' '+t.type+'</span>'
+      +'<span style="font-size:10px;color:var(--blue);background:var(--blue-bg);border-radius:8px;padding:2px 7px;white-space:nowrap">'+v8FmtCapital(capital)+'</span>'
+      +'<span style="font-size:10px;color:var(--text3);background:var(--card2);border-radius:8px;padding:2px 7px;white-space:nowrap">'+dateLabel+'</span>'
+      +'<span style="font-size:13px;font-weight:800;white-space:nowrap;margin-left:auto;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN')+'</span>'
+      +'</div>';
+  }).join('');
+}
+function v8OpenHistorySheet(){
+  v8RenderHistorySheet();
+  document.getElementById('v8HistoryBackdrop').classList.add('show');
+  document.getElementById('v8HistorySheet').classList.add('show');
+}
+function v8CloseHistorySheet(){
+  document.getElementById('v8HistoryBackdrop').classList.remove('show');
+  document.getElementById('v8HistorySheet').classList.remove('show');
+}
+document.getElementById('v8HistoryBackdrop').onclick=v8CloseHistorySheet;
+document.getElementById('v8HistoryClose').onclick=v8CloseHistorySheet;
+
+
 function v8MDiag(msg){
   var el=document.getElementById('v8ManualDebugTrail');
   var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
@@ -3950,8 +4027,12 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
 
 
 
-function v8SwipeWrap(cardKey, innerHTML){
-  return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
+function v8SwipeWrap(cardKey, innerHTML, hasOpenTrade){
+  var closeBg = hasOpenTrade
+    ? '<div class="v8swipe-close-bg"><button type="button" class="v8swipe-close-btn" onclick="v8CloseCard(this)"><span class="v8close-icon">✅</span></button></div>'
+    : '';
+  return '<div class="v8swipe-wrap" data-key="'+cardKey+'" data-has-trade="'+(hasOpenTrade?'1':'0')+'">'
+    + closeBg
     + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
     + '<div class="v8swipe-target">'+innerHTML+'</div></div>';
 }
@@ -3961,8 +4042,9 @@ function v8AttachSwipeHandlers(){
     var target=wrap.querySelector('.v8swipe-target');
     if(target.dataset.swipeAttached) return;
     target.dataset.swipeAttached='1';
+    var hasOpenTrade = wrap.dataset.hasTrade==='1';
     var startX=0,currentX=0,dragging=false,moved=false;
-    var OPEN_X=-90;
+    var OPEN_X=-90, OPEN_X_RIGHT=90;
     target.addEventListener('touchstart',function(e){
       startX=e.touches[0].clientX; dragging=true; moved=false;
       target.classList.add('dragging');
@@ -3972,6 +4054,7 @@ function v8AttachSwipeHandlers(){
       currentX=e.touches[0].clientX-startX;
       if(Math.abs(currentX)>8) moved=true;
       if(currentX<0){ target.style.transform='translateX('+Math.max(currentX,OPEN_X)+'px)'; }
+      else if(hasOpenTrade){ target.style.transform='translateX('+Math.min(currentX,OPEN_X_RIGHT)+'px)'; }
     },{passive:true});
     target.addEventListener('touchend',function(){
       dragging=false;
@@ -3979,6 +4062,10 @@ function v8AttachSwipeHandlers(){
       if(currentX<-35){
         v8CloseAllSwipes(wrap);
         target.style.transform='translateX('+OPEN_X+'px)';
+        target.classList.add('swipe-open');
+      } else if(hasOpenTrade && currentX>35){
+        v8CloseAllSwipes(wrap);
+        target.style.transform='translateX('+OPEN_X_RIGHT+'px)';
         target.classList.add('swipe-open');
       } else {
         target.style.transform='translateX(0)';
@@ -4017,13 +4104,41 @@ function v8DeleteCard(btn){
   if(typeof S !== 'undefined' && S.signals){
     S.signals = S.signals.filter(function(sig){ return sig.id !== key; });
   }
-  // If this card has a genuinely open real paper trade, close it too -- otherwise
-  // the trade-keeps-card-alive fallback in v8SyncFromRealSignals would resurrect
-  // this exact card on the very next scan sync, undoing the delete.
-  if(typeof S !== 'undefined' && S.paperTrades && typeof exitPaperTrade === 'function'){
-    var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
-    if(openTrade){ exitPaperTrade(openTrade.id); }
+  // Real fix (2026-08-21): delete now wipes the card completely, including any real
+  // open trade tied to it -- NO P&L history entry is ever created, even if real capital
+  // was deployed. This is an explicit user decision: delete means "erase, no record",
+  // separate from close/sell (swipe-right, v8CloseCard) which is the only path that
+  // writes to trade history. Must remove from S.paperTrades directly (a raw splice, not
+  // exitPaperTrade -- that function writes to S.closedPaperTrades, which is exactly the
+  // history entry delete must never create) or the "open trade always shows" fallback
+  // in v8SyncFromRealSignals would resurrect this exact card on the next sync.
+  if(typeof S !== 'undefined' && S.paperTrades){
+    var _delIdx = S.paperTrades.findIndex(function(pt){ return pt.sigId === key; });
+    if(_delIdx >= 0){ S.paperTrades.splice(_delIdx, 1); if(typeof savePaperTrades==='function') savePaperTrades(); }
   }
+  wrap.style.overflow='hidden';
+  wrap.style.maxHeight=wrap.offsetHeight+'px';
+  requestAnimationFrame(function(){
+    wrap.style.transition='max-height .25s ease, margin .25s ease, opacity .2s ease';
+    wrap.style.opacity='0';
+    wrap.style.maxHeight='0px';
+    wrap.style.marginBottom='0px';
+  });
+  setTimeout(function(){ wrap.remove(); v8RenderHeaderStats(); },300);
+}
+
+function v8CloseCard(btn){
+  var wrap=btn.closest('.v8swipe-wrap');
+  if(!wrap) return;
+  var key=wrap.dataset.key;
+  if(typeof S === 'undefined' || !S.paperTrades) return;
+  var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
+  if(!openTrade){ return; } // no real trade to close -- swipe-right only shows for open trades anyway
+  if(typeof exitPaperTrade === 'function'){ exitPaperTrade(openTrade.id); }
+  // exitPaperTrade already pushes the trade into S.closedPaperTrades with its real
+  // P&L, capital, and exit time -- this is what feeds the trade-history list. Also
+  // drop it from the live signal array so it doesn't reappear on the next sync.
+  if(S.signals){ S.signals = S.signals.filter(function(sig){ return sig.id !== key; }); }
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -4328,7 +4443,7 @@ function v8FromRealSignal(sig){
   var liveLtp = (realTrade && realTrade.currentPremium) ? realTrade.currentPremium : (sig.premium || sig.entryPremium || 0);
   var liveSpot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[sig.sym]) ? LIVE_PRICES[sig.sym] : (sig.spotPrice || 0);
   return {
-    key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
+    key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type, hasOpenTrade: !!realTrade,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict, rawRoadblock: !!sig.roadblock,
     entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
@@ -4429,7 +4544,7 @@ function v8SyncFromRealSignals(){
         var realLtp = pt.currentPremium || pt.entryPremium || pt.avgPremium || 0;
         var realEntry = pt.avgPremium || pt.entryPremium || 0;
         card = {
-          key: pt.sigId, mode: 'manual', name: pt.sym, strike: pt.strike, type: pt.type,
+          key: pt.sigId, mode: 'manual', name: pt.sym, strike: pt.strike, type: pt.type, hasOpenTrade: true,
           tier: 'unknown', tierLabel: '❔ NO DATA', tagCls: 'warn',
           entry: realEntry, spot: (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[pt.sym]) || 0, ltp: realLtp,
           lots: pt.lots || 1, lotSize: pt.lot || 1, dim: true,
@@ -4612,7 +4727,7 @@ function v8RenderFeed(){
     return;
   }
   feed.innerHTML = v8Signals.map(function(s){
-    return v8SwipeWrap(s.key, v8BuildCompactCard(s));
+    return v8SwipeWrap(s.key, v8BuildCompactCard(s), s.hasOpenTrade);
   }).join('');
   v8AttachSwipeHandlers();
   v8RenderHeaderStats();
@@ -4650,6 +4765,8 @@ function v8RenderHeaderStats(){
   }
   var liveEl=document.getElementById('v8LiveSignalsVal');
   if(liveEl) liveEl.textContent = (typeof S !== 'undefined' && S.signals) ? S.signals.length : v8Signals.length;
+  var histSheet = document.getElementById('v8HistorySheet');
+  if(histSheet && histSheet.classList.contains('show')) v8RenderHistorySheet();
 }
 
 </script>
