@@ -4733,6 +4733,13 @@ function v8RenderFeed(){
   v8RenderHeaderStats();
 }
 function v8TriggerScan(){
+  // Real fix: this button/branch is meant to START a scan from the empty state --
+  // toggleScan() is a genuine toggle (confirmed: first line stops if S.scanning is
+  // already true), so if this ever fires while a scan is already running (e.g. a
+  // narrow timing gap between S.scanning flipping true and this empty-state render),
+  // it would silently STOP the real scan instead of doing nothing. Guard it so this
+  // button can only ever start, never stop.
+  if(typeof S!=='undefined' && S.scanning){ if(typeof toast==='function') toast('Already scanning…'); return; }
   if(typeof toggleScan==='function') toggleScan();
   else if(typeof toast==='function') toast('⚠️ Scan function not available');
 }
