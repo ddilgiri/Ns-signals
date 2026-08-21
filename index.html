@@ -4028,9 +4028,11 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
 
 
 function v8SwipeWrap(cardKey, innerHTML, hasOpenTrade){
-  var closeBg = hasOpenTrade
-    ? '<div class="v8swipe-close-bg"><button type="button" class="v8swipe-close-btn" onclick="v8CloseCard(this)"><span class="v8close-icon">✅</span></button></div>'
-    : '';
+  // Real fix (2026-08-21) per explicit user decision: swipe-right (close/save to history)
+  // is now always available on every card, not just cards with a real open trade --
+  // v8CloseCard() handles both cases (real exit for a trade, synthetic zero-P&L record
+  // for a raw signal never entered).
+  var closeBg = '<div class="v8swipe-close-bg"><button type="button" class="v8swipe-close-btn" onclick="v8CloseCard(this)"><span class="v8close-icon">✅</span></button></div>';
   return '<div class="v8swipe-wrap" data-key="'+cardKey+'" data-has-trade="'+(hasOpenTrade?'1':'0')+'">'
     + closeBg
     + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
@@ -4042,7 +4044,6 @@ function v8AttachSwipeHandlers(){
     var target=wrap.querySelector('.v8swipe-target');
     if(target.dataset.swipeAttached) return;
     target.dataset.swipeAttached='1';
-    var hasOpenTrade = wrap.dataset.hasTrade==='1';
     var startX=0,currentX=0,dragging=false,moved=false;
     var OPEN_X=-90, OPEN_X_RIGHT=90;
     target.addEventListener('touchstart',function(e){
@@ -4054,7 +4055,7 @@ function v8AttachSwipeHandlers(){
       currentX=e.touches[0].clientX-startX;
       if(Math.abs(currentX)>8) moved=true;
       if(currentX<0){ target.style.transform='translateX('+Math.max(currentX,OPEN_X)+'px)'; }
-      else if(hasOpenTrade){ target.style.transform='translateX('+Math.min(currentX,OPEN_X_RIGHT)+'px)'; }
+      else { target.style.transform='translateX('+Math.min(currentX,OPEN_X_RIGHT)+'px)'; }
     },{passive:true});
     target.addEventListener('touchend',function(){
       dragging=false;
@@ -4063,7 +4064,7 @@ function v8AttachSwipeHandlers(){
         v8CloseAllSwipes(wrap);
         target.style.transform='translateX('+OPEN_X+'px)';
         target.classList.add('swipe-open');
-      } else if(hasOpenTrade && currentX>35){
+      } else if(currentX>35){
         v8CloseAllSwipes(wrap);
         target.style.transform='translateX('+OPEN_X_RIGHT+'px)';
         target.classList.add('swipe-open');
@@ -4133,11 +4134,33 @@ function v8CloseCard(btn){
   var key=wrap.dataset.key;
   if(typeof S === 'undefined' || !S.paperTrades) return;
   var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
-  if(!openTrade){ return; } // no real trade to close -- swipe-right only shows for open trades anyway
-  if(typeof exitPaperTrade === 'function'){ exitPaperTrade(openTrade.id); }
-  // exitPaperTrade already pushes the trade into S.closedPaperTrades with its real
-  // P&L, capital, and exit time -- this is what feeds the trade-history list. Also
-  // drop it from the live signal array so it doesn't reappear on the next sync.
+  if(openTrade){
+    if(typeof exitPaperTrade === 'function'){ exitPaperTrade(openTrade.id); }
+    // exitPaperTrade already pushes the trade into S.closedPaperTrades with its real
+    // P&L, capital, and exit time -- this is what feeds the trade-history list.
+  } else {
+    // Real fix (2026-08-21) per explicit user decision: swipe-right now works on ANY
+    // signal card, even one never converted into a real trade. Since there is no actual
+    // entry to look back on, build a synthetic closed record using the current LTP as
+    // both entry and exit (P&L genuinely 0 -- this was never actually held, so no real
+    // gain or loss exists to report), so it still appears in Trade History honestly
+    // rather than silently doing nothing.
+    var sig = (S.signals||[]).find(function(s){ return s.id===key; });
+    if(sig){
+      var ltp = sig.premium || sig.entryPremium || 0;
+      var lots = sig.v8Lots || 1;
+      var lot = sig.lot || 1;
+      var closedRecord = {
+        id: String(Date.now()), sigId: key, sym: sig.sym, strike: sig.strike, type: sig.type,
+        lot: lot, lots: lots, avgPremium: ltp, entryPremium: ltp, currentPremium: ltp,
+        pnl: 0, date: (new Date()).toLocaleDateString('en-IN'), exitDate: (new Date()).toLocaleDateString('en-IN'),
+        status: 'CLOSED'
+      };
+      S.closedPaperTrades.push(closedRecord);
+      if(typeof savePaperTrades==='function') savePaperTrades();
+      if(typeof toast==='function') toast('✅ Recorded — '+sig.sym+' '+sig.strike+' '+sig.type+' (never entered, no P&L)');
+    }
+  }
   if(S.signals){ S.signals = S.signals.filter(function(sig){ return sig.id !== key; }); }
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
