@@ -1396,6 +1396,13 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     var chunk=t.slice(bi,bi+CONCURRENCY);
     await Promise.all(chunk.map(function(stk){return scanSymbol(stk.sym,stk.token,stk.lot,!1);}));
     renderSignals(); // live partial render after each chunk for immediate feedback
+    // Real fix: renderSignals() only ever updates the old hidden V4 DOM -- nothing in
+    // the main 25s scan loop was telling the actual visible V8 dashboard to re-render,
+    // even though S.signals itself was genuinely getting fresh verdict/score/description
+    // every pass. Only the separate 15s price-poll loop happened to trigger v8Sync, which
+    // made LTP/Spot look like they were updating while verdict text stayed frozen --
+    // confirmed by user report after the open-trade re-scoring fix still showed no change.
+    if(typeof v8SyncFromRealSignals==='function'){ try{ v8SyncFromRealSignals(); }catch(e){} }
   }
   if(renderSignals(),updateAnalytics(),S.signals.length>0&&"all"!==S.filterMode)
     if(!S.signals.filter(function(e){return"stocks"===S.filterMode?!e.isCommodity:"strong"===S.filterMode?"STRONG"===e.verdict:"moderate"!==S.filterMode||"MODERATE"===e.verdict}).length){
