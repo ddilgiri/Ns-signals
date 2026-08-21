@@ -105,9 +105,12 @@
 .v8empty-scan-btn:active{opacity:.85}
 .v8fab:active{transform:scale(.94)}
 .v8swipe-wrap{position:relative;margin-bottom:8px;border-radius:13px;overflow:hidden}
-.v8swipe-delete-bg{position:absolute;inset:0;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:13px}
+.v8swipe-delete-bg{position:absolute;top:0;right:0;bottom:0;left:50%;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:0 13px 13px 0}
 .v8swipe-delete-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .v8swipe-delete-bg .v8del-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
+.v8swipe-close-bg{position:absolute;top:0;left:0;bottom:0;right:50%;background:var(--green);display:flex;align-items:stretch;justify-content:flex-start;border-radius:13px 0 0 13px}
+.v8swipe-close-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.v8swipe-close-bg .v8close-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
 .v8swipe-target{position:relative;background:var(--card);touch-action:pan-y;transition:transform .25s ease}
 .v8swipe-target.dragging{transition:none}
 .v8mcard{background:var(--card);border-radius:13px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0;cursor:pointer}
@@ -395,13 +398,26 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   </div>
   <div class="v8summary-strip">
     <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
-    <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
+    <div class="v8stat-card capital" id="v8CapitalCard" onclick="v8OpenHistorySheet()" style="cursor:pointer"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
+<div class="v8sheet-backdrop" id="v8HistoryBackdrop"></div>
+<div class="v8sheet" id="v8HistorySheet">
+  <div class="v8sheet-handle"></div>
+  <div class="v8sheet-close" id="v8HistoryClose">✕</div>
+  <div style="padding:0 4px 4px">
+    <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px">Trade history</div>
+    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total realized P&amp;L</div>
+      <div id="v8HistoryTotalPnl" style="font-size:22px;font-weight:800">₹0</div>
+    </div>
+    <div id="v8HistoryList"></div>
+  </div>
+</div>
 <div class="v8sheet-backdrop" id="v8FormBackdrop"></div>
 <div class="v8sheet" id="v8FormSheet">
   <div class="v8sheet-handle"></div>
@@ -3724,6 +3740,63 @@ function v8CloseFormSheet(){
 document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
 document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
 
+function v8FmtCapital(n){
+  n = Math.round(n||0);
+  if(n>=1e5) return '₹'+(n/1e5).toFixed(1)+'L';
+  if(n>=1e3) return '₹'+Math.round(n/1e3)+'K';
+  return '₹'+n;
+}
+function v8FmtHistoryDate(dateStr, exitDateStr){
+  var raw = exitDateStr || dateStr;
+  if(!raw) return '';
+  var parts = raw.split('/');
+  if(parts.length!==3) return raw;
+  var d = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+  var today = new Date(); today.setHours(0,0,0,0);
+  var yest = new Date(today); yest.setDate(yest.getDate()-1);
+  var dOnly = new Date(d); dOnly.setHours(0,0,0,0);
+  if(dOnly.getTime()===today.getTime()) return 'Today';
+  if(dOnly.getTime()===yest.getTime()) return 'Yesterday';
+  if(d.getFullYear()===today.getFullYear()) return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+}
+function v8RenderHistorySheet(){
+  var listEl = document.getElementById('v8HistoryList');
+  var totalEl = document.getElementById('v8HistoryTotalPnl');
+  if(!listEl || typeof S === 'undefined' || !S.closedPaperTrades) return;
+  var trades = S.closedPaperTrades.slice().reverse();
+  var totalPnl = trades.reduce(function(sum,t){ return sum+(t.pnl||0); },0);
+  totalEl.textContent = (totalPnl>=0?'+':'-')+'₹'+Math.abs(Math.round(totalPnl)).toLocaleString('en-IN');
+  totalEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)';
+  if(!trades.length){
+    listEl.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">No closed trades yet</div>';
+    return;
+  }
+  listEl.innerHTML = trades.map(function(t){
+    var pnl = t.pnl||0;
+    var capital = (t.avgPremium||t.entryPremium||0) * (t.lot||1) * (t.lots||1) * 1.2;
+    var dateLabel = v8FmtHistoryDate(t.date, t.exitDate);
+    return '<div style="display:flex;align-items:center;gap:6px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+      +'<span style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap">'+t.sym+' '+t.strike+' '+t.type+'</span>'
+      +'<span style="font-size:10px;color:var(--blue);background:var(--blue-bg);border-radius:8px;padding:2px 7px;white-space:nowrap">'+v8FmtCapital(capital)+'</span>'
+      +'<span style="font-size:10px;color:var(--text3);background:var(--card2);border-radius:8px;padding:2px 7px;white-space:nowrap">'+dateLabel+'</span>'
+      +'<span style="font-size:13px;font-weight:800;white-space:nowrap;margin-left:auto;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN')+'</span>'
+      +'</div>';
+  }).join('');
+}
+function v8OpenHistorySheet(){
+  v8RenderHistorySheet();
+  document.getElementById('v8HistoryBackdrop').classList.add('show');
+  document.getElementById('v8HistorySheet').classList.add('show');
+}
+function v8CloseHistorySheet(){
+  document.getElementById('v8HistoryBackdrop').classList.remove('show');
+  document.getElementById('v8HistorySheet').classList.remove('show');
+}
+document.getElementById('v8HistoryBackdrop').onclick=v8CloseHistorySheet;
+document.getElementById('v8HistoryClose').onclick=v8CloseHistorySheet;
+
+
 function v8MDiag(msg){
   var el=document.getElementById('v8ManualDebugTrail');
   var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
@@ -3952,6 +4025,7 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
 
 function v8SwipeWrap(cardKey, innerHTML){
   return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
+    + '<div class="v8swipe-close-bg"><button type="button" class="v8swipe-close-btn" onclick="v8CloseCard(this)"><span class="v8close-icon">✅</span></button></div>'
     + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
     + '<div class="v8swipe-target">'+innerHTML+'</div></div>';
 }
@@ -3962,7 +4036,7 @@ function v8AttachSwipeHandlers(){
     if(target.dataset.swipeAttached) return;
     target.dataset.swipeAttached='1';
     var startX=0,currentX=0,dragging=false,moved=false;
-    var OPEN_X=-90;
+    var OPEN_X=-90, OPEN_X_RIGHT=90;
     target.addEventListener('touchstart',function(e){
       startX=e.touches[0].clientX; dragging=true; moved=false;
       target.classList.add('dragging');
@@ -3972,6 +4046,7 @@ function v8AttachSwipeHandlers(){
       currentX=e.touches[0].clientX-startX;
       if(Math.abs(currentX)>8) moved=true;
       if(currentX<0){ target.style.transform='translateX('+Math.max(currentX,OPEN_X)+'px)'; }
+      else { target.style.transform='translateX('+Math.min(currentX,OPEN_X_RIGHT)+'px)'; }
     },{passive:true});
     target.addEventListener('touchend',function(){
       dragging=false;
@@ -3979,6 +4054,10 @@ function v8AttachSwipeHandlers(){
       if(currentX<-35){
         v8CloseAllSwipes(wrap);
         target.style.transform='translateX('+OPEN_X+'px)';
+        target.classList.add('swipe-open');
+      } else if(currentX>35){
+        v8CloseAllSwipes(wrap);
+        target.style.transform='translateX('+OPEN_X_RIGHT+'px)';
         target.classList.add('swipe-open');
       } else {
         target.style.transform='translateX(0)';
@@ -4017,13 +4096,61 @@ function v8DeleteCard(btn){
   if(typeof S !== 'undefined' && S.signals){
     S.signals = S.signals.filter(function(sig){ return sig.id !== key; });
   }
-  // If this card has a genuinely open real paper trade, close it too -- otherwise
-  // the trade-keeps-card-alive fallback in v8SyncFromRealSignals would resurrect
-  // this exact card on the very next scan sync, undoing the delete.
-  if(typeof S !== 'undefined' && S.paperTrades && typeof exitPaperTrade === 'function'){
-    var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
-    if(openTrade){ exitPaperTrade(openTrade.id); }
+  // Delete wipes everything, no history record ever -- even a real open trade with
+  // actual capital in it is removed with zero P&L entry, per explicit user decision.
+  // Close/sell (swipe-right, v8CloseCard) is the only path that ever writes to
+  // trade history. Raw splice from S.paperTrades, not exitPaperTrade (which would
+  // write to S.closedPaperTrades -- exactly the record delete must never create).
+  if(typeof S !== 'undefined' && S.paperTrades){
+    var _delIdx = S.paperTrades.findIndex(function(pt){ return pt.sigId === key; });
+    if(_delIdx >= 0){ S.paperTrades.splice(_delIdx, 1); if(typeof savePaperTrades==='function') savePaperTrades(); }
   }
+  wrap.style.overflow='hidden';
+  wrap.style.maxHeight=wrap.offsetHeight+'px';
+  requestAnimationFrame(function(){
+    wrap.style.transition='max-height .25s ease, margin .25s ease, opacity .2s ease';
+    wrap.style.opacity='0';
+    wrap.style.maxHeight='0px';
+    wrap.style.marginBottom='0px';
+  });
+  setTimeout(function(){ wrap.remove(); v8RenderHeaderStats(); },300);
+}
+
+function v8CloseCard(btn){
+  var wrap=btn.closest('.v8swipe-wrap');
+  if(!wrap) return;
+  var key=wrap.dataset.key;
+  if(typeof S === 'undefined' || !S.paperTrades){ wrap.remove(); return; }
+  var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
+  if(openTrade){
+    if(typeof exitPaperTrade === 'function'){ exitPaperTrade(openTrade.id); }
+    // exitPaperTrade pushes the trade into S.closedPaperTrades with its real
+    // P&L, capital, and exit time -- this is what feeds Trade History.
+  } else {
+    // No real trade exists yet -- swipe-right still works on any signal card per
+    // explicit user decision. Build a synthetic closed record using the current LTP
+    // as both entry and exit (P&L honestly 0, since nothing was actually held) so it
+    // still appears in Trade History rather than doing nothing.
+    var sig = (typeof S !== 'undefined' && S.signals) ? S.signals.find(function(s){ return s.id===key; }) : null;
+    if(sig){
+      var ltp = sig.premium || sig.entryPremium || 0;
+      var lots = sig.v8Lots || 1;
+      var lot = sig.lot || 1;
+      var closedRecord = {
+        id: String(Date.now()), sigId: key, sym: sig.sym, strike: sig.strike, type: sig.type,
+        lot: lot, lots: lots, avgPremium: ltp, entryPremium: ltp, currentPremium: ltp,
+        pnl: 0, date: (new Date()).toLocaleDateString('en-IN'), exitDate: (new Date()).toLocaleDateString('en-IN'),
+        status: 'CLOSED'
+      };
+      if(typeof S.closedPaperTrades === 'undefined') S.closedPaperTrades = [];
+      S.closedPaperTrades.push(closedRecord);
+      if(typeof savePaperTrades==='function') savePaperTrades();
+      if(typeof toast==='function') toast('✅ Recorded — '+sig.sym+' '+sig.strike+' '+sig.type+' (never entered, no P&L)');
+    }
+  }
+  if(typeof S !== 'undefined' && S.signals){ S.signals = S.signals.filter(function(sig){ return sig.id !== key; }); }
+  v8Signals=v8Signals.filter(function(s){return s.key!==key;});
+  v8SaveSignals();
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -4650,6 +4777,8 @@ function v8RenderHeaderStats(){
   }
   var liveEl=document.getElementById('v8LiveSignalsVal');
   if(liveEl) liveEl.textContent = (typeof S !== 'undefined' && S.signals) ? S.signals.length : v8Signals.length;
+  var histSheet = document.getElementById('v8HistorySheet');
+  if(histSheet && histSheet.classList.contains('show')) v8RenderHistorySheet();
 }
 
 </script>
