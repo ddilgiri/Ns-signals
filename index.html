@@ -442,6 +442,13 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
         </div>
       </div>
     </div>
+    <div class="v8form-group" id="v8ExpiryPickerRow" style="display:none">
+      <label>Expiry (within 3 days of rollover — choose which contract)</label>
+      <div class="v8side-toggle" id="v8ExpiryPicker">
+        <button type="button" class="active" id="v8ExpCurrent" onclick="v8SelectExpiry('current')"></button>
+        <button type="button" id="v8ExpNext" onclick="v8SelectExpiry('next')"></button>
+      </div>
+    </div>
     <div class="v8form-row">
       <div class="v8form-group">
         <label>Entry Price</label>
@@ -3693,6 +3700,7 @@ document.getElementById('v8BtnPE').onclick=function(){ v8SetSide('PE'); };
 function v8FilterStockSuggest(){
   var q=(document.getElementById('v8MStock').value||'').toUpperCase().trim();
   var box=document.getElementById('v8StockSuggest');
+  if(typeof NSE_STOCKS!=='undefined' && NSE_STOCKS.some(function(s){return s.sym===q;})){ v8CheckExpiryWindow(q); }
   if(!q){ box.style.display='none'; box.innerHTML=''; return; }
   var list=(typeof NSE_STOCKS!=='undefined'?NSE_STOCKS:[]).filter(function(s){return s.sym.indexOf(q)===0;}).slice(0,8);
   if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
@@ -3702,6 +3710,55 @@ function v8FilterStockSuggest(){
 function v8SelectStock(sym){
   document.getElementById('v8MStock').value=sym;
   document.getElementById('v8StockSuggest').style.display='none';
+  v8CheckExpiryWindow(sym);
+}
+var v8SelectedExpiryChoice='current';
+function v8LastTuesdayOf(year, monthIndex1to12){
+  // monthIndex1to12: 1=Jan..12=Dec, matching the "days in month" trick below
+  var last = new Date(year, monthIndex1to12, 0);
+  var diff = last.getDay()>=2 ? last.getDay()-2 : last.getDay()+5;
+  last.setDate(last.getDate()-diff);
+  last.setHours(0,0,0,0);
+  return last;
+}
+function v8FmtExpiryLabel(d){
+  var months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  return String(d.getDate()).padStart(2,'0')+months[d.getMonth()]+d.getFullYear();
+}
+function v8CheckExpiryWindow(sym){
+  var symUpper=(sym||'').toUpperCase();
+  var row=document.getElementById('v8ExpiryPickerRow');
+  if(!row) return;
+  var isIndexSym = (typeof IDX_LIST!=='undefined') && IDX_LIST.some(function(x){return x.sym===symUpper;});
+  var _indicesWithMonthlyOnly = ['BANKNIFTY','FINNIFTY','MIDCPNIFTY'];
+  // Real check: only stocks (and the 3 monthly-only indices) roll over on this monthly
+  // schedule -- NIFTY itself is weekly and not part of this picker. Matches the same
+  // isIndexSym / _idxList distinction server.js already uses for rollover timing.
+  var appliesToThis = !isIndexSym || _indicesWithMonthlyOnly.includes(symUpper);
+  if(!symUpper || !appliesToThis){ row.style.display='none'; v8SelectedExpiryChoice='current'; return; }
+  var now=new Date();
+  var todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var curExpiry=v8LastTuesdayOf(now.getFullYear(), now.getMonth()+1);
+  var dte=Math.round((curExpiry-todayMid)/86400000);
+  // Within 3 days of rollover (matches the server's tightened threshold) -- show both
+  // current and next month as explicit choices instead of the app silently picking one.
+  if(dte>=0 && dte<=3){
+    var nextMonthIdx=(now.getMonth()+1)%12;
+    var nextYear=now.getMonth()===11 ? now.getFullYear()+1 : now.getFullYear();
+    var nextExpiry=v8LastTuesdayOf(nextYear, nextMonthIdx+1);
+    document.getElementById('v8ExpCurrent').textContent=v8FmtExpiryLabel(curExpiry);
+    document.getElementById('v8ExpNext').textContent=v8FmtExpiryLabel(nextExpiry);
+    row.style.display='block';
+    v8SelectExpiry('current');
+  } else {
+    row.style.display='none';
+    v8SelectedExpiryChoice='current';
+  }
+}
+function v8SelectExpiry(which){
+  v8SelectedExpiryChoice=which;
+  document.getElementById('v8ExpCurrent').classList.toggle('active', which==='current');
+  document.getElementById('v8ExpNext').classList.toggle('active', which==='next');
 }
 document.addEventListener('click',function(e){
   if(!e.target.closest('.v8form-group')){
@@ -3728,6 +3785,9 @@ function v8OpenFormSheet(){
   var suggestBox=document.getElementById('v8StockSuggest');
   if(suggestBox){ suggestBox.style.display='none'; suggestBox.innerHTML=''; }
   v8SetSide('CE');
+  var expRow=document.getElementById('v8ExpiryPickerRow');
+  if(expRow) expRow.style.display='none';
+  v8SelectedExpiryChoice='current';
   var defaultLot = localStorage.getItem('v8mock-defaultlot') || '1';
   document.getElementById('v8MLots').value = defaultLot;
   document.getElementById('v8FormBackdrop').classList.add('show');
@@ -3959,9 +4019,13 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
     if(real){
       v8MDiag('signal-analysis succeeded, score='+real.score+' verdict='+real.verdict);
       var respB=null, oiAnalysisData=null;
+      // Real fix: when the picker was shown (within 3 days of rollover) and the user
+      // explicitly chose 'next', pass expiry:'NEXT_MONTH' through so the server resolves
+      // the contract the user actually meant, instead of silently picking one on its own.
+      var _expiryOverride = (v8SelectedExpiryChoice==='next') ? 'NEXT_MONTH' : undefined;
       try{
         respB=await fetch(getServer()+'/oi-analysis',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({symbol:symUpper,spotPrice:liveSpot})});
+          body:JSON.stringify(_expiryOverride ? {symbol:symUpper,spotPrice:liveSpot,expiry:_expiryOverride} : {symbol:symUpper,spotPrice:liveSpot})});
         oiAnalysisData=await respB.json();
       }catch(e){
         v8MDiag('oi-analysis fetch failed (non-fatal): '+e.message);
