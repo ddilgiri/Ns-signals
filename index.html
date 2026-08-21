@@ -4519,6 +4519,7 @@ function v8FromRealSignal(sig){
   return {
     key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type, hasOpenTrade: !!realTrade,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict, rawRoadblock: !!sig.roadblock,
+    debugExpiry: (realTrade && realTrade.expiry) ? realTrade.expiry : (sig.expiry || 'MISSING'),
     entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
     ltp: liveLtp,
@@ -4740,6 +4741,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);padding:2px 0 0">DEBUG expiry: '+s.debugExpiry+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
