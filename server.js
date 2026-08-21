@@ -125,13 +125,13 @@ function getExpiryWeekInfo(symbol){
     }
   } else {
     // BANKNIFTY, FINNIFTY, MIDCPNIFTY: monthly, current month till expiry day
-    // Stocks: monthly, but roll to NEXT month 4 days before expiry (matches getExpiryType logic)
+    // Stocks: monthly, but roll to NEXT month starting the day before expiry (dte<=1) (matches getExpiryType logic) -- per explicit user confirmation: for Aug 25 expiry, use August through Aug 23, switch to September starting Aug 24
     const curMonthLastTue=lastWeekdayOfMonth(2);
     const dteToCurMonth=Math.round((curMonthLastTue-now)/86400000);
     const INDICES_LIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
     const isIndexSym=INDICES_LIST.includes(sym);
-    if(!isIndexSym && dteToCurMonth<=4){
-      // Stock within 4 days of expiry — use NEXT month's last Tuesday instead
+    if(!isIndexSym && dteToCurMonth<=1){
+      // Stock on or after the day before expiry — use NEXT month's last Tuesday instead
       const nextMonthDate=new Date(year,month+1,1);
       const nm=nextMonthDate.getMonth(),ny=nextMonthDate.getFullYear();
       const lastDayNext=new Date(ny,nm+1,0);
@@ -649,8 +649,8 @@ function getExpiryType(e){
     }
     return"MONTHLY";
   }
-  // STOCKS only — switch to next month 4 days before expiry
-  if(dte<=4){
+  // STOCKS only — switch to next month starting the day before expiry (dte<=1), per explicit user confirmation: for Aug 25 expiry, use August through Aug 23, switch to September starting Aug 24
+  if(dte<=1){
     log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
   }
