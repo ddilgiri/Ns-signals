@@ -79,8 +79,6 @@
 .v8dash-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:var(--text)}
 .v8header-icons{display:flex;gap:8px}
 .v8gear-btn,.v8log-btn{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;position:relative}
-.v8log-btn.spinning{animation:v8spin .7s linear infinite}
-@keyframes v8spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .v8gear-btn:active,.v8log-btn:active{background:var(--card2)}
 .v8log-btn-badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--red);border:1.5px solid var(--card)}
 .v8summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
@@ -107,12 +105,9 @@
 .v8empty-scan-btn:active{opacity:.85}
 .v8fab:active{transform:scale(.94)}
 .v8swipe-wrap{position:relative;margin-bottom:8px;border-radius:13px;overflow:hidden}
-.v8swipe-delete-bg{position:absolute;top:0;right:0;bottom:0;left:50%;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:0 13px 13px 0}
+.v8swipe-delete-bg{position:absolute;inset:0;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:13px}
 .v8swipe-delete-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .v8swipe-delete-bg .v8del-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
-.v8swipe-close-bg{position:absolute;top:0;left:0;bottom:0;right:50%;background:var(--green);display:flex;align-items:stretch;justify-content:flex-start;border-radius:13px 0 0 13px}
-.v8swipe-close-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.v8swipe-close-bg .v8close-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
 .v8swipe-target{position:relative;background:var(--card);touch-action:pan-y;transition:transform .25s ease}
 .v8swipe-target.dragging{transition:none}
 .v8mcard{background:var(--card);border-radius:13px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(16,20,30,.06);overflow:hidden;margin:0;cursor:pointer}
@@ -393,7 +388,6 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   <div class="v8dash-header">
     <h1>NS-Signals</h1>
     <div class="v8header-icons">
-      <button class="v8log-btn" id="v8RefreshBtn" onclick="v8ManualRefresh()">🔄</button>
       <button class="v8log-btn" id="v8ThemeBtn" onclick="toggleTheme()">🌙</button>
       <button class="v8log-btn" id="v8LogBtn">📋</button>
       <button class="v8gear-btn" id="v8GearBtn">⚙️</button>
@@ -401,26 +395,13 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   </div>
   <div class="v8summary-strip">
     <div class="v8stat-card live"><div class="v8stat-val" id="v8LiveSignalsVal">0</div><div class="v8stat-lbl">Live Signals</div></div>
-    <div class="v8stat-card capital" id="v8CapitalCard" onclick="v8OpenHistorySheet()" style="cursor:pointer"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
+    <div class="v8stat-card capital" id="v8CapitalCard"><div class="v8stat-val" id="v8CapitalVal">₹0</div><div class="v8stat-lbl">Capital Deployed</div></div>
     <div class="v8stat-card pnl" id="v8PnlCard"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
-<div class="v8sheet-backdrop" id="v8HistoryBackdrop"></div>
-<div class="v8sheet" id="v8HistorySheet">
-  <div class="v8sheet-handle"></div>
-  <div class="v8sheet-close" id="v8HistoryClose">✕</div>
-  <div style="padding:0 4px 4px">
-    <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:12px">Trade history</div>
-    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;margin-bottom:14px">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Total realized P&amp;L</div>
-      <div id="v8HistoryTotalPnl" style="font-size:22px;font-weight:800">₹0</div>
-    </div>
-    <div id="v8HistoryList"></div>
-  </div>
-</div>
 <div class="v8sheet-backdrop" id="v8FormBackdrop"></div>
 <div class="v8sheet" id="v8FormSheet">
   <div class="v8sheet-handle"></div>
@@ -613,8 +594,6 @@ async function refreshOpenTradePrices(){
   var openTrades=S.paperTrades.filter(function(t){return t.status==="OPEN"||!t.status;});
   if(!openTrades.length||!S.connected)return;
   var payload=openTrades.map(function(t){return{symbol:t.sym,strike:t.strike,type:t.type,expiry:t.expiry||null};});
-  var _premieDiag=payload.find(function(p){return p.symbol==='PREMIERENE';});
-  if(_premieDiag && typeof addLog==='function') addLog('🔬 DIAG live-trade-prices payload for PREMIERENE: '+JSON.stringify(_premieDiag),'warn');
   try{
     var r=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:payload})});
     var data=await r.json();
@@ -623,11 +602,6 @@ async function refreshOpenTradePrices(){
       data.debugMisses.forEach(function(m){
         addLog('🔍 Live price miss: '+m.key+' -- '+m.reason+' (symCandidatesFound='+m.symCandidatesFound+', searchedStrike='+m.searchedStrike+', searchedType='+m.searchedType+')','warn');
       });
-    }
-    var _premieKey=(openTrades.find(function(t){return t.sym==='PREMIERENE';})||{});
-    if(_premieKey.sym && typeof addLog==='function'){
-      var _pk=_premieKey.sym+"_"+_premieKey.strike+"_"+_premieKey.type+"_"+(_premieKey.expiry||"");
-      addLog('🔬 DIAG server response for PREMIERENE key ['+_pk+']: price='+data.prices[_pk]+' expired='+(data.expired&&data.expired[_pk])+' -- all price keys returned: '+Object.keys(data.prices).join(', '),'warn');
     }
     openTrades.forEach(function(trade){
       var key=trade.sym+"_"+trade.strike+"_"+trade.type+"_"+(trade.expiry||"");
@@ -1440,82 +1414,19 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // Resets naturally on next login/day since window._avoidedToday is reset at scan start.
   window._avoidedToday=window._avoidedToday||{};
   var _avoidKey=e+"_"+v;
-  // Real fix: found via diagnostic logging that PREMIERENE's frozen LTP root cause was
-  // NOT the expiry backfill logic (never even reached) -- it was this exact exclusion.
-  // PREMIERENE scored under 48% at some point today, got added to _avoidedToday, and
-  // every scan since then skipped it here, before ever calling /signal-analysis, before
-  // ever computing/backfilling expiry. Spot kept updating only because that's a totally
-  // separate loop (batchUpdatePrices) with no day-exclusion at all -- LTP genuinely
-  // could never recover. A stock with a real open trade must never be excluded from
-  // scanning regardless of score, since you're already holding it and need live pricing
-  // (and its expiry) regardless of how weak this scan's signal quality looks.
-  var _hasOpenTradeForThis = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.some(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN'; }) : false;
-  if(window._avoidedToday[_avoidKey] && !_hasOpenTradeForThis){continue;}
+  if(window._avoidedToday[_avoidKey]){continue;}
   try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");
   // Day-exclusion threshold raised from AVOID-only (<42%) to <48% per explicit user
   // decision -- checked directly against g.score now, not the verdict string, since
   // 48 falls inside the WEAK band (42-59%) and doesn't line up with a verdict boundary.
-  if(g.score<48){
-    if(!_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
-    addLog("🚫 "+e+" "+v+" "+g.score+"% — under 48%"+(_hasOpenTradeForThis?" (open trade — still scanning every cycle, not excluded)":", excluded from scanning for rest of today"),"warn");
-    if(_hasOpenTradeForThis){
-      // Real fix: even at a genuinely weak score, an open trade still needs its expiry
-      // backfilled if missing -- this normally happens later in this function via the
-      // /oi-analysis call, but that code is never reached because of the continue below.
-      // Do a minimal, targeted fetch here just for the expiry, so the trade can still be
-      // priced correctly even while its signal quality stays weak.
-      try{
-        var _expOnly=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s})});
-        var _expData=await _expOnly.json();
-        if(_expData && _expData.expiry && typeof S!=='undefined' && S.paperTrades){
-          var _tb=S.paperTrades.find(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN' && !pt.expiry; });
-          if(_tb){ _tb.expiry=_expData.expiry; if(typeof savePaperTrades==='function') savePaperTrades(); addLog("🔬 DIAG "+e+": expiry backfilled from weak-score path: "+_expData.expiry,"ok"); }
-        }
-      }catch(_ee){}
-    }
-    continue;
-  }
+  if(g.score<48){window._avoidedToday[_avoidKey]=true;addLog("🚫 "+e+" "+v+" "+g.score+"% — under 48%, excluded from scanning for rest of today","warn");continue;}
   if("AVOID"===g.verdict||"TRAP"===g.verdict)continue;
 var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorage.getItem("fxo_scan_cache_"+e);if(_rawCache){var _parsedCache=JSON.parse(_rawCache);if(_parsedCache&&_parsedCache.chain&&_parsedCache.chain.length&&isCacheFromToday(_parsedCache.ts))_cachedChain=_parsedCache.chain;}}catch(_ce){}
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
-if(u=f.atmStrike||0,f.chain&&f.chain.length)for(var h=f.chain.slice().sort(function(e,t){return Math.abs(e.strike-s)-Math.abs(t.strike-s)}),k=0;k<h.length;k++){var E="CE"===v?h[k].CE_ltp||0:h[k].PE_ltp||0;if(E>0){y=E,u=h[k].strike,pPrevClose=("CE"===v?h[k].CE_prevClose:h[k].PE_prevClose)||0;break}}g.ceWalls&&g.ceWalls.length||(g.ceWalls=f.ceWalls||[]),g.peFloors&&g.peFloors.length||(g.peFloors=f.peFloors||[]),g.ceSignal||(g.ceSignal=f.ceSignal||null),g.peSignal||(g.peSignal=f.peSignal||null),g.rameshTrapped||(g.rameshTrapped=f.rameshTrapped||!1),g.atmCeOIChange=f.atmCeOIChange||0,g.atmPeOIChange=f.atmPeOIChange||0,g.strikeFlags=f.strikeFlags||[]}}catch(t){addLog("OI fetch "+e+": "+t.message,"warn")}if(!y&&u)try{var _sExp=(function(){var now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));function lastTueOf(yr,mn){var last=new Date(yr,mn,0);var diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}var todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());var curLastTue=lastTueOf(now.getFullYear(),now.getMonth()+1);var dte=Math.round((curLastTue-todayMid)/86400000);var _idxList=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];var _isIdx=_idxList.includes(e.toUpperCase());return(_isIdx?(dte<0):(dte<=5))?"NEXT_MONTH":"MONTHLY";})();var L=await fetch(getServer()+"/option-ltp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,strike:u,type:v,expiry:_sExp})}),T=await L.json();T.status&&T.ltp&&(y=parseFloat(T.ltp));if(!y)addLog("Fallback /option-ltp also empty for "+e+" "+v+" "+u+": "+(T.message||JSON.stringify(T).slice(0,100)),"warn");}catch(_fbErr){addLog("Fallback /option-ltp threw for "+e+" "+v+" "+u+": "+_fbErr.message,"warn");}if(u>0&&s>0){var N=Math.abs(u-s)/s;if(N>.2){addLog("Skip "+e+" "+v+" — strike "+u+" too far from spot "+Math.round(s)+" ("+(100*N).toFixed(0)+"%)","warn");continue}}if(!u){addLog("Skip "+e+" — no valid strike found","warn");continue}if(!y){addLog("Skip "+e+" "+v+" — zero premium at scan time [oiStatus:"+(f?f.status:"no-f")+" chainLen:"+(f&&f.chain?f.chain.length:"n/a")+" atmStrike:"+(f?f.atmStrike:"n/a")+" u:"+u+"]","warn");continue}// Real fix: found the actual remaining blocker via careful re-read after the
-// _avoidedToday bypass fix still didn't resolve PREMIERENE. This exact dup-check
-// ALSO exits before ever reaching the expiry-backfill code further below -- so even
-// once a stock+strike passes the _avoidedToday gate, THIS check throws it straight
-// back out again if a trade already exists, which is true for literally every already-
-// open trade, every single scan, forever. Only skip here if that trade already HAS its
-// expiry -- otherwise let it fall through once so the expiry gets computed and backfilled.
-var _dupOpenTrade=S.paperTrades.find(function(pt){return pt.sym===e&&pt.type===v&&pt.strike===u&&"OPEN"===pt.status});
-if(_dupOpenTrade && _dupOpenTrade.expiry){addLog("Skip: "+e+" "+v+" "+u+" — already an open paper trade, use the live flag badge on that card instead of a fresh signal","warn");continue}if(y>0){var C=y*o*1.2;if(C>r){addLog("Over-cap "+e+" — capital ₹"+Math.round(C/1e3)+"K > limit ₹"+Math.round(r/1e3)+"K, showing anyway (flagged)","");}}if(g.naresStaleDowngrade)addLog("Naresh: "+e+" "+v+" downgraded STRONG→MODERATE — urgency faded (STALE), likely late entry","warn");var _matchedRow=(f&&f.chain)?f.chain.find(function(r){return r.strike===u;}):null;
+if(u=f.atmStrike||0,f.chain&&f.chain.length)for(var h=f.chain.slice().sort(function(e,t){return Math.abs(e.strike-s)-Math.abs(t.strike-s)}),k=0;k<h.length;k++){var E="CE"===v?h[k].CE_ltp||0:h[k].PE_ltp||0;if(E>0){y=E,u=h[k].strike,pPrevClose=("CE"===v?h[k].CE_prevClose:h[k].PE_prevClose)||0;break}}g.ceWalls&&g.ceWalls.length||(g.ceWalls=f.ceWalls||[]),g.peFloors&&g.peFloors.length||(g.peFloors=f.peFloors||[]),g.ceSignal||(g.ceSignal=f.ceSignal||null),g.peSignal||(g.peSignal=f.peSignal||null),g.rameshTrapped||(g.rameshTrapped=f.rameshTrapped||!1),g.atmCeOIChange=f.atmCeOIChange||0,g.atmPeOIChange=f.atmPeOIChange||0,g.strikeFlags=f.strikeFlags||[]}}catch(t){addLog("OI fetch "+e+": "+t.message,"warn")}if(!y&&u)try{var _sExp=(function(){var now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));function lastTueOf(yr,mn){var last=new Date(yr,mn,0);var diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}var todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());var curLastTue=lastTueOf(now.getFullYear(),now.getMonth()+1);var dte=Math.round((curLastTue-todayMid)/86400000);var _idxList=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];var _isIdx=_idxList.includes(e.toUpperCase());return(_isIdx?(dte<0):(dte<=5))?"NEXT_MONTH":"MONTHLY";})();var L=await fetch(getServer()+"/option-ltp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,strike:u,type:v,expiry:_sExp})}),T=await L.json();T.status&&T.ltp&&(y=parseFloat(T.ltp));if(!y)addLog("Fallback /option-ltp also empty for "+e+" "+v+" "+u+": "+(T.message||JSON.stringify(T).slice(0,100)),"warn");}catch(_fbErr){addLog("Fallback /option-ltp threw for "+e+" "+v+" "+u+": "+_fbErr.message,"warn");}if(u>0&&s>0){var N=Math.abs(u-s)/s;if(N>.2){addLog("Skip "+e+" "+v+" — strike "+u+" too far from spot "+Math.round(s)+" ("+(100*N).toFixed(0)+"%)","warn");continue}}if(!u){addLog("Skip "+e+" — no valid strike found","warn");continue}if(!y){addLog("Skip "+e+" "+v+" — zero premium at scan time [oiStatus:"+(f?f.status:"no-f")+" chainLen:"+(f&&f.chain?f.chain.length:"n/a")+" atmStrike:"+(f?f.atmStrike:"n/a")+" u:"+u+"]","warn");continue}if(S.paperTrades.some(function(pt){return pt.sym===e&&pt.type===v&&pt.strike===u&&"OPEN"===pt.status})){addLog("Skip: "+e+" "+v+" "+u+" — already an open paper trade, use the live flag badge on that card instead of a fresh signal","warn");continue}if(y>0){var C=y*o*1.2;if(C>r){addLog("Over-cap "+e+" — capital ₹"+Math.round(C/1e3)+"K > limit ₹"+Math.round(r/1e3)+"K, showing anyway (flagged)","");}}if(g.naresStaleDowngrade)addLog("Naresh: "+e+" "+v+" downgraded STRONG→MODERATE — urgency faded (STALE), likely late entry","warn");var _matchedRow=(f&&f.chain)?f.chain.find(function(r){return r.strike===u;}):null;
 var _existingSig=S.signals.find(function(t){return t.sym===e&&t.type===v&&t.strike===u;});
 var x=Object.assign({},g,{gammaBlast:g.gammaBlast||null,id:_existingSig?_existingSig.id:e+"_"+v+"_"+Date.now(),sym:e,type:v,lot:o,token:String(t),score:g.score,initialScore:_existingSig?_existingSig.initialScore:g.score,verdict:g.verdict,spotPrice:s,premium:y,entryPremium:_existingSig?_existingSig.entryPremium:y,prevPremiumClose:pPrevClose,strike:u,expiry:(f&&f.expiry)||null,isExpiry:!!g.isExpiryDay,isCommodity:!1,ts:_existingSig?_existingSig.ts:Date.now(),lastUpdated:Date.now(),ceCase:_matchedRow?_matchedRow.ceCase:null,peCase:_matchedRow?_matchedRow.peCase:null,overCapital:(y>0&&y*o*1.2>r)});computeLevels(x);
-// Real fix: this regular scan pass re-derives expiry fresh every time (line above),
-// but a trade already sitting in S.paperTrades with no expiry (e.g. any Manual Check
-// trade created before the backfill fix existed) never got that value written back
-// onto ITSELF -- only the signal object x got it. Confirmed via user's own screenshot:
-// PREMIERENE's Spot genuinely updated every scan (proving this loop DOES reach manual
-// signals) while LTP stayed frozen, because the trade object's own .expiry stayed null
-// forever. Patch the trade directly here too, every scan, not just once at creation.
-// TEMPORARY DIAGNOSTIC LOGGING per user request -- traces every step of this exact
-// chain so the real break point is visible in Activity Log within a few scan cycles,
-// instead of guessing further from static code reading. Remove once root cause found.
-if(e==='PREMIERENE'){
-  addLog('🔬 DIAG '+e+' '+v+': f.expiry='+(f?JSON.stringify(f.expiry):'f is null/undefined')+' -> x.expiry='+x.expiry,'warn');
-}
-if(x.expiry && typeof S!=='undefined' && S.paperTrades){
-  var _tradeBackfill = S.paperTrades.find(function(pt){ return pt.sigId===x.id && !pt.expiry; });
-  if(e==='PREMIERENE'){
-    addLog('🔬 DIAG '+e+': looking for trade with sigId='+x.id+' -- found match: '+(!!_tradeBackfill)+' -- total open trades: '+S.paperTrades.length+' -- their sigIds: '+S.paperTrades.map(function(pt){return pt.sigId;}).join(','),'warn');
-  }
-  if(_tradeBackfill){
-    _tradeBackfill.expiry = x.expiry;
-    if(typeof savePaperTrades==='function') savePaperTrades();
-    if(e==='PREMIERENE'){ addLog('🔬 DIAG '+e+': BACKFILLED trade.expiry = '+x.expiry,'ok'); }
-  }
-} else if(e==='PREMIERENE'){
-  addLog('🔬 DIAG '+e+': backfill block skipped entirely -- x.expiry is falsy ('+x.expiry+') or S.paperTrades unavailable','err');
-}
 // Real fix: a signal that already exists is now RE-EVALUATED every scan, not skipped.
 // Previously "already exists" meant permanently frozen at whatever verdict/flags it had
 // when first created (e.g. stuck on STALE forever even if conditions genuinely changed
@@ -3813,87 +3724,6 @@ function v8CloseFormSheet(){
 document.getElementById('v8FormBackdrop').onclick=v8CloseFormSheet;
 document.getElementById('v8FormClose').onclick=v8CloseFormSheet;
 
-function v8FmtCapital(n){
-  n = Math.round(n||0);
-  if(n>=1e5) return '₹'+(n/1e5).toFixed(1)+'L';
-  if(n>=1e3) return '₹'+Math.round(n/1e3)+'K';
-  return '₹'+n;
-}
-function v8FmtHistoryDate(dateStr, exitDateStr){
-  // exitDate/date are stored as toLocaleDateString('en-IN') strings (DD/MM/YYYY), no
-  // time component preserved -- real trades only have a date, not a precise time, so
-  // the history list shows Today/Yesterday/date without a clock time (unlike the
-  // original mock which assumed a timestamp that isn't actually stored anywhere).
-  var raw = exitDateStr || dateStr;
-  if(!raw) return '';
-  var parts = raw.split('/');
-  if(parts.length!==3) return raw;
-  var d = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
-  var today = new Date(); today.setHours(0,0,0,0);
-  var yest = new Date(today); yest.setDate(yest.getDate()-1);
-  var dOnly = new Date(d); dOnly.setHours(0,0,0,0);
-  if(dOnly.getTime()===today.getTime()) return 'Today';
-  if(dOnly.getTime()===yest.getTime()) return 'Yesterday';
-  if(d.getFullYear()===today.getFullYear()) return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
-  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-}
-function v8RenderHistorySheet(){
-  var listEl = document.getElementById('v8HistoryList');
-  var totalEl = document.getElementById('v8HistoryTotalPnl');
-  if(!listEl || typeof S === 'undefined' || !S.closedPaperTrades) return;
-  var trades = S.closedPaperTrades.slice().reverse(); // newest first
-  var totalPnl = trades.reduce(function(sum,t){ return sum+(t.pnl||0); },0);
-  totalEl.textContent = (totalPnl>=0?'+':'-')+'₹'+Math.abs(Math.round(totalPnl)).toLocaleString('en-IN');
-  totalEl.style.color = totalPnl>=0 ? 'var(--green)' : 'var(--red)';
-  if(!trades.length){
-    listEl.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">No closed trades yet</div>';
-    return;
-  }
-  listEl.innerHTML = trades.map(function(t){
-    var pnl = t.pnl||0;
-    var capital = (t.avgPremium||t.entryPremium||0) * (t.lot||1) * (t.lots||1) * 1.2;
-    var dateLabel = v8FmtHistoryDate(t.date, t.exitDate);
-    return '<div style="display:flex;align-items:center;gap:6px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
-      +'<span style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap">'+t.sym+' '+t.strike+' '+t.type+'</span>'
-      +'<span style="font-size:10px;color:var(--blue);background:var(--blue-bg);border-radius:8px;padding:2px 7px;white-space:nowrap">'+v8FmtCapital(capital)+'</span>'
-      +'<span style="font-size:10px;color:var(--text3);background:var(--card2);border-radius:8px;padding:2px 7px;white-space:nowrap">'+dateLabel+'</span>'
-      +'<span style="font-size:13px;font-weight:800;white-space:nowrap;margin-left:auto;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN')+'</span>'
-      +'</div>';
-  }).join('');
-}
-function v8ManualRefresh(){
-  // Real fix per explicit user request: a direct manual refresh, bypassing whatever
-  // timing/caching uncertainty might delay the normal 5s/15s/25s loops -- forces every
-  // live-data path (trade LTP, stock spot price, dashboard card rebuild) to run right
-  // now, immediately, on tap. Gives clear visible feedback (spin + toast) so it's obvious
-  // something happened, rather than a silent no-op if nothing was actually stale.
-  var btn = document.getElementById('v8RefreshBtn');
-  if(btn) btn.classList.add('spinning');
-  var tasks = [];
-  if(typeof refreshOpenTradePrices==='function') tasks.push(refreshOpenTradePrices());
-  if(typeof batchUpdatePrices==='function') tasks.push(batchUpdatePrices());
-  Promise.all(tasks).then(function(){
-    if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
-    if(typeof toast==='function') toast('🔄 Refreshed');
-  }).catch(function(){
-    if(typeof toast==='function') toast('⚠️ Refresh failed — check connection');
-  }).finally(function(){
-    if(btn) setTimeout(function(){ btn.classList.remove('spinning'); }, 400);
-  });
-}
-function v8OpenHistorySheet(){
-  v8RenderHistorySheet();
-  document.getElementById('v8HistoryBackdrop').classList.add('show');
-  document.getElementById('v8HistorySheet').classList.add('show');
-}
-function v8CloseHistorySheet(){
-  document.getElementById('v8HistoryBackdrop').classList.remove('show');
-  document.getElementById('v8HistorySheet').classList.remove('show');
-}
-document.getElementById('v8HistoryBackdrop').onclick=v8CloseHistorySheet;
-document.getElementById('v8HistoryClose').onclick=v8CloseHistorySheet;
-
-
 function v8MDiag(msg){
   var el=document.getElementById('v8ManualDebugTrail');
   var time=(new Date()).toLocaleTimeString('en-IN',{hour12:false});
@@ -4089,23 +3919,6 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
           real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
         }
-        // Real fix: /oi-analysis returns the raw expiry string used to resolve the
-        // option chain (e.g. "28AUG2025"), but a Manual Check signal was created with
-        // NO expiry at all (addPaperTrade's trade object has no expiry field either,
-        // since it existed before this analysis ever ran). Without it, every future
-        // /live-trade-prices call for this trade falls back to the legacy no-expiry
-        // path, which was confirmed via a real broker screenshot to NOT keep the LTP
-        // genuinely fresh -- capture it here and backfill both the signal and the
-        // already-created trade so future price refreshes use the strict exact-match
-        // path like every other trade already does.
-        if(oiAnalysisData.expiry){
-          realSig.expiry = oiAnalysisData.expiry;
-          if(typeof S !== 'undefined' && S.paperTrades){
-            var _tradeToPatch = S.paperTrades.find(function(pt){ return pt.sigId === realSig.id; });
-            if(_tradeToPatch){ _tradeToPatch.expiry = oiAnalysisData.expiry; if(typeof savePaperTrades==='function') savePaperTrades(); }
-          }
-          v8MDiag('expiry backfilled onto signal and trade: '+oiAnalysisData.expiry);
-        }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
       // no new card, no separate pending state, just the real values arriving.
@@ -4137,14 +3950,8 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
 
 
 
-function v8SwipeWrap(cardKey, innerHTML, hasOpenTrade){
-  // Real fix (2026-08-21) per explicit user decision: swipe-right (close/save to history)
-  // is now always available on every card, not just cards with a real open trade --
-  // v8CloseCard() handles both cases (real exit for a trade, synthetic zero-P&L record
-  // for a raw signal never entered).
-  var closeBg = '<div class="v8swipe-close-bg"><button type="button" class="v8swipe-close-btn" onclick="v8CloseCard(this)"><span class="v8close-icon">✅</span></button></div>';
-  return '<div class="v8swipe-wrap" data-key="'+cardKey+'" data-has-trade="'+(hasOpenTrade?'1':'0')+'">'
-    + closeBg
+function v8SwipeWrap(cardKey, innerHTML){
+  return '<div class="v8swipe-wrap" data-key="'+cardKey+'">'
     + '<div class="v8swipe-delete-bg"><button type="button" class="v8swipe-delete-btn" onclick="v8DeleteCard(this)"><span class="v8del-icon">🗑️</span></button></div>'
     + '<div class="v8swipe-target">'+innerHTML+'</div></div>';
 }
@@ -4155,7 +3962,7 @@ function v8AttachSwipeHandlers(){
     if(target.dataset.swipeAttached) return;
     target.dataset.swipeAttached='1';
     var startX=0,currentX=0,dragging=false,moved=false;
-    var OPEN_X=-90, OPEN_X_RIGHT=90;
+    var OPEN_X=-90;
     target.addEventListener('touchstart',function(e){
       startX=e.touches[0].clientX; dragging=true; moved=false;
       target.classList.add('dragging');
@@ -4165,7 +3972,6 @@ function v8AttachSwipeHandlers(){
       currentX=e.touches[0].clientX-startX;
       if(Math.abs(currentX)>8) moved=true;
       if(currentX<0){ target.style.transform='translateX('+Math.max(currentX,OPEN_X)+'px)'; }
-      else { target.style.transform='translateX('+Math.min(currentX,OPEN_X_RIGHT)+'px)'; }
     },{passive:true});
     target.addEventListener('touchend',function(){
       dragging=false;
@@ -4173,10 +3979,6 @@ function v8AttachSwipeHandlers(){
       if(currentX<-35){
         v8CloseAllSwipes(wrap);
         target.style.transform='translateX('+OPEN_X+'px)';
-        target.classList.add('swipe-open');
-      } else if(currentX>35){
-        v8CloseAllSwipes(wrap);
-        target.style.transform='translateX('+OPEN_X_RIGHT+'px)';
         target.classList.add('swipe-open');
       } else {
         target.style.transform='translateX(0)';
@@ -4215,63 +4017,13 @@ function v8DeleteCard(btn){
   if(typeof S !== 'undefined' && S.signals){
     S.signals = S.signals.filter(function(sig){ return sig.id !== key; });
   }
-  // Real fix (2026-08-21): delete now wipes the card completely, including any real
-  // open trade tied to it -- NO P&L history entry is ever created, even if real capital
-  // was deployed. This is an explicit user decision: delete means "erase, no record",
-  // separate from close/sell (swipe-right, v8CloseCard) which is the only path that
-  // writes to trade history. Must remove from S.paperTrades directly (a raw splice, not
-  // exitPaperTrade -- that function writes to S.closedPaperTrades, which is exactly the
-  // history entry delete must never create) or the "open trade always shows" fallback
-  // in v8SyncFromRealSignals would resurrect this exact card on the next sync.
-  if(typeof S !== 'undefined' && S.paperTrades){
-    var _delIdx = S.paperTrades.findIndex(function(pt){ return pt.sigId === key; });
-    if(_delIdx >= 0){ S.paperTrades.splice(_delIdx, 1); if(typeof savePaperTrades==='function') savePaperTrades(); }
+  // If this card has a genuinely open real paper trade, close it too -- otherwise
+  // the trade-keeps-card-alive fallback in v8SyncFromRealSignals would resurrect
+  // this exact card on the very next scan sync, undoing the delete.
+  if(typeof S !== 'undefined' && S.paperTrades && typeof exitPaperTrade === 'function'){
+    var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
+    if(openTrade){ exitPaperTrade(openTrade.id); }
   }
-  wrap.style.overflow='hidden';
-  wrap.style.maxHeight=wrap.offsetHeight+'px';
-  requestAnimationFrame(function(){
-    wrap.style.transition='max-height .25s ease, margin .25s ease, opacity .2s ease';
-    wrap.style.opacity='0';
-    wrap.style.maxHeight='0px';
-    wrap.style.marginBottom='0px';
-  });
-  setTimeout(function(){ wrap.remove(); v8RenderHeaderStats(); },300);
-}
-
-function v8CloseCard(btn){
-  var wrap=btn.closest('.v8swipe-wrap');
-  if(!wrap) return;
-  var key=wrap.dataset.key;
-  if(typeof S === 'undefined' || !S.paperTrades) return;
-  var openTrade = S.paperTrades.find(function(pt){ return pt.sigId === key; });
-  if(openTrade){
-    if(typeof exitPaperTrade === 'function'){ exitPaperTrade(openTrade.id); }
-    // exitPaperTrade already pushes the trade into S.closedPaperTrades with its real
-    // P&L, capital, and exit time -- this is what feeds the trade-history list.
-  } else {
-    // Real fix (2026-08-21) per explicit user decision: swipe-right now works on ANY
-    // signal card, even one never converted into a real trade. Since there is no actual
-    // entry to look back on, build a synthetic closed record using the current LTP as
-    // both entry and exit (P&L genuinely 0 -- this was never actually held, so no real
-    // gain or loss exists to report), so it still appears in Trade History honestly
-    // rather than silently doing nothing.
-    var sig = (S.signals||[]).find(function(s){ return s.id===key; });
-    if(sig){
-      var ltp = sig.premium || sig.entryPremium || 0;
-      var lots = sig.v8Lots || 1;
-      var lot = sig.lot || 1;
-      var closedRecord = {
-        id: String(Date.now()), sigId: key, sym: sig.sym, strike: sig.strike, type: sig.type,
-        lot: lot, lots: lots, avgPremium: ltp, entryPremium: ltp, currentPremium: ltp,
-        pnl: 0, date: (new Date()).toLocaleDateString('en-IN'), exitDate: (new Date()).toLocaleDateString('en-IN'),
-        status: 'CLOSED'
-      };
-      S.closedPaperTrades.push(closedRecord);
-      if(typeof savePaperTrades==='function') savePaperTrades();
-      if(typeof toast==='function') toast('✅ Recorded — '+sig.sym+' '+sig.strike+' '+sig.type+' (never entered, no P&L)');
-    }
-  }
-  if(S.signals){ S.signals = S.signals.filter(function(sig){ return sig.id !== key; }); }
   wrap.style.overflow='hidden';
   wrap.style.maxHeight=wrap.offsetHeight+'px';
   requestAnimationFrame(function(){
@@ -4576,9 +4328,8 @@ function v8FromRealSignal(sig){
   var liveLtp = (realTrade && realTrade.currentPremium) ? realTrade.currentPremium : (sig.premium || sig.entryPremium || 0);
   var liveSpot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[sig.sym]) ? LIVE_PRICES[sig.sym] : (sig.spotPrice || 0);
   return {
-    key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type, hasOpenTrade: !!realTrade,
+    key: sig.id, mode: sig.isManualCheck ? 'manual' : 'auto', name: sig.sym, strike: sig.strike, type: sig.type,
     tier: t.tier, tierLabel: t.tierLabel, tagCls: t.tagCls, rawVerdict: sig.verdict, rawRoadblock: !!sig.roadblock,
-    debugExpiry: (realTrade && realTrade.expiry) ? realTrade.expiry : (sig.expiry || 'MISSING'),
     entry: (realTrade && realTrade.avgPremium) ? realTrade.avgPremium : (sig.entryPremium || sig.premium || 0),
     spot: liveSpot,
     ltp: liveLtp,
@@ -4678,7 +4429,7 @@ function v8SyncFromRealSignals(){
         var realLtp = pt.currentPremium || pt.entryPremium || pt.avgPremium || 0;
         var realEntry = pt.avgPremium || pt.entryPremium || 0;
         card = {
-          key: pt.sigId, mode: 'manual', name: pt.sym, strike: pt.strike, type: pt.type, hasOpenTrade: true,
+          key: pt.sigId, mode: 'manual', name: pt.sym, strike: pt.strike, type: pt.type,
           tier: 'unknown', tierLabel: '❔ NO DATA', tagCls: 'warn',
           entry: realEntry, spot: (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[pt.sym]) || 0, ltp: realLtp,
           lots: pt.lots || 1, lotSize: pt.lot || 1, dim: true,
@@ -4800,7 +4551,6 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
-    +'<div style="font-size:10px;color:var(--text3);padding:2px 0 0">DEBUG expiry: '+s.debugExpiry+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
@@ -4862,19 +4612,12 @@ function v8RenderFeed(){
     return;
   }
   feed.innerHTML = v8Signals.map(function(s){
-    return v8SwipeWrap(s.key, v8BuildCompactCard(s), s.hasOpenTrade);
+    return v8SwipeWrap(s.key, v8BuildCompactCard(s));
   }).join('');
   v8AttachSwipeHandlers();
   v8RenderHeaderStats();
 }
 function v8TriggerScan(){
-  // Real fix: this button/branch is meant to START a scan from the empty state --
-  // toggleScan() is a genuine toggle (confirmed: first line stops if S.scanning is
-  // already true), so if this ever fires while a scan is already running (e.g. a
-  // narrow timing gap between S.scanning flipping true and this empty-state render),
-  // it would silently STOP the real scan instead of doing nothing. Guard it so this
-  // button can only ever start, never stop.
-  if(typeof S!=='undefined' && S.scanning){ if(typeof toast==='function') toast('Already scanning…'); return; }
   if(typeof toggleScan==='function') toggleScan();
   else if(typeof toast==='function') toast('⚠️ Scan function not available');
 }
@@ -4907,8 +4650,6 @@ function v8RenderHeaderStats(){
   }
   var liveEl=document.getElementById('v8LiveSignalsVal');
   if(liveEl) liveEl.textContent = (typeof S !== 'undefined' && S.signals) ? S.signals.length : v8Signals.length;
-  var histSheet = document.getElementById('v8HistorySheet');
-  if(histSheet && histSheet.classList.contains('show')) v8RenderHistorySheet();
 }
 
 </script>
