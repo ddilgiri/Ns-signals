@@ -1440,12 +1440,41 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // Resets naturally on next login/day since window._avoidedToday is reset at scan start.
   window._avoidedToday=window._avoidedToday||{};
   var _avoidKey=e+"_"+v;
-  if(window._avoidedToday[_avoidKey]){continue;}
+  // Real fix: found via diagnostic logging that PREMIERENE's frozen LTP root cause was
+  // NOT the expiry backfill logic (never even reached) -- it was this exact exclusion.
+  // PREMIERENE scored under 48% at some point today, got added to _avoidedToday, and
+  // every scan since then skipped it here, before ever calling /signal-analysis, before
+  // ever computing/backfilling expiry. Spot kept updating only because that's a totally
+  // separate loop (batchUpdatePrices) with no day-exclusion at all -- LTP genuinely
+  // could never recover. A stock with a real open trade must never be excluded from
+  // scanning regardless of score, since you're already holding it and need live pricing
+  // (and its expiry) regardless of how weak this scan's signal quality looks.
+  var _hasOpenTradeForThis = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.some(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN'; }) : false;
+  if(window._avoidedToday[_avoidKey] && !_hasOpenTradeForThis){continue;}
   try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");
   // Day-exclusion threshold raised from AVOID-only (<42%) to <48% per explicit user
   // decision -- checked directly against g.score now, not the verdict string, since
   // 48 falls inside the WEAK band (42-59%) and doesn't line up with a verdict boundary.
-  if(g.score<48){window._avoidedToday[_avoidKey]=true;addLog("🚫 "+e+" "+v+" "+g.score+"% — under 48%, excluded from scanning for rest of today","warn");continue;}
+  if(g.score<48){
+    if(!_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
+    addLog("🚫 "+e+" "+v+" "+g.score+"% — under 48%"+(_hasOpenTradeForThis?" (open trade — still scanning every cycle, not excluded)":", excluded from scanning for rest of today"),"warn");
+    if(_hasOpenTradeForThis){
+      // Real fix: even at a genuinely weak score, an open trade still needs its expiry
+      // backfilled if missing -- this normally happens later in this function via the
+      // /oi-analysis call, but that code is never reached because of the continue below.
+      // Do a minimal, targeted fetch here just for the expiry, so the trade can still be
+      // priced correctly even while its signal quality stays weak.
+      try{
+        var _expOnly=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s})});
+        var _expData=await _expOnly.json();
+        if(_expData && _expData.expiry && typeof S!=='undefined' && S.paperTrades){
+          var _tb=S.paperTrades.find(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN' && !pt.expiry; });
+          if(_tb){ _tb.expiry=_expData.expiry; if(typeof savePaperTrades==='function') savePaperTrades(); addLog("🔬 DIAG "+e+": expiry backfilled from weak-score path: "+_expData.expiry,"ok"); }
+        }
+      }catch(_ee){}
+    }
+    continue;
+  }
   if("AVOID"===g.verdict||"TRAP"===g.verdict)continue;
 var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorage.getItem("fxo_scan_cache_"+e);if(_rawCache){var _parsedCache=JSON.parse(_rawCache);if(_parsedCache&&_parsedCache.chain&&_parsedCache.chain.length&&isCacheFromToday(_parsedCache.ts))_cachedChain=_parsedCache.chain;}}catch(_ce){}
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
