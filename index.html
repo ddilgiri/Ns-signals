@@ -79,6 +79,8 @@
 .v8dash-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:var(--text)}
 .v8header-icons{display:flex;gap:8px}
 .v8gear-btn,.v8log-btn{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;position:relative}
+.v8log-btn.spinning{animation:v8spin .7s linear infinite}
+@keyframes v8spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .v8gear-btn:active,.v8log-btn:active{background:var(--card2)}
 .v8log-btn-badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--red);border:1.5px solid var(--card)}
 .v8summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
@@ -105,10 +107,10 @@
 .v8empty-scan-btn:active{opacity:.85}
 .v8fab:active{transform:scale(.94)}
 .v8swipe-wrap{position:relative;margin-bottom:8px;border-radius:13px;overflow:hidden}
-.v8swipe-delete-bg{position:absolute;inset:0;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:13px}
+.v8swipe-delete-bg{position:absolute;top:0;right:0;bottom:0;left:50%;background:var(--red);display:flex;align-items:stretch;justify-content:flex-end;border-radius:0 13px 13px 0}
 .v8swipe-delete-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .v8swipe-delete-bg .v8del-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
-.v8swipe-close-bg{position:absolute;inset:0;background:var(--green);display:flex;align-items:stretch;justify-content:flex-start;border-radius:13px}
+.v8swipe-close-bg{position:absolute;top:0;left:0;bottom:0;right:50%;background:var(--green);display:flex;align-items:stretch;justify-content:flex-start;border-radius:13px 0 0 13px}
 .v8swipe-close-btn{width:90px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .v8swipe-close-bg .v8close-icon{color:var(--card);font-size:22px;font-weight:800;pointer-events:none}
 .v8swipe-target{position:relative;background:var(--card);touch-action:pan-y;transition:transform .25s ease}
@@ -391,6 +393,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   <div class="v8dash-header">
     <h1>NS-Signals</h1>
     <div class="v8header-icons">
+      <button class="v8log-btn" id="v8RefreshBtn" onclick="v8ManualRefresh()">🔄</button>
       <button class="v8log-btn" id="v8ThemeBtn" onclick="toggleTheme()">🌙</button>
       <button class="v8log-btn" id="v8LogBtn">📋</button>
       <button class="v8gear-btn" id="v8GearBtn">⚙️</button>
@@ -3787,6 +3790,26 @@ function v8RenderHistorySheet(){
       +'<span style="font-size:13px;font-weight:800;white-space:nowrap;margin-left:auto;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN')+'</span>'
       +'</div>';
   }).join('');
+}
+function v8ManualRefresh(){
+  // Real fix per explicit user request: a direct manual refresh, bypassing whatever
+  // timing/caching uncertainty might delay the normal 5s/15s/25s loops -- forces every
+  // live-data path (trade LTP, stock spot price, dashboard card rebuild) to run right
+  // now, immediately, on tap. Gives clear visible feedback (spin + toast) so it's obvious
+  // something happened, rather than a silent no-op if nothing was actually stale.
+  var btn = document.getElementById('v8RefreshBtn');
+  if(btn) btn.classList.add('spinning');
+  var tasks = [];
+  if(typeof refreshOpenTradePrices==='function') tasks.push(refreshOpenTradePrices());
+  if(typeof batchUpdatePrices==='function') tasks.push(batchUpdatePrices());
+  Promise.all(tasks).then(function(){
+    if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
+    if(typeof toast==='function') toast('🔄 Refreshed');
+  }).catch(function(){
+    if(typeof toast==='function') toast('⚠️ Refresh failed — check connection');
+  }).finally(function(){
+    if(btn) setTimeout(function(){ btn.classList.remove('spinning'); }, 400);
+  });
 }
 function v8OpenHistorySheet(){
   v8RenderHistorySheet();
