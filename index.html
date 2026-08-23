@@ -4330,68 +4330,71 @@ function v8DeriveTier(sig, realTrade){
     // Both squeezing at once -- #9
     if(ceGroup==='SQUEEZE' && peGroup==='SQUEEZE'){
       return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
-        verdictTxt:'Both Call and Put are showing short covering at '+sig.strike+' right now — a lot of forced buying on both sides, not real conviction. Very unstable, likely to reverse fast. Avoid or book instantly if taken.'};
+        verdictTxt:'Both Call and Put are showing short covering at '+sig.strike+' right now (score '+Math.round(sig.score||0)+'%) — a lot of forced buying on both sides, not real conviction. Very unstable, likely to reverse fast. Avoid or book instantly if taken.'};
     }
     // Squeeze on one side -- #7
     if(yourGroup==='SQUEEZE' || otherGroup==='SQUEEZE'){
       var squeezeOnYourSide = yourGroup==='SQUEEZE';
       return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
         verdictTxt: squeezeOnYourSide
-          ? 'Sharp move at '+sig.strike+' — but it\'s short covering, not fresh buying. Can work fast for a '+yourLabel+' buyer, but often reverses. Book quick, don\'t hold.'
-          : 'The move at '+sig.strike+' is a '+otherLabel+'-side squeeze, not something that helps a '+yourLabel+' buyer directly. Stay cautious.'};
+          ? 'Sharp move at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — but it\'s short covering, not fresh buying. Can work fast for a '+yourLabel+' buyer, but often reverses. Book quick, don\'t hold.'
+          : 'The move at '+sig.strike+' is a '+otherLabel+'-side squeeze (score '+Math.round(sig.score||0)+'%), not something that helps a '+yourLabel+' buyer directly. Stay cautious.'};
     }
     // Both sides sellers winning -- range-lock, #4
     if(ceGroup==='SELLERS_WIN' && peGroup==='SELLERS_WIN'){
+      var _rlDetail = (wall && floor) ? (' Call wall '+v8FmtOI(wall.oi)+' OI, Put floor '+v8FmtOI(floor.oi)+' OI.') : '';
       return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-        verdictTxt:'Sellers are controlling both sides at '+sig.strike+' — bad setup for a '+yourLabel+' buyer, no room to move '+(sig.type==='CE'?'up':'down')+'. Skip.'};
+        verdictTxt:'Sellers are controlling both sides at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — bad setup for a '+yourLabel+' buyer, no room to move '+(sig.type==='CE'?'up':'down')+'.'+_rlDetail+' Skip.'};
     }
     // Both sides buyers winning -- real conflict, #5
     if(ceGroup==='BUYERS_WIN' && peGroup==='BUYERS_WIN'){
       return {tier:'mixed', tierLabel:'🟡 MIXED', tagCls:'warn', verdictEmoji:'⚠️',
-        verdictTxt:'Buyers are active on both Call and Put at '+sig.strike+' — real conflict, no clean edge for a '+yourLabel+' buyer right now. Size down or wait.'};
+        verdictTxt:'Buyers are active on both Call and Put at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — real conflict, no clean edge for a '+yourLabel+' buyer right now. Size down or wait.'};
     }
     // Bullish agreement: CE buyers win + PE sellers win -- #3
     if(ceGroup==='BUYERS_WIN' && peGroup==='SELLERS_WIN'){
       if(sig.type==='CE'){
         return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok', verdictEmoji:'✅',
-          verdictTxt:'Both sides agree this is bullish at '+sig.strike+' — good for a CE buyer, clean confirmed setup. Normal size is fine.'};
+          verdictTxt:'Both sides agree this is bullish at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — good for a CE buyer, clean confirmed setup. Normal size is fine.'};
       } else {
         return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-          verdictTxt:'Both sides confirm bullish here — that\'s against a PE buyer. Better to skip PE at this strike.'};
+          verdictTxt:'Both sides confirm bullish here at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — that\'s against a PE buyer. Better to skip PE at this strike.'};
       }
     }
     // Bearish agreement: CE sellers win + PE buyers win -- #11
     if(ceGroup==='SELLERS_WIN' && peGroup==='BUYERS_WIN'){
       if(sig.type==='PE'){
         return {tier:'clear-plus', tierLabel:'🟢🤝 CLEAR+', tagCls:'ok', verdictEmoji:'✅',
-          verdictTxt:'Both sides confirm bearish at '+sig.strike+' — good for a PE buyer, clean confirmed setup. Normal size is fine.'};
+          verdictTxt:'Both sides confirm bearish at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — good for a PE buyer, clean confirmed setup. Normal size is fine.'};
       } else {
         return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-          verdictTxt:'Both sides confirm bearish here — that\'s against a CE buyer. Better to skip CE at this strike.'};
+          verdictTxt:'Both sides confirm bearish here at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — that\'s against a CE buyer. Better to skip CE at this strike.'};
       }
     }
     // Your side confirmed, other side unclear -- #1/#2
     if(yourGroup==='BUYERS_WIN' && (otherGroup==='UNWIND'||otherGroup==='BUILDING'||otherGroup==='NONE')){
+      var _yourWallDetail = confirmSide ? (' '+confirmLabel+' at '+confirmSide.strike+' holding '+v8FmtOI(confirmSide.oi)+' OI.') : '';
       return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok', verdictEmoji: sig.type==='CE'?'📈':'📉',
-        verdictTxt:yourLabel+' wall is breaking at '+sig.strike+' — buyers winning, good sign for a '+yourLabel+' buyer. But '+otherLabel+' side isn\'t confirming yet, so this is early. Watch closely.'};
+        verdictTxt:yourLabel+' wall is breaking at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — buyers winning, good sign for a '+yourLabel+' buyer.'+_yourWallDetail+' But '+otherLabel+' side isn\'t confirming yet, so this is early. Watch closely.'};
     }
     if(yourGroup==='SELLERS_WIN' && (otherGroup==='UNWIND'||otherGroup==='BUILDING'||otherGroup==='NONE')){
+      var _sellDetail = confirmSide ? (' '+confirmLabel+' holding at '+v8FmtOI(confirmSide.oi)+' OI.') : '';
       return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-        verdictTxt:yourLabel+' side shows sellers winning (wall/floor holding) at '+sig.strike+' — that works against a '+yourLabel+' buyer here. Not a good entry point right now. Wait.'};
+        verdictTxt:yourLabel+' side shows sellers winning (wall/floor holding) at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — that works against a '+yourLabel+' buyer here.'+_sellDetail+' Not a good entry point right now. Wait.'};
     }
     // Other side confirmed, your side unclear
     if(otherGroup==='BUYERS_WIN' || otherGroup==='SELLERS_WIN'){
       return {tier:'clear', tierLabel:'🟢 CLEAR', tagCls:'ok', verdictEmoji:'📊',
-        verdictTxt:otherLabel+' side shows '+(otherGroup==='BUYERS_WIN'?'buyers':'sellers')+' winning at '+sig.strike+' — no direct read for your '+yourLabel+' side yet. Nothing confirmed on '+yourLabel+'. Wait for a real '+yourLabel+'-side signal.'};
+        verdictTxt:otherLabel+' side shows '+(otherGroup==='BUYERS_WIN'?'buyers':'sellers')+' winning at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — no direct read for your '+yourLabel+' side yet. Nothing confirmed on '+yourLabel+'. Wait for a real '+yourLabel+'-side signal.'};
     }
     // Both unwinding, no fresh positioning -- #6
     if(ceGroup==='UNWIND' && peGroup==='UNWIND'){
       return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-        verdictTxt:'No fresh positioning at '+sig.strike+' — nothing here supports a '+yourLabel+' buy right now. Wait for the next real move.'};
+        verdictTxt:'No fresh positioning at '+sig.strike+' (score '+Math.round(sig.score||0)+'%) — nothing here supports a '+yourLabel+' buy right now. Wait for the next real move.'};
     }
     // Fallback: no classified case on either side, or too thin -- #8
     return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️',
-      verdictTxt:'OI is too thin near '+sig.strike+' to trust any signal for a '+yourLabel+' buy. Skip until volume builds.'};
+      verdictTxt:'OI is too thin near '+sig.strike+' (score '+Math.round(sig.score||0)+'%) to trust any signal for a '+yourLabel+' buy. Skip until volume builds.'};
   }
 
   // Fallback: original wall/floor-strength logic, used when real Case data is not
@@ -4416,8 +4419,8 @@ function v8DeriveTier(sig, realTrade){
       return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:v8Pick(flagVariants)};
     }
     var weakVariants=[
-      'Verdict came in WEAK on this scan — signal does not clear the confidence bar. Skip for now.',
-      'This scan\'s confidence score is too low to act on — not strong enough to trust yet. Skip for now.'
+      'Verdict came in WEAK on this scan (score '+Math.round(sig.score||0)+'%) — signal does not clear the confidence bar. Skip for now.',
+      'This scan\'s confidence score is '+Math.round(sig.score||0)+'% — too low to act on, not strong enough to trust yet. Skip for now.'
     ];
     return {tier:'skip', tierLabel:'🔒 SKIP', tagCls:'skip', verdictEmoji:'⚠️', verdictTxt:v8Pick(weakVariants)};
   }
