@@ -1396,16 +1396,7 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     var chunk=t.slice(bi,bi+CONCURRENCY);
     await Promise.all(chunk.map(function(stk){return scanSymbol(stk.sym,stk.token,stk.lot,!1);}));
     renderSignals(); // live partial render after each chunk for immediate feedback
-    // TEMPORARY DIAGNOSTIC per user report: LTP/Spot update but verdict text doesn't,
-    // despite this call being confirmed present in code. Logging around it to see in
-    // the Activity Log whether it's genuinely reached and whether it throws silently.
-    if(typeof addLog==='function') addLog('🔬 DIAG: about to call v8SyncFromRealSignals from scan loop, S.signals.length='+(S.signals?S.signals.length:'undefined'),'warn');
-    if(typeof v8SyncFromRealSignals==='function'){
-      try{ v8SyncFromRealSignals(); if(typeof addLog==='function') addLog('🔬 DIAG: v8SyncFromRealSignals from scan loop completed OK','ok'); }
-      catch(e){ if(typeof addLog==='function') addLog('🔬 DIAG: v8SyncFromRealSignals THREW: '+e.message,'err'); }
-    } else {
-      if(typeof addLog==='function') addLog('🔬 DIAG: v8SyncFromRealSignals is NOT a function at this point','err');
-    }
+    if(typeof v8SyncFromRealSignals==='function'){ try{ v8SyncFromRealSignals(); }catch(e){} }
   }
   if(renderSignals(),updateAnalytics(),S.signals.length>0&&"all"!==S.filterMode)
     if(!S.signals.filter(function(e){return"stocks"===S.filterMode?!e.isCommodity:"strong"===S.filterMode?"STRONG"===e.verdict:"moderate"!==S.filterMode||"MODERATE"===e.verdict}).length){
@@ -4469,7 +4460,6 @@ function v8FromRealSignal(sig){
   // different real trade-creation path), then 0 if genuinely no trade exists yet.
   var realTrade = (typeof S !== 'undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId === sig.id; }) : null;
   var t = v8DeriveTier(sig, realTrade);
-  if(typeof addLog==='function' && sig.sym) addLog('🔬 DIAG verdictTxt for '+sig.sym+' '+sig.strike+' '+sig.type+': "'+(t.verdictTxt||'').substring(0,60)+'..." tier='+t.tier,'');
   var wall = sig.ceWalls && sig.ceWalls[0];
   var floor = sig.peFloors && sig.peFloors[0];
   var realLots = realTrade ? (realTrade.lots || 1) : (sig.v8Lots != null ? sig.v8Lots : 0);
