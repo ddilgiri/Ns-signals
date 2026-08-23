@@ -251,6 +251,7 @@
 .v8form-input{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--border);font-size:14px;font-weight:600;color:var(--text);background:var(--card)}
 .v8form-input:focus{outline:none;border-color:var(--purple)}
 .v8log-screen{position:fixed;inset:0;z-index:130;display:none;flex-direction:column;height:100vh;background:var(--card)}
+#v8EventsView{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .v8log-screen.show{display:flex}
 .v8log-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 16px 12px;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0}
 .v8log-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:var(--text)}
@@ -262,7 +263,7 @@
 .v8log-filter-row{display:flex;gap:6px;padding:12px 16px;overflow-x:auto;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border)}
 .v8log-filter-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text3)}
 .v8log-filter-chip.active{background:var(--text);color:var(--card);border-color:var(--text)}
-.v8log-list{flex:1;overflow-y:auto;padding:8px 16px 24px}
+.v8log-list{flex:1;min-height:0;overflow-y:auto;padding:8px 16px 24px}
 .v8log-entry{display:flex;align-items:baseline;gap:7px;padding:5px 2px;overflow:hidden}
 .v8log-dot{display:none}
 .v8log-dot.signal{background:var(--green)}
@@ -402,6 +403,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8stat-card pnl" id="v8PnlCard" onclick="v8OpenHistorySheet()" style="cursor:pointer"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
+  <input class="v8form-input" id="v8FeedSearch" type="text" placeholder="🔍 Search stock…" autocomplete="off" oninput="v8RenderFeed()" style="margin:10px 4px 4px;width:calc(100% - 8px)">
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
@@ -1438,12 +1440,13 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   var _hasOpenTradeForThis = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.some(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN'; }) : false;
   if(window._avoidedToday[_avoidKey] && !_hasOpenTradeForThis){continue;}
   try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");
-  // Day-exclusion threshold raised from AVOID-only (<42%) to <48% per explicit user
-  // decision -- checked directly against g.score now, not the verdict string, since
-  // 48 falls inside the WEAK band (42-59%) and doesn't line up with a verdict boundary.
-  if(g.score<48){
+  // Day-exclusion threshold now tied directly to the Setup "Min Confidence %" slider
+  // (variable l, read above) instead of a separate hardcoded 48 -- per user decision:
+  // one number, one meaning. If the slider changes, both display filtering and scan
+  // exclusion move together automatically.
+  if(g.score<l){
     if(!_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
-    addLog("🚫 "+e+" "+v+" "+g.score+"% — under 48%"+(_hasOpenTradeForThis?" (open trade — still scanning every cycle, not excluded)":", excluded from scanning for rest of today"),"warn");
+    addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%"+(_hasOpenTradeForThis?" (open trade — still scanning every cycle, not excluded)":", excluded from scanning for rest of today"),"warn");
     if(!_hasOpenTradeForThis) continue;
   }
   if(("AVOID"===g.verdict||"TRAP"===g.verdict) && !_hasOpenTradeForThis)continue;
@@ -4756,7 +4759,17 @@ function v8RenderFeed(){
     }
     return;
   }
-  feed.innerHTML = v8Signals.map(function(s){
+  var _tierRank = {'clear-plus':0,'clear':1,'mixed':2,'stale':3,'skip':4,'unknown':5};
+  var _sorted = v8Signals.slice().sort(function(a,b){
+    var ra = (a.rawVerdict==='STRONG'||a.rawVerdict==='MODERATE') ? 0 : (_tierRank[a.tier]!=null?_tierRank[a.tier]+1:9);
+    var rb = (b.rawVerdict==='STRONG'||b.rawVerdict==='MODERATE') ? 0 : (_tierRank[b.tier]!=null?_tierRank[b.tier]+1:9);
+    if(ra!==rb) return ra-rb;
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  var _searchQ = (document.getElementById('v8FeedSearch')||{}).value || '';
+  _searchQ = _searchQ.trim().toUpperCase();
+  var _filtered = _searchQ ? _sorted.filter(function(s){ return (s.name||'').toUpperCase().indexOf(_searchQ)>=0; }) : _sorted;
+  feed.innerHTML = _filtered.map(function(s){
     return v8SwipeWrap(s.key, v8BuildCompactCard(s));
   }).join('');
   v8AttachSwipeHandlers();
