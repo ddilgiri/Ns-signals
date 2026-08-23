@@ -79,6 +79,8 @@
 .v8dash-header h1{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;margin:0;color:var(--text)}
 .v8header-icons{display:flex;gap:8px}
 .v8gear-btn,.v8log-btn{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;position:relative}
+.v8log-btn.spinning{animation:v8dashrefresh .7s linear infinite}
+@keyframes v8dashrefresh{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .v8gear-btn:active,.v8log-btn:active{background:var(--card2)}
 .v8log-btn-badge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--red);border:1.5px solid var(--card)}
 .v8summary-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
@@ -392,6 +394,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   <div class="v8dash-header">
     <h1>NS-Signals</h1>
     <div class="v8header-icons">
+      <button class="v8log-btn" id="v8DashRefreshBtn" onclick="v8RefreshDashboardSignals()" title="Force refresh visible signals">👁️‍🗨️</button>
       <button class="v8log-btn" id="v8ThemeBtn" onclick="toggleTheme()">🌙</button>
       <button class="v8log-btn" id="v8LogBtn">📋</button>
       <button class="v8gear-btn" id="v8GearBtn">⚙️</button>
@@ -3835,6 +3838,26 @@ function v8RenderHistorySheet(){
       +'<span style="font-size:13px;font-weight:800;white-space:nowrap;margin-left:auto;color:'+(pnl>=0?'var(--green)':'var(--red)')+'">'+(pnl>=0?'+':'-')+'₹'+Math.abs(Math.round(pnl)).toLocaleString('en-IN')+'</span>'
       +'</div>';
   }).join('');
+}
+function v8RefreshDashboardSignals(){
+  // Force-refresh ONLY the signal cards currently visible on the dashboard, per
+  // explicit user request: LTP, spot, P&L, and verdict/prediction text -- not a
+  // global app refresh, not the baseline, not the F&O list. Reuses the same real
+  // functions already driving the normal 5s/15s/25s live loops, just triggered
+  // immediately on tap instead of waiting for the next cycle.
+  var btn = document.getElementById('v8DashRefreshBtn');
+  if(btn) btn.classList.add('spinning');
+  var tasks = [];
+  if(typeof batchUpdatePrices==='function') tasks.push(batchUpdatePrices());
+  if(typeof refreshOpenTradePrices==='function') tasks.push(refreshOpenTradePrices());
+  Promise.all(tasks).then(function(){
+    if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
+    if(typeof toast==='function') toast('👁️ Signals refreshed');
+  }).catch(function(){
+    if(typeof toast==='function') toast('⚠️ Refresh failed — check connection');
+  }).finally(function(){
+    if(btn) setTimeout(function(){ btn.classList.remove('spinning'); }, 400);
+  });
 }
 function v8OpenHistorySheet(){
   v8RenderHistorySheet();
