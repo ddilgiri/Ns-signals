@@ -403,7 +403,6 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8stat-card pnl" id="v8PnlCard" onclick="v8OpenHistorySheet()" style="cursor:pointer"><div class="v8stat-val" id="v8PnlVal">₹0</div><div class="v8stat-lbl">P&amp;L</div></div>
     <div class="v8stat-card scan"><div class="v8stat-val" id="v8LastScanVal"><span class="v8scan-dot" id="v8ScanDot"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>--</div><div class="v8stat-lbl">Last Scan</div></div>
   </div>
-  <input class="v8form-input" id="v8FeedSearch" type="text" placeholder="🔍 Search stock…" autocomplete="off" oninput="v8RenderFeed()" style="margin:10px 4px 4px;width:calc(100% - 8px)">
   <div id="v8FeedList"></div>
 </div>
 <button class="v8fab" id="v8Fab">+</button>
@@ -4759,17 +4758,7 @@ function v8RenderFeed(){
     }
     return;
   }
-  var _tierRank = {'clear-plus':0,'clear':1,'mixed':2,'stale':3,'skip':4,'unknown':5};
-  var _sorted = v8Signals.slice().sort(function(a,b){
-    var ra = (a.rawVerdict==='STRONG'||a.rawVerdict==='MODERATE') ? 0 : (_tierRank[a.tier]!=null?_tierRank[a.tier]+1:9);
-    var rb = (b.rawVerdict==='STRONG'||b.rawVerdict==='MODERATE') ? 0 : (_tierRank[b.tier]!=null?_tierRank[b.tier]+1:9);
-    if(ra!==rb) return ra-rb;
-    return (a.name||'').localeCompare(b.name||'');
-  });
-  var _searchQ = (document.getElementById('v8FeedSearch')||{}).value || '';
-  _searchQ = _searchQ.trim().toUpperCase();
-  var _filtered = _searchQ ? _sorted.filter(function(s){ return (s.name||'').toUpperCase().indexOf(_searchQ)>=0; }) : _sorted;
-  feed.innerHTML = _filtered.map(function(s){
+  feed.innerHTML = v8Signals.map(function(s){
     return v8SwipeWrap(s.key, v8BuildCompactCard(s));
   }).join('');
   v8AttachSwipeHandlers();
