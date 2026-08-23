@@ -3371,13 +3371,14 @@ function v8WatchRealBaseline(){
       if(v8ElapsedMs >= 1500){
         clearInterval(checkStart);
         v8Diag('showing baseline screen (up-to-date state)');
-        v8ShowBaselineScreen(false);
+        var marketClosedNow = (typeof getMarketStatus==='function') ? !getMarketStatus().nseOpen : false;
+        v8ShowBaselineScreen(false, marketClosedNow);
         splash.style.display='none';
       }
     }
   }, 300);
 }
-function v8ShowBaselineScreen(isDownloading){
+function v8ShowBaselineScreen(isDownloading, marketClosedNow){
   var bscreen=document.getElementById('v8BaselineScreen');
   if(!bscreen) return;
   bscreen.style.display='flex';
@@ -3391,8 +3392,13 @@ function v8ShowBaselineScreen(isDownloading){
     if(subEl) subEl.textContent='Fetching option chain data for F&O stocks';
     if(curStock) curStock.textContent='Starting…';
   } else {
-    if(titleEl) titleEl.textContent='Baseline Ready';
-    if(subEl) subEl.textContent='Already up to date for today';
+    if(marketClosedNow){
+      if(titleEl) titleEl.textContent='Market Closed';
+      if(subEl) subEl.textContent='Baseline download runs when NSE opens (9:15 AM IST)';
+    } else {
+      if(titleEl) titleEl.textContent='Baseline Ready';
+      if(subEl) subEl.textContent='Already up to date for today';
+    }
     if(curStock) curStock.parentElement.style.display='none';
     if(attemptStat) attemptStat.parentElement.style.display='none';
     if(pctStat){ pctStat.textContent='100%'; }
