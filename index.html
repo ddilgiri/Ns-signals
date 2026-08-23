@@ -529,6 +529,10 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8stocks-search-row">
       <input class="v8stocks-search" id="v8StockSearch" placeholder="Search stock…">
     </div>
+    <div class="v8log-filter-row">
+      <button class="v8log-filter-chip active" id="v8StocksFilterAll" onclick="v8SetStocksFilter('all')">All</button>
+      <button class="v8log-filter-chip" id="v8StocksFilterWatch" onclick="v8SetStocksFilter('watch')">👁 Watchlist</button>
+    </div>
     <div class="v8stocks-table-head"><div>Stock</div><div class="num">CE</div><div class="num">PE</div></div>
     <div class="v8stocks-list" id="v8StocksList"></div>
   </div>
@@ -3610,18 +3614,46 @@ async function v8LoadAllStockScores(){
 }
 function v8ScoreTier(v){ if(v>=75)return'strong'; if(v>=60)return'moderate'; if(v>=42)return'weak'; return'trap'; }
 function v8TierLabel(v){ var t=v8ScoreTier(v); return t.charAt(0).toUpperCase()+t.slice(1); }
+var v8StocksFilterMode='all';
+function v8SetStocksFilter(mode){
+  v8StocksFilterMode=mode;
+  document.getElementById('v8StocksFilterAll').classList.toggle('active', mode==='all');
+  document.getElementById('v8StocksFilterWatch').classList.toggle('active', mode==='watch');
+  v8RenderStocks();
+}
 function v8RenderStocks(){
   var q=(document.getElementById('v8StockSearch').value||'').toUpperCase().trim();
   var filtered=q?v8AllStocksData.filter(function(s){return s.name.indexOf(q)>=0;}):v8AllStocksData;
   var list=document.getElementById('v8StocksList');
   if(!v8AllStocksData.length){ list.innerHTML='<div class="v8log-empty">No scan data yet — run a scan first, then check back here.</div>'; return; }
-  if(filtered.length===0){ list.innerHTML='<div class="v8log-empty">No stocks match your search.</div>'; return; }
+  // Watchlist filter: per user decision, shows stocks whose best side (CE or PE,
+  // whichever is higher) scores at or above 90% of the current Min Confidence slider
+  // value -- e.g. slider=60 means watch floor=54. Reads the same live slider already
+  // used to gate scanning/day-exclusion elsewhere, so this stays in sync automatically
+  // if that setting changes. Sorted by best score descending (Strong tier naturally
+  // sorts above Moderate this way), each row led by whichever side is actually higher.
+  var minConf = parseInt((document.getElementById('cfgMinConf')||{}).value || '60');
+  var watchFloor = Math.round(minConf * 0.9);
+  if(v8StocksFilterMode==='watch'){
+    filtered = filtered.filter(function(s){ return Math.max(s.ce, s.pe) >= watchFloor; });
+    filtered = filtered.slice().sort(function(a,b){ return Math.max(b.ce,b.pe) - Math.max(a.ce,a.pe); });
+  }
+  if(filtered.length===0){
+    list.innerHTML = v8StocksFilterMode==='watch'
+      ? '<div class="v8log-empty">Nothing at or above '+watchFloor+'% right now (90% of your '+minConf+'% Min Confidence setting).</div>'
+      : '<div class="v8log-empty">No stocks match your search.</div>';
+    return;
+  }
   list.innerHTML=filtered.map(function(s){
     var bestScore=Math.max(s.ce,s.pe);
     var rowMood=v8ScoreTier(bestScore);
-    return '<div class="v8stock-row row-'+rowMood+'"><div class="name">'+s.name+'</div>'
-      +'<div class="v8mood-pill '+v8ScoreTier(s.ce)+'"><span class="score">'+s.ce+'</span><span class="tier-tag">'+v8TierLabel(s.ce)+'</span></div>'
-      +'<div class="v8mood-pill '+v8ScoreTier(s.pe)+'"><span class="score">'+s.pe+'</span><span class="tier-tag">'+v8TierLabel(s.pe)+'</span></div></div>';
+    var ceFirst = s.ce >= s.pe;
+    var ceCell='<div class="v8mood-pill '+v8ScoreTier(s.ce)+'"><span class="score">'+s.ce+'</span><span class="tier-tag">'+v8TierLabel(s.ce)+'</span></div>';
+    var peCell='<div class="v8mood-pill '+v8ScoreTier(s.pe)+'"><span class="score">'+s.pe+'</span><span class="tier-tag">'+v8TierLabel(s.pe)+'</span></div>';
+    var cells = (v8StocksFilterMode==='watch')
+      ? (ceFirst ? ceCell+peCell : peCell+ceCell)
+      : ceCell+peCell;
+    return '<div class="v8stock-row row-'+rowMood+'"><div class="name">'+s.name+'</div>'+cells+'</div>';
   }).join('');
 }
 document.getElementById('v8StockSearch').oninput=v8RenderStocks;
