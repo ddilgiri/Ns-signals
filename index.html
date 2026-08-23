@@ -504,6 +504,11 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
     <div class="v8label-block"><span class="lbl">Scan cycle sound</span><span class="sub">Subtle tick every scan completion</span></div>
     <button class="v8toggle-switch" id="v8ToggleScanSound"><span class="knob"></span></button>
   </div>
+  <div class="v8settings-section-title">F&amp;O Stock List</div>
+  <div class="v8settings-row" style="flex-direction:column;align-items:stretch;gap:8px">
+    <button class="v8swipe-close-btn" style="width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px;font-weight:700;color:var(--text)" id="v8RefreshFnoBtn" onclick="v8TriggerRefreshFno()">🔄 Refresh F&amp;O Stock List</button>
+    <div id="v8RefreshFnoSub" style="font-size:11px;color:var(--text3)"></div>
+  </div>
 </div>
 <div class="v8log-screen" id="v8LogScreenWrap">
   <div class="v8log-header">
@@ -1664,7 +1669,7 @@ setInterval(function(){try{savePaperTrades();}catch(e){}},8000);
 document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"){try{savePaperTrades();}catch(e){}}});
 window.addEventListener("beforeunload",function(){try{savePaperTrades();}catch(e){}});
 window.addEventListener("pagehide",function(){try{savePaperTrades();}catch(e){}});
-window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e);var themeIcon="dark"===e?"🌙":"☀️";var tbEl=document.getElementById("themeBtn");if(tbEl)tbEl.textContent=themeIcon;var v8tbEl=document.getElementById("v8ThemeBtn");if(v8tbEl)v8tbEl.textContent=themeIcon;var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),setTimeout(function(){doLogin()},1e3)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
+window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem("fxo-theme")||"dark";document.documentElement.setAttribute("data-theme",e);var themeIcon="dark"===e?"🌙":"☀️";var tbEl=document.getElementById("themeBtn");if(tbEl)tbEl.textContent=themeIcon;var v8tbEl=document.getElementById("v8ThemeBtn");if(v8tbEl)v8tbEl.textContent=themeIcon;var t=localStorage.getItem("fxo-client"),o=localStorage.getItem("fxo-api"),n=localStorage.getItem("fxo-pass"),s=localStorage.getItem("fxo-totp"),a=localStorage.getItem("fxo-maxcap");if(t&&(document.getElementById("cfgClient").value=t),o&&(document.getElementById("cfgApi").value=o),n)try{document.getElementById("cfgPass").value=atob(n)}catch(e){}s&&(document.getElementById("cfgTotp").value=s),a&&(document.getElementById("cfgMaxCap").value=a),(function(){var mc=localStorage.getItem("v8mock-minconf");if(mc)document.getElementById("cfgMinConf").value=mc;})(),loadPaperTrades(),renderSignals(),renderTrades(),updateAnalytics(),startTradesPricePolling(),updateNotifToggleUI(),addLog("DILIP FXO v4.5 ready — Ramesh/Suresh OI Engine ("+S.paperTrades.length+" open, "+S.closedPaperTrades.length+" closed trades loaded)","ok"),t&&o&&n&&(addLog("Saved credentials found — auto connecting...",""),setTimeout(function(){doLogin()},1e3)),"serviceWorker"in navigator&&navigator.serviceWorker.register("/sw.js").then(function(){addLog("PWA installed — add to home screen via browser menu","ok");if(_notifGranted)setupPushSubscription();}).catch(function(e){addLog("SW: "+e.message,"warn")})})</script><div id="toast"></div></body></html><script>
 // ═══════════════════════════════════════════════════════════════
 // DILIP FXO V4 — SIGNAL CARD ENGINE
 // Zone A: Symbol · Strike · Premium · Meta
@@ -3698,6 +3703,12 @@ document.getElementById('v8SignalType').onchange=function(){
 document.getElementById('v8MinConfSlider').oninput=function(){
   document.getElementById('v8MinConfVal').textContent=this.value+'%';
   localStorage.setItem('v8mock-minconf', this.value);
+  // Real fix: this slider only ever wrote to a mock localStorage key, never to the
+  // actual cfgMinConf hidden field the scan loop genuinely reads for both the
+  // display threshold and the day-exclusion gate -- meaning this visible slider was
+  // completely disconnected from real scan behavior. Now genuinely wired through.
+  var _realField = document.getElementById('cfgMinConf');
+  if(_realField) _realField.value = this.value;
 };
 document.getElementById('v8ToggleStale').onclick=function(){
   this.classList.toggle('on');
