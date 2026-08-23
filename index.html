@@ -1124,12 +1124,20 @@ async function loadFnoStockList(forceRefresh){
   try{
     var cached=localStorage.getItem("fxo-fno-list");
     var cachedAt=localStorage.getItem("fxo-fno-list-ts");
-    var isStale=!cachedAt||(Date.now()-parseInt(cachedAt))>24*60*60*1000;
+    // Real fix per explicit user decision: this now checks against the actual CALENDAR
+    // DAY, not a rolling 24h window from last fetch (which drifts with login time and
+    // doesn't match "first login of the day" the way a real day boundary does). The F&O
+    // list realistically only changes once a day at most, so the first login each day
+    // fetches fresh from Angel One; every subsequent login that same day goes straight
+    // to cache, skipping the Angel One call entirely.
+    var todayStr=(new Date()).toDateString();
+    var cachedDayStr=cachedAt?(new Date(parseInt(cachedAt))).toDateString():null;
+    var isStale=!cachedDayStr||cachedDayStr!==todayStr;
     if(cached && !isStale && !forceRefresh){
       var parsed=JSON.parse(cached);
-      if(parsed && parsed.length>50){NSE_STOCKS=parsed.map(function(s){return typeof s==="string"?{sym:s,token:null,lot:1}:s;}).filter(function(s){return s&&s.sym;});addLog("✅ Using cached F&O list ("+NSE_STOCKS.length+" stocks)","ok");var btnEl0=document.getElementById("verifyTokBtn");if(btnEl0 && !btnEl0.disabled) btnEl0.innerHTML="🔄 Refresh F&O Stock List ("+NSE_STOCKS.length+" stocks)";return;}
+      if(parsed && parsed.length>50){NSE_STOCKS=parsed.map(function(s){return typeof s==="string"?{sym:s,token:null,lot:1}:s;}).filter(function(s){return s&&s.sym;});addLog("✅ Using today's cached F&O list ("+NSE_STOCKS.length+" stocks) — already fetched fresh once today","ok");var btnEl0=document.getElementById("verifyTokBtn");if(btnEl0 && !btnEl0.disabled) btnEl0.innerHTML="🔄 Refresh F&O Stock List ("+NSE_STOCKS.length+" stocks)";return;}
     }
-    addLog("🔄 Auto-deriving F&O stock list from Angel One...","");
+    addLog("🔄 First login today — auto-deriving fresh F&O stock list from Angel One...","");
     var res=await fetch(getServer()+"/fno-stock-list"+(forceRefresh?"?refresh=1":""));
     var data=await res.json();
     if(data.status && data.stocks && data.stocks.length>50){
