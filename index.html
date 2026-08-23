@@ -3636,12 +3636,23 @@ function v8RenderStocks(){
 document.getElementById('v8StockSearch').oninput=v8RenderStocks;
 document.getElementById('v8TabEvents').onclick=function(){ v8SwitchLogTab('events'); };
 document.getElementById('v8TabStocks').onclick=function(){ v8SwitchLogTab('stocks'); };
+var v8StocksRefreshTimer=null;
 function v8SwitchLogTab(tab){
   document.getElementById('v8TabEvents').classList.toggle('active', tab==='events');
   document.getElementById('v8TabStocks').classList.toggle('active', tab==='stocks');
   document.getElementById('v8EventsView').style.display=tab==='events'?'block':'none';
   document.getElementById('v8StocksView').style.display=tab==='stocks'?'flex':'none';
-  if(tab==='stocks') v8LoadAllStockScores();
+  if(tab==='stocks'){
+    v8LoadAllStockScores();
+    // Real fix per user decision: /all-stock-scores is a free in-memory read on the
+    // server (no Angel One API call at all -- confirmed, it just reads LATEST_SCORES),
+    // so polling it while this tab is open costs nothing extra. Matches the background
+    // scan's own 25s cadence -- no point refreshing faster than the data can change.
+    if(v8StocksRefreshTimer) clearInterval(v8StocksRefreshTimer);
+    v8StocksRefreshTimer=setInterval(v8LoadAllStockScores, 25000);
+  } else {
+    if(v8StocksRefreshTimer){ clearInterval(v8StocksRefreshTimer); v8StocksRefreshTimer=null; }
+  }
 }
 function v8OpenLogScreen(){
   v8RenderLog();
@@ -3649,6 +3660,7 @@ function v8OpenLogScreen(){
 }
 document.getElementById('v8LogBack').onclick=function(){
   document.getElementById('v8LogScreenWrap').classList.remove('show');
+  if(v8StocksRefreshTimer){ clearInterval(v8StocksRefreshTimer); v8StocksRefreshTimer=null; }
 };
 
 document.getElementById('v8GearBtn').onclick=v8OpenSettings;
