@@ -125,7 +125,7 @@ function getExpiryWeekInfo(symbol){
     }
   } else {
     // BANKNIFTY, FINNIFTY, MIDCPNIFTY: monthly, current month till expiry day
-    // Stocks: monthly, but roll to NEXT month starting the day before expiry (dte<=1) (matches getExpiryType logic) -- per explicit user confirmation: for Aug 25 expiry, use August through Aug 23, switch to September starting Aug 24
+    // Stocks: monthly, but roll to NEXT month once dte<=1 (matches getExpiryType logic) -- per explicit user confirmation using real trading days: for an Aug 25 (Tue) expiry, the last trading day on August is Friday Aug 21 (dte=4, weekend has no trading), switches to September starting Monday Aug 24 (dte=1). Applies identically to Manual Check -- both paths call this same function via /oi-analysis, no separate logic exists.
     const curMonthLastTue=lastWeekdayOfMonth(2);
     const dteToCurMonth=Math.round((curMonthLastTue-now)/86400000);
     const INDICES_LIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
@@ -649,7 +649,7 @@ function getExpiryType(e){
     }
     return"MONTHLY";
   }
-  // STOCKS only — switch to next month starting the day before expiry (dte<=1), per explicit user confirmation: for Aug 25 expiry, use August through Aug 23, switch to September starting Aug 24
+  // STOCKS only — switch to next month once dte<=1, per explicit user confirmation: last trading day on current month is the Friday before expiry week, switches on the following Monday. Same function used for Manual Check, no separate path.
   if(dte<=1){
     log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
