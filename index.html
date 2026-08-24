@@ -4371,6 +4371,30 @@ function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 // tick on the card itself, not the Activity Log). Keyed by card key, each entry keeps
 // the last 5 ticks with a timestamp so you can see the classification actually moving.
 var v8DiagHistory = {};
+// Real fix (2026-08-24): user wants the diag badge ticking every 1 second, not just
+// on scan cycles (which only happen every ~25s). This runs independently of scans --
+// logs the CURRENT state of each open signal every second, directly to its badge's DOM,
+// without rebuilding the whole card. Note: the underlying data (ceCase/OI/LTP) itself
+// still only actually changes when a real scan/price-poll runs -- this just makes that
+// visible second-by-second, including the repeats, so you can see exactly when a real
+// change lands versus when it's just re-showing the same values.
+function v8DiagTick(){
+  if(typeof S==='undefined' || !S.signals) return;
+  S.signals.forEach(function(sig){
+    var badge = document.getElementById('diagbadge-'+sig.id);
+    if(!badge) return; // card not currently rendered/visible, skip
+    var key = sig.id;
+    if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
+    var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var rawTxt = ' [rawCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
+    var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' score='+Math.round(sig.score||0)+'%'+rawTxt;
+    var hist = v8DiagHistory[key];
+    hist.push(entry); // every second, no dedup -- repeats are meaningful (shows data is stale between real updates)
+    if(hist.length>8) hist.shift();
+    badge.innerHTML = '<div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, updates every 1s):</div>'+hist.slice().reverse().map(function(h){return '<div>'+h+'</div>';}).join('');
+  });
+}
+setInterval(v8DiagTick, 1000);
 function v8CaseGroup(c){
   if(c===1||c===3) return 'SELLERS_WIN';
   if(c===6) return 'BUYERS_WIN';
@@ -4843,7 +4867,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
-    +'<div style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;"><div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, newest first):</div>'+(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
+    +'<div id="diagbadge-'+s.key+'" style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;"><div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, updates every 1s):</div>'+(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
