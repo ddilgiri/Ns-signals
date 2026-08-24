@@ -470,8 +470,8 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
   <div class="v8form-title">⚙️ Settings</div>
   <div class="v8settings-section-title">Signal Filters</div>
   <div class="v8slider-row">
-    <div class="v8slider-label"><span>Min Confidence %</span><span class="val" id="v8MinConfVal">60%</span></div>
-    <input type="range" min="40" max="90" value="60" id="v8MinConfSlider">
+    <div class="v8slider-label"><span>Min Confidence %</span><span class="val" id="v8MinConfVal">45%</span></div>
+    <input type="range" min="40" max="90" value="45" id="v8MinConfSlider">
   </div>
   <div class="v8settings-row">
     <div class="v8label-block"><span class="lbl">Show STALE signals</span><span class="sub">Include late-entry-risk cards in feed</span></div>
@@ -3664,8 +3664,8 @@ document.getElementById('v8GearBtn').onclick=v8OpenSettings;
 
 // ===== Stage 6: Settings sheet (mock, per confirmed pattern) =====
 function v8OpenSettings(){
-  document.getElementById('v8MinConfSlider').value = localStorage.getItem('v8mock-minconf') || '60';
-  document.getElementById('v8MinConfVal').textContent = (localStorage.getItem('v8mock-minconf') || '60') + '%';
+  document.getElementById('v8MinConfSlider').value = localStorage.getItem('v8mock-minconf') || '45';
+  document.getElementById('v8MinConfVal').textContent = (localStorage.getItem('v8mock-minconf') || '45') + '%';
   document.getElementById('v8ToggleStale').classList.toggle('on', localStorage.getItem('v8mock-showstale')==='1');
   document.getElementById('v8ToggleMixed').classList.toggle('on', localStorage.getItem('v8mock-showmixed')!=='0');
   document.getElementById('v8ToggleScanSound').classList.toggle('on', localStorage.getItem('v8mock-scansound')==='1');
