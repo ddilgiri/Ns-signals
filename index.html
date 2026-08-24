@@ -4366,6 +4366,13 @@ function v8CaseGroup(c){
   return 'NONE';
 }
 function v8DeriveTier(sig, realTrade){
+  // Diagnostic badge init (2026-08-24) -- default state, overwritten below if the
+  // Case-based branch actually runs. If ceCase/peCase were null going in, this stays
+  // as the "not matched" state, telling us at a glance whether the strike-match lookup
+  // (fixed in commit 13d8c04) found a row or not.
+  sig._diagCeCase = sig.ceCase; sig._diagPeCase = sig.peCase;
+  sig._diagCeGroup = null; sig._diagPeGroup = null;
+  sig._diagMatched = (sig.ceCase!=null || sig.peCase!=null);
   if(sig.invalidStrike){
     var invalidStrikeVariants=[
       sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.',
@@ -4423,6 +4430,12 @@ function v8DeriveTier(sig, realTrade){
   if(sig.ceCase!=null || sig.peCase!=null){
     var ceGroup = v8CaseGroup(sig.ceCase);
     var peGroup = v8CaseGroup(sig.peCase);
+    // Diagnostic badge data (2026-08-24, per user request to watch this live on the
+    // dashboard instead of digging through logs) -- stash the raw classification
+    // straight onto sig so the renderer can show it without touching every branch below.
+    sig._diagCeCase = sig.ceCase; sig._diagPeCase = sig.peCase;
+    sig._diagCeGroup = ceGroup; sig._diagPeGroup = peGroup;
+    sig._diagMatched = true;
     var yourGroup = sig.type==='CE' ? ceGroup : peGroup;
     var otherGroup = sig.type==='CE' ? peGroup : ceGroup;
     var yourLabel = sig.type==='CE' ? 'CE' : 'PE';
@@ -4597,6 +4610,8 @@ function v8FromRealSignal(sig){
     planExit: sig.exitZone || '—',
     verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt,
     tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
+    diagCeCase: sig._diagCeCase, diagPeCase: sig._diagPeCase,
+    diagCeGroup: sig._diagCeGroup, diagPeGroup: sig._diagPeGroup, diagMatched: sig._diagMatched,
   };
 }
 
@@ -4797,6 +4812,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;">🔍 DIAG: ceCase='+(s.diagCeCase==null?"null":s.diagCeCase)+' peCase='+(s.diagPeCase==null?"null":s.diagPeCase)+' ceGroup='+(s.diagCeGroup||"--")+' peGroup='+(s.diagPeGroup||"--")+' matched='+(s.diagMatched?"YES":"NO")+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
