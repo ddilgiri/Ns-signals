@@ -4357,6 +4357,10 @@ function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 //   5, 7 = unwinding, no fresh positioning
 //   8    = short covering squeeze
 //   null = no data / too thin to classify
+// Diagnostic tick history (2026-08-24, per user request: watch verdict change every
+// tick on the card itself, not the Activity Log). Keyed by card key, each entry keeps
+// the last 5 ticks with a timestamp so you can see the classification actually moving.
+var v8DiagHistory = {};
 function v8CaseGroup(c){
   if(c===1||c===3) return 'SELLERS_WIN';
   if(c===6) return 'BUYERS_WIN';
@@ -4612,6 +4616,22 @@ function v8FromRealSignal(sig){
     tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
     diagCeCase: sig._diagCeCase, diagPeCase: sig._diagPeCase,
     diagCeGroup: sig._diagCeGroup, diagPeGroup: sig._diagPeGroup, diagMatched: sig._diagMatched,
+    diagHistory: (function(){
+      // Append this tick to the running history for this card, keep last 5.
+      var key = sig.id;
+      if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
+      var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%';
+      var hist = v8DiagHistory[key];
+      // Only append if actually different from the last entry (avoid dup spam when nothing changed)
+      var lastEntry = hist.length ? hist[hist.length-1].replace(/^\S+\s/,'') : null;
+      var thisEntryNoTime = entry.replace(/^\S+\s/,'');
+      if(lastEntry !== thisEntryNoTime){
+        hist.push(entry);
+        if(hist.length>5) hist.shift();
+      }
+      return hist.slice().reverse(); // newest first
+    })(),
   };
 }
 
@@ -4812,7 +4832,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
-    +'<div style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;">🔍 DIAG: ceCase='+(s.diagCeCase==null?"null":s.diagCeCase)+' peCase='+(s.diagPeCase==null?"null":s.diagPeCase)+' ceGroup='+(s.diagCeGroup||"--")+' peGroup='+(s.diagPeGroup||"--")+' matched='+(s.diagMatched?"YES":"NO")+'</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;"><div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, newest first):</div>'+(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
