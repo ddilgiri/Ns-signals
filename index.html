@@ -4398,6 +4398,30 @@ function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 // tick on the card itself, not the Activity Log). Keyed by card key, each entry keeps
 // the last 5 ticks with a timestamp so you can see the classification actually moving.
 var v8DiagHistory = {};
+// Real fix (2026-08-24): stuck Manual Check trades (expiry never resolved because
+// /signal-analysis failed on both attempts) previously only got a retry when the user
+// manually tapped force-refresh -- per explicit user request, this must self-heal without
+// requiring manual intervention. Independent 20s interval, separate from the main 25s
+// scan loop, checks for any Manual Check signal with no resolved expiry and retries its
+// background analysis automatically. Capped at 3 auto-retries per trade (v8AutoRetryCount)
+// to avoid hammering a genuinely broken symbol forever -- after that, only a manual
+// force-refresh will keep trying, same as before this fix.
+var v8AutoRetryCount = {};
+function v8AutoHealStuckTrades(){
+  if(typeof S==='undefined' || !S.signals || !S.connected) return;
+  if(typeof v8RunManualAnalysisInBackground!=='function') return;
+  S.signals.forEach(function(sig){
+    if(!sig.isManualCheck || sig.expiry) return; // only unresolved Manual Check signals
+    var retries = v8AutoRetryCount[sig.id] || 0;
+    if(retries >= 3) return; // cap reached, needs manual force-refresh from here
+    v8AutoRetryCount[sig.id] = retries + 1;
+    if(typeof v8MDiag==='function') v8MDiag('auto-heal: retrying stuck signal '+sig.sym+' (attempt '+(retries+1)+'/3)');
+    v8RunManualAnalysisInBackground(sig, sig.sym, sig.strike, sig.type, sig.entryPremium||sig.premium, sig.v8Lots||1).catch(function(e){
+      if(typeof v8MDiag==='function') v8MDiag('auto-heal retry failed: '+(e&&e.message));
+    });
+  });
+}
+setInterval(v8AutoHealStuckTrades, 20000);
 // Real fix (2026-08-24): user wants the diag badge ticking every 1 second, not just
 // on scan cycles (which only happen every ~25s). This runs independently of scans --
 // logs the CURRENT state of each open signal every second, directly to its badge's DOM,
