@@ -4095,6 +4095,22 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       // no new card, no separate pending state, just the real values arriving.
       realSig.invalidStrike = !strikeIsValid; // real flag -- card verdict reflects this honestly
       realSig.expiry = real.expiry || realSig.expiry; // real fix: propagate the correct NEXT_MONTH/MONTHLY expiry onto the signal so live-trade-prices stops using its nearest-contract fallback
+      // Real fix (2026-08-24, second pass): the above only updates realSig (the display
+      // signal in S.signals) -- but addPaperTrade() already created the ACTUAL trade record
+      // in S.paperTrades synchronously, back in v8CreateInstantSignal, BEFORE this background
+      // analysis had a chance to run. That trade record's own .expiry was set from realSig at
+      // creation time (which had no expiry yet) and NEVER gets updated afterward -- so
+      // live-trade-prices kept using the trade's original null expiry regardless of this fix.
+      // This is the actual, confirmed reason the bug persisted after the first fix. Now: also
+      // write the corrected expiry directly onto the matching open trade record.
+      if(real.expiry && typeof S!=='undefined' && S.paperTrades){
+        var _tradeToFix=S.paperTrades.find(function(pt){ return pt.sigId===realSig.id; });
+        if(_tradeToFix && !_tradeToFix.expiry){
+          _tradeToFix.expiry = real.expiry;
+          if(typeof savePaperTrades==='function') savePaperTrades();
+          v8MDiag('backfilled expiry '+real.expiry+' onto open trade record for '+realSig.sym);
+        }
+      }
       realSig.score = real.score!=null ? real.score : realSig.score;
       realSig.verdict = real.verdict || realSig.verdict;
       realSig.ceWalls = real.ceWalls || realSig.ceWalls;
