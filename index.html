@@ -4079,9 +4079,17 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           // Real fix: extract this exact strike's real Case 1-8 classification
           // (ceCase/peCase), now that the server sends it in chain[] -- needed for
           // the confirmed buyer-perspective sentence logic.
-          var thisStrikeRow = chain.find(function(c){ return c.strike===typedStrike; });
+          // Real fix (2026-08-24): strict === match against typedStrike could silently miss
+          // on any float/string type mismatch between client and server, dropping ceCase/peCase
+          // to null and falling through to the weaker generic wall/floor wording ("side isn't
+          // confirming yet") even when the real Case classification was a clean, confirmed
+          // agreement -- exact symptom the user hit on AMBUJACEM 410 PE where the raw chain
+          // clearly showed Case1(CE)+Case6(PE) agreement but the card kept saying not confirmed.
+          // Now matches by rounded numeric value, tolerant of type/precision differences.
+          var thisStrikeRow = chain.find(function(c){ return Math.round(parseFloat(c.strike))===Math.round(typedStrike); });
           real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
           real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
+          if(!thisStrikeRow) v8MDiag('WARNING: no chain row matched strike '+typedStrike+' out of '+chain.length+' rows -- ceCase/peCase will be null, falling back to weaker wall/floor wording');
         }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
