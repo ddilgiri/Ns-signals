@@ -1446,30 +1446,10 @@ var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorag
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
 if(u=f.atmStrike||0,f.chain&&f.chain.length)for(var h=f.chain.slice().sort(function(e,t){return Math.abs(e.strike-s)-Math.abs(t.strike-s)}),k=0;k<h.length;k++){var E="CE"===v?h[k].CE_ltp||0:h[k].PE_ltp||0;if(E>0){y=E,u=h[k].strike,pPrevClose=("CE"===v?h[k].CE_prevClose:h[k].PE_prevClose)||0;break}}g.ceWalls&&g.ceWalls.length||(g.ceWalls=f.ceWalls||[]),g.peFloors&&g.peFloors.length||(g.peFloors=f.peFloors||[]),g.ceSignal||(g.ceSignal=f.ceSignal||null),g.peSignal||(g.peSignal=f.peSignal||null),g.rameshTrapped||(g.rameshTrapped=f.rameshTrapped||!1),g.atmCeOIChange=f.atmCeOIChange||0,g.atmPeOIChange=f.atmPeOIChange||0,g.strikeFlags=f.strikeFlags||[],f.expiry&&(g.expiry=f.expiry);
-// Real fix (2026-08-24): user wants to verify in the Activity Log itself which expiry
-// month each stock's scan actually resolved to, not just on the card badge -- direct
-// confirmation the scan loop is genuinely using the correct (September) contract.
-if(typeof addLog==='function' && f.expiry){ addLog('📅 '+e+' '+v+' scan using expiry: '+f.expiry,''); }
 // Real fix (2026-08-24): auto-scan signals never got the ceCase/peCase/raw diagnostic
 // fields that Manual Check signals get -- user wants the same 1s live diagnostic badge
 // working for auto-scan cards too, to check which expiry month is actually being used
 // there. Same strike-match logic as Manual Check's fix, tolerant numeric comparison.
-if(f.chain && f.chain.length){
-  var _autoStrikeRow = f.chain.find(function(c){ return Math.round(parseFloat(c.strike))===Math.round(u); });
-  if(_autoStrikeRow){
-    // Real fix: set the ACTUAL ceCase/peCase fields too (not just diagnostic display
-    // copies) so auto-scan cards get the same Case-based verdict branch in v8DeriveTier()
-    // that Manual Check cards already get, instead of silently staying on the weaker
-    // wall/floor-strength fallback logic the whole time.
-    g.ceCase = _autoStrikeRow.ceCase; g.peCase = _autoStrikeRow.peCase;
-    g._diagCeCase = _autoStrikeRow.ceCase; g._diagPeCase = _autoStrikeRow.peCase;
-    g._diagMatched = true;
-    g._rawCeOi = _autoStrikeRow.CE_oi; g._rawCeLtp = _autoStrikeRow.CE_ltp;
-    g._rawCeOiChange = _autoStrikeRow.CE_oiChange; g._rawCePrevClose = _autoStrikeRow.CE_prevClose;
-    g._rawPeOi = _autoStrikeRow.PE_oi; g._rawPeLtp = _autoStrikeRow.PE_ltp;
-    g._rawPeOiChange = _autoStrikeRow.PE_oiChange; g._rawPePrevClose = _autoStrikeRow.PE_prevClose;
-  }
-}
 }}catch(t){addLog("OI fetch "+e+": "+t.message,"warn")}if(!y&&u)try{var _sExp=(function(){var now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));function lastTueOf(yr,mn){var last=new Date(yr,mn,0);var diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}var todayMid=new Date(now.getFullYear(),now.getMonth(),now.getDate());var curLastTue=lastTueOf(now.getFullYear(),now.getMonth()+1);var dte=Math.round((curLastTue-todayMid)/86400000);var _idxList=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];var _isIdx=_idxList.includes(e.toUpperCase());return(_isIdx?(dte<0):(dte<=5))?"NEXT_MONTH":"MONTHLY";})();var L=await fetch(getServer()+"/option-ltp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,strike:u,type:v,expiry:_sExp})}),T=await L.json();T.status&&T.ltp&&(y=parseFloat(T.ltp));if(!y)addLog("Fallback /option-ltp also empty for "+e+" "+v+" "+u+": "+(T.message||JSON.stringify(T).slice(0,100)),"warn");}catch(_fbErr){addLog("Fallback /option-ltp threw for "+e+" "+v+" "+u+": "+_fbErr.message,"warn");}if(u>0&&s>0){var N=Math.abs(u-s)/s;if(N>.2){addLog("Skip "+e+" "+v+" — strike "+u+" too far from spot "+Math.round(s)+" ("+(100*N).toFixed(0)+"%)","warn");continue}}if(!u){addLog("Skip "+e+" — no valid strike found","warn");continue}if(!y){addLog("Skip "+e+" "+v+" — zero premium at scan time [oiStatus:"+(f?f.status:"no-f")+" chainLen:"+(f&&f.chain?f.chain.length:"n/a")+" atmStrike:"+(f?f.atmStrike:"n/a")+" u:"+u+"]","warn");continue}// Real fix: this "already an open paper trade" check was unconditionally skipping
 // the entire rest of the scan for any stock+strike you already hold -- meaning the
 // card's verdict, score, and description text NEVER updated again after the trade was
@@ -4132,32 +4112,12 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
           real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
           if(!thisStrikeRow) v8MDiag('WARNING: no chain row matched strike '+typedStrike+' out of '+chain.length+' rows -- ceCase/peCase will be null, falling back to weaker wall/floor wording');
-          // Real fix (2026-08-24): capture raw CE inputs too, to diagnose why ceCase keeps
-          // coming back null while peCase resolves fine on the SAME strike/tick -- narrows
-          // down whether it's missing raw data (CE_ltp/CE_oi/CE_prevClose) vs a classifyCase
-          // edge case, without needing server log access.
-          real._rawCeOi = thisStrikeRow ? thisStrikeRow.CE_oi : undefined;
-          real._rawCeLtp = thisStrikeRow ? thisStrikeRow.CE_ltp : undefined;
-          real._rawCeOiChange = thisStrikeRow ? thisStrikeRow.CE_oiChange : undefined;
-          real._rawCePrevClose = thisStrikeRow ? thisStrikeRow.CE_prevClose : undefined;
-          // Real fix (2026-08-24): also capture the PE-side raw fields -- the user's ACTUAL
-          // traded leg is often PE (as in this case, 410 PE), but the diagnostic badge only
-          // ever showed CE raw data, leaving no visibility into the real traded option's own
-          // OI/LTP movement, only the untraded opposite side.
-          real._rawPeOi = thisStrikeRow ? thisStrikeRow.PE_oi : undefined;
-          real._rawPeLtp = thisStrikeRow ? thisStrikeRow.PE_ltp : undefined;
-          real._rawPeOiChange = thisStrikeRow ? thisStrikeRow.PE_oiChange : undefined;
-          real._rawPePrevClose = thisStrikeRow ? thisStrikeRow.PE_prevClose : undefined;
         }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
       // no new card, no separate pending state, just the real values arriving.
       realSig.invalidStrike = !strikeIsValid; // real flag -- card verdict reflects this honestly
       realSig.expiry = real.expiry || realSig.expiry; // real fix: propagate the correct NEXT_MONTH/MONTHLY expiry onto the signal so live-trade-prices stops using its nearest-contract fallback
-      realSig._rawCeOi = real._rawCeOi; realSig._rawCeLtp = real._rawCeLtp;
-      realSig._rawCeOiChange = real._rawCeOiChange; realSig._rawCePrevClose = real._rawCePrevClose;
-      realSig._rawPeOi = real._rawPeOi; realSig._rawPeLtp = real._rawPeLtp;
-      realSig._rawPeOiChange = real._rawPeOiChange; realSig._rawPePrevClose = real._rawPePrevClose;
       // Real fix (2026-08-24, second pass): the above only updates realSig (the display
       // signal in S.signals) -- but addPaperTrade() already created the ACTUAL trade record
       // in S.paperTrades synchronously, back in v8CreateInstantSignal, BEFORE this background
@@ -4420,9 +4380,6 @@ function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 //   8    = short covering squeeze
 //   null = no data / too thin to classify
 // Diagnostic tick history (2026-08-24, per user request: watch verdict change every
-// tick on the card itself, not the Activity Log). Keyed by card key, each entry keeps
-// the last 5 ticks with a timestamp so you can see the classification actually moving.
-var v8DiagHistory = {};
 // Real fix (2026-08-24): stuck Manual Check trades (expiry never resolved because
 // /signal-analysis failed on both attempts) previously only got a retry when the user
 // manually tapped force-refresh -- per explicit user request, this must self-heal without
@@ -4447,44 +4404,6 @@ function v8AutoHealStuckTrades(){
   });
 }
 setInterval(v8AutoHealStuckTrades, 20000);
-// Real fix (2026-08-24): user wants the diag badge ticking every 1 second, not just
-// on scan cycles (which only happen every ~25s). This runs independently of scans --
-// logs the CURRENT state of each open signal every second, directly to its badge's DOM,
-// without rebuilding the whole card. Note: the underlying data (ceCase/OI/LTP) itself
-// still only actually changes when a real scan/price-poll runs -- this just makes that
-// visible second-by-second, including the repeats, so you can see exactly when a real
-// change lands versus when it's just re-showing the same values.
-function v8DiagTick(){
-  if(typeof S==='undefined' || !S.signals) return;
-  S.signals.forEach(function(sig){
-    var badge = document.getElementById('diagbadge-'+sig.id);
-    if(!badge) return; // card not currently rendered/visible, skip
-    var key = sig.id;
-    if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
-    var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    var _tradeForDiag = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId===sig.id; }) : null;
-    // Real fix (2026-08-24): show the TRADED leg's raw data first and clearly labeled
-    // (CE or PE, whichever sig.type actually is), since the badge previously only ever
-    // showed CE raw fields even when the real position was PE -- no visibility into the
-    // actual traded option's own price movement. Opposite (untraded) side shown second.
-    var tradedRawTxt, otherRawTxt;
-    if(sig.type==='PE'){
-      tradedRawTxt = ' [TRADED-PE: oi='+(sig._rawPeOi==null?'?':sig._rawPeOi)+' ltp='+(sig._rawPeLtp==null?'?':sig._rawPeLtp)+' oiChg='+(sig._rawPeOiChange==null?'?':sig._rawPeOiChange)+' prevC='+(sig._rawPePrevClose==null?'?':sig._rawPePrevClose)+']';
-      otherRawTxt = ' [otherCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+']';
-    } else {
-      tradedRawTxt = ' [TRADED-CE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
-      otherRawTxt = ' [otherPE: oi='+(sig._rawPeOi==null?'?':sig._rawPeOi)+' ltp='+(sig._rawPeLtp==null?'?':sig._rawPeLtp)+']';
-    }
-    var tradeLtpTxt = ' [tradeLTP='+(_tradeForDiag&&_tradeForDiag.currentPremium!=null?_tradeForDiag.currentPremium:'?')+' tradePnl='+(_tradeForDiag&&_tradeForDiag.pnl!=null?_tradeForDiag.pnl:'?')+']';
-    var expTxt = ' [sigExp='+(sig.expiry||'UNSET')+' tradeExp='+(_tradeForDiag?(_tradeForDiag.expiry||'UNSET'):'no-trade')+']';
-    var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' score='+Math.round(sig.score||0)+'%'+tradedRawTxt+otherRawTxt+tradeLtpTxt+expTxt;
-    var hist = v8DiagHistory[key];
-    hist.push(entry); // every second, no dedup -- repeats are meaningful (shows data is stale between real updates)
-    if(hist.length>8) hist.shift();
-    badge.innerHTML = '<div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, updates every 1s):</div>'+hist.slice().reverse().map(function(h){return '<div>'+h+'</div>';}).join('');
-  });
-}
-setInterval(v8DiagTick, 1000);
 function v8CaseGroup(c){
   if(c===1||c===3) return 'SELLERS_WIN';
   if(c===6) return 'BUYERS_WIN';
@@ -4494,13 +4413,6 @@ function v8CaseGroup(c){
   return 'NONE';
 }
 function v8DeriveTier(sig, realTrade){
-  // Diagnostic badge init (2026-08-24) -- default state, overwritten below if the
-  // Case-based branch actually runs. If ceCase/peCase were null going in, this stays
-  // as the "not matched" state, telling us at a glance whether the strike-match lookup
-  // (fixed in commit 13d8c04) found a row or not.
-  sig._diagCeCase = sig.ceCase; sig._diagPeCase = sig.peCase;
-  sig._diagCeGroup = null; sig._diagPeGroup = null;
-  sig._diagMatched = (sig.ceCase!=null || sig.peCase!=null);
   if(sig.invalidStrike){
     var invalidStrikeVariants=[
       sig.strike+' is not a real, currently-tradeable strike for '+sig.sym+' — check the option chain and re-enter with a valid strike.',
@@ -4558,12 +4470,6 @@ function v8DeriveTier(sig, realTrade){
   if(sig.ceCase!=null || sig.peCase!=null){
     var ceGroup = v8CaseGroup(sig.ceCase);
     var peGroup = v8CaseGroup(sig.peCase);
-    // Diagnostic badge data (2026-08-24, per user request to watch this live on the
-    // dashboard instead of digging through logs) -- stash the raw classification
-    // straight onto sig so the renderer can show it without touching every branch below.
-    sig._diagCeCase = sig.ceCase; sig._diagPeCase = sig.peCase;
-    sig._diagCeGroup = ceGroup; sig._diagPeGroup = peGroup;
-    sig._diagMatched = true;
     var yourGroup = sig.type==='CE' ? ceGroup : peGroup;
     var otherGroup = sig.type==='CE' ? peGroup : ceGroup;
     var yourLabel = sig.type==='CE' ? 'CE' : 'PE';
@@ -4738,27 +4644,6 @@ function v8FromRealSignal(sig){
     planExit: sig.exitZone || '—',
     verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt,
     tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
-    diagCeCase: sig._diagCeCase, diagPeCase: sig._diagPeCase,
-    diagCeGroup: sig._diagCeGroup, diagPeGroup: sig._diagPeGroup, diagMatched: sig._diagMatched,
-    diagHistory: (function(){
-      // Real fix (2026-08-24): simplified to just seed the array on first render -- the
-      // 1-second v8DiagTick() ticker (which shows the TRADED leg's own data, not just CE)
-      // takes over immediately once the card is in the DOM, so this initial entry is only
-      // ever visible for a fraction of a second before the ticker's richer format replaces it.
-      var key = sig.id;
-      if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
-      var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%';
-      var hist = v8DiagHistory[key];
-      // Only append if actually different from the last entry (avoid dup spam when nothing changed)
-      var lastEntry = hist.length ? hist[hist.length-1].replace(/^\S+\s/,'') : null;
-      var thisEntryNoTime = entry.replace(/^\S+\s/,'');
-      if(lastEntry !== thisEntryNoTime){
-        hist.push(entry);
-        if(hist.length>5) hist.shift();
-      }
-      return hist.slice().reverse(); // newest first
-    })(),
   };
 }
 
@@ -4959,7 +4844,6 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
-    +'<div id="diagbadge-'+s.key+'" style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;"><div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, updates every 1s):</div>'+(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
