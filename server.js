@@ -1062,7 +1062,16 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
   g=(he[he.length-1]||d[0])?.raw;
 }else if("NEXT_MONTH"===o){
   const Se=(c.getMonth()+1)%12,Ee=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),fe=d.filter(e=>e.date.getMonth()===Se&&e.date.getFullYear()===Ee);
-  g=(fe[fe.length-1]||d[1]||d[0])?.raw;
+  // Real fix (2026-08-24): previously silently fell back to d[1]/d[0] -- the NEAREST
+  // (often current-month) expiry -- if next month's contracts weren't listed yet by
+  // Angel One. That meant a genuine data gap could serve the WRONG (old) month with
+  // zero error surfaced, exactly the bug the user hit on rollover day for INFY. Now:
+  // if next month truly has no listed contracts, fail loudly instead of guessing.
+  if(!fe.length){
+    log(`NEXT_MONTH requested for ${i} but no ${Se+1}/${Ee} contracts found in instrument master -- refusing to silently fall back to current month`,"ERROR");
+    return t.json({status:!1,message:`Next month's option chain for ${i} is not yet available from the exchange. Try again shortly.`});
+  }
+  g=fe[fe.length-1].raw;
   log(`NEXT_MONTH expiry selected: ${g}`,"INFO");
 }else if("NIFTY_NEXT_WEEKLY"===o){
   // Next Tuesday's contract — skip today's expiry, take next available Tuesday
