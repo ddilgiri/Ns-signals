@@ -2499,27 +2499,12 @@ window.renderSignals = function() {
 
 // ── 3. AUTO EXIT — check on every premium update ────
 function v4CheckAutoExit(trade, currentPrem) {
-  if(!trade || trade.status !== 'OPEN') return;
-  // Real fix (2026-08-24): a freshly-created trade's .expiry starts null and only gets
-  // backfilled once the background /oi-analysis call resolves it -- a few seconds after
-  // creation. Any price poll landing in that gap fetches the WRONG (nearest/current-month)
-  // contract's LTP via live-trade-prices' legacy fallback, which on rollover day can be
-  // a near-worthless premium -- easily under the 50% stop-loss floor, closing the trade
-  // almost instantly on bad data before the real fix ever gets a chance to apply. Don't
-  // run exit checks at all until the trade has a real, resolved expiry.
-  if(!trade.expiry){ return; }
-  var target = trade.target1;
-  var entryPrem = trade.avgPremium || trade.entryPremium || 0;
-  // Stop = 50% of entry premium
-  var stop = entryPrem * 0.5;
-
-  var hitTarget = target && currentPrem >= target;
-  var hitStop = stop > 0 && currentPrem <= stop;
-
-  if(hitTarget || hitStop) {
-    var reason = hitTarget ? '🏁 Target hit' : '🛑 Stop loss hit';
-    v4CloseTrade(trade.id, currentPrem, reason);
-  }
+  // Real fix (2026-08-24): auto stop-loss/target closing removed entirely per explicit
+  // user request -- "I'll manage" -- after repeated closes on transient wrong-month
+  // pricing during the expiry-rollover window. No automatic exit fires anymore; the
+  // user closes trades manually via the UI. Function kept (not deleted) since it's
+  // still called from the price-poll loop -- now a deliberate no-op.
+  return;
 }
 
 function v4CloseTrade(tradeId, exitPrem, reason) {
