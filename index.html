@@ -4388,26 +4388,6 @@ var v8DiagHistory = {};
 // still only actually changes when a real scan/price-poll runs -- this just makes that
 // visible second-by-second, including the repeats, so you can see exactly when a real
 // change lands versus when it's just re-showing the same values.
-// Real fix (2026-08-24): user wants to paste the diagnostic log as text into chat
-// instead of screenshotting the card -- copies the FULL stored history (all 8 kept
-// ticks, oldest first for readable chronological order) for this card straight to
-// the clipboard as plain text.
-function v8CopyDiagLog(key){
-  var hist = v8DiagHistory[key] || [];
-  if(!hist.length){ if(typeof toast==='function') toast('No diagnostic ticks yet for this card'); return; }
-  var sig = (typeof S!=='undefined' && S.signals) ? S.signals.find(function(s){return s.id===key;}) : null;
-  var header = sig ? (sig.sym+' '+sig.strike+' '+sig.type+' -- diagnostic log\n') : 'Diagnostic log\n';
-  var text = header + hist.join('\n');
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){
-      if(typeof toast==='function') toast('📋 Diagnostic log copied ('+hist.length+' ticks)');
-    }).catch(function(){
-      if(typeof toast==='function') toast('⚠️ Copy failed -- clipboard permission denied');
-    });
-  } else {
-    if(typeof toast==='function') toast('⚠️ Clipboard not available in this browser');
-  }
-}
 function v8DiagTick(){
   if(typeof S==='undefined' || !S.signals) return;
   S.signals.forEach(function(sig){
@@ -4913,9 +4893,7 @@ function v8BuildCompactCard(s){
     +'<div class="v8mid-item right"><span class="v8mid-lbl">LTP</span><span class="v8ltp '+(s.ltp>=s.entry?'up':'down')+'">'+v8Fmt(s.ltp)+'</span></div>'
     +'</div>'
     +'<div class="v8mcard-tag '+s.tagCls+'">'+s.verdictEmoji+' '+s.verdictTxt+'</div>'
-    +'<div id="diagbadge-'+s.key+'" style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span style="opacity:0.8;">🔍 DIAG (live, updates every 1s):</span><button type="button" onclick="v8CopyDiagLog(\''+s.key+'\')" style="font-family:inherit;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:2px 8px;cursor:pointer;">📋 Copy</button></div>'
-    +(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
+    +'<div id="diagbadge-'+s.key+'" style="font-family:monospace;font-size:10px;color:#a855f7;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:6px;padding:4px 8px;margin-top:6px;"><div style="opacity:0.8;margin-bottom:2px;">🔍 DIAG (live, updates every 1s):</div>'+(s.diagHistory&&s.diagHistory.length?s.diagHistory.map(function(h){return '<div>'+h+'</div>';}).join(''):'<div>no ticks yet</div>')+'</div>'
     +'<div class="v8mcard-lot-row"><span class="v8lot-row-lbl">Lots</span><div class="v8lot-stepper">'
     +'<button type="button" onclick="v8ChangeLots(\''+s.key+'\',-1)">−</button>'
     +'<span class="v8lot-val">'+s.lots+'</span>'
