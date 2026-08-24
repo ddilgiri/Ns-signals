@@ -3839,6 +3839,23 @@ function v8RefreshDashboardSignals(){
   if(typeof batchUpdatePrices==='function') tasks.push(batchUpdatePrices());
   if(typeof refreshOpenTradePrices==='function') tasks.push(refreshOpenTradePrices());
   if(typeof refreshSignalOI==='function') tasks.push(refreshSignalOI(true));
+  // Real fix (2026-08-24): a Manual Check trade whose /signal-analysis call failed on
+  // BOTH attempts (real=null) gets permanently stuck with expiry/ceCase/peCase never
+  // set -- confirmed live on a real BAJFINANCE position, stuck 5+ minutes with zero
+  // visible error, still silently pricing off the wrong (nearest/current) contract the
+  // whole time. Force-refresh now detects any Manual Check signal with unset expiry and
+  // re-runs the full background analysis for it, giving stuck trades a real recovery
+  // path instead of staying broken forever with no indication anything is wrong.
+  if(typeof S!=='undefined' && S.signals && typeof v8RunManualAnalysisInBackground==='function'){
+    S.signals.forEach(function(sig){
+      if(sig.isManualCheck && !sig.expiry){
+        v8MDiag('force-refresh: found stuck Manual Check signal (no expiry) for '+sig.sym+', re-running background analysis');
+        tasks.push(v8RunManualAnalysisInBackground(sig, sig.sym, sig.strike, sig.type, sig.entryPremium||sig.premium, sig.v8Lots||1).catch(function(e){
+          v8MDiag('stuck-trade recovery retry failed: '+(e&&e.message));
+        }));
+      }
+    });
+  }
   Promise.all(tasks).then(function(){
     if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
     if(typeof toast==='function') toast('👁️ Signals refreshed');
