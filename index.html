@@ -4090,12 +4090,22 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real.ceCase = thisStrikeRow ? thisStrikeRow.ceCase : null;
           real.peCase = thisStrikeRow ? thisStrikeRow.peCase : null;
           if(!thisStrikeRow) v8MDiag('WARNING: no chain row matched strike '+typedStrike+' out of '+chain.length+' rows -- ceCase/peCase will be null, falling back to weaker wall/floor wording');
+          // Real fix (2026-08-24): capture raw CE inputs too, to diagnose why ceCase keeps
+          // coming back null while peCase resolves fine on the SAME strike/tick -- narrows
+          // down whether it's missing raw data (CE_ltp/CE_oi/CE_prevClose) vs a classifyCase
+          // edge case, without needing server log access.
+          real._rawCeOi = thisStrikeRow ? thisStrikeRow.CE_oi : undefined;
+          real._rawCeLtp = thisStrikeRow ? thisStrikeRow.CE_ltp : undefined;
+          real._rawCeOiChange = thisStrikeRow ? thisStrikeRow.CE_oiChange : undefined;
+          real._rawCePrevClose = thisStrikeRow ? thisStrikeRow.CE_prevClose : undefined;
         }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
       // no new card, no separate pending state, just the real values arriving.
       realSig.invalidStrike = !strikeIsValid; // real flag -- card verdict reflects this honestly
       realSig.expiry = real.expiry || realSig.expiry; // real fix: propagate the correct NEXT_MONTH/MONTHLY expiry onto the signal so live-trade-prices stops using its nearest-contract fallback
+      realSig._rawCeOi = real._rawCeOi; realSig._rawCeLtp = real._rawCeLtp;
+      realSig._rawCeOiChange = real._rawCeOiChange; realSig._rawCePrevClose = real._rawCePrevClose;
       // Real fix (2026-08-24, second pass): the above only updates realSig (the display
       // signal in S.signals) -- but addPaperTrade() already created the ACTUAL trade record
       // in S.paperTrades synchronously, back in v8CreateInstantSignal, BEFORE this background
@@ -4621,7 +4631,8 @@ function v8FromRealSignal(sig){
       var key = sig.id;
       if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
       var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%';
+      var rawTxt = ' [rawCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
+      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%'+rawTxt;
       var hist = v8DiagHistory[key];
       // Only append if actually different from the last entry (avoid dup spam when nothing changed)
       var lastEntry = hist.length ? hist[hist.length-1].replace(/^\S+\s/,'') : null;
