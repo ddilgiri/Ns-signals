@@ -4098,6 +4098,14 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
           real._rawCeLtp = thisStrikeRow ? thisStrikeRow.CE_ltp : undefined;
           real._rawCeOiChange = thisStrikeRow ? thisStrikeRow.CE_oiChange : undefined;
           real._rawCePrevClose = thisStrikeRow ? thisStrikeRow.CE_prevClose : undefined;
+          // Real fix (2026-08-24): also capture the PE-side raw fields -- the user's ACTUAL
+          // traded leg is often PE (as in this case, 410 PE), but the diagnostic badge only
+          // ever showed CE raw data, leaving no visibility into the real traded option's own
+          // OI/LTP movement, only the untraded opposite side.
+          real._rawPeOi = thisStrikeRow ? thisStrikeRow.PE_oi : undefined;
+          real._rawPeLtp = thisStrikeRow ? thisStrikeRow.PE_ltp : undefined;
+          real._rawPeOiChange = thisStrikeRow ? thisStrikeRow.PE_oiChange : undefined;
+          real._rawPePrevClose = thisStrikeRow ? thisStrikeRow.PE_prevClose : undefined;
         }
       }
       // Real fix: update the SAME signal object already on the dashboard, in place --
@@ -4106,6 +4114,8 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       realSig.expiry = real.expiry || realSig.expiry; // real fix: propagate the correct NEXT_MONTH/MONTHLY expiry onto the signal so live-trade-prices stops using its nearest-contract fallback
       realSig._rawCeOi = real._rawCeOi; realSig._rawCeLtp = real._rawCeLtp;
       realSig._rawCeOiChange = real._rawCeOiChange; realSig._rawCePrevClose = real._rawCePrevClose;
+      realSig._rawPeOi = real._rawPeOi; realSig._rawPeLtp = real._rawPeLtp;
+      realSig._rawPeOiChange = real._rawPeOiChange; realSig._rawPePrevClose = real._rawPePrevClose;
       // Real fix (2026-08-24, second pass): the above only updates realSig (the display
       // signal in S.signals) -- but addPaperTrade() already created the ACTUAL trade record
       // in S.paperTrades synchronously, back in v8CreateInstantSignal, BEFORE this background
@@ -4386,10 +4396,22 @@ function v8DiagTick(){
     var key = sig.id;
     if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
     var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    var rawTxt = ' [rawCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
     var _tradeForDiag = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sigId===sig.id; }) : null;
+    // Real fix (2026-08-24): show the TRADED leg's raw data first and clearly labeled
+    // (CE or PE, whichever sig.type actually is), since the badge previously only ever
+    // showed CE raw fields even when the real position was PE -- no visibility into the
+    // actual traded option's own price movement. Opposite (untraded) side shown second.
+    var tradedRawTxt, otherRawTxt;
+    if(sig.type==='PE'){
+      tradedRawTxt = ' [TRADED-PE: oi='+(sig._rawPeOi==null?'?':sig._rawPeOi)+' ltp='+(sig._rawPeLtp==null?'?':sig._rawPeLtp)+' oiChg='+(sig._rawPeOiChange==null?'?':sig._rawPeOiChange)+' prevC='+(sig._rawPePrevClose==null?'?':sig._rawPePrevClose)+']';
+      otherRawTxt = ' [otherCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+']';
+    } else {
+      tradedRawTxt = ' [TRADED-CE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
+      otherRawTxt = ' [otherPE: oi='+(sig._rawPeOi==null?'?':sig._rawPeOi)+' ltp='+(sig._rawPeLtp==null?'?':sig._rawPeLtp)+']';
+    }
+    var tradeLtpTxt = ' [tradeLTP='+(_tradeForDiag&&_tradeForDiag.currentPremium!=null?_tradeForDiag.currentPremium:'?')+' tradePnl='+(_tradeForDiag&&_tradeForDiag.pnl!=null?_tradeForDiag.pnl:'?')+']';
     var expTxt = ' [sigExp='+(sig.expiry||'UNSET')+' tradeExp='+(_tradeForDiag?(_tradeForDiag.expiry||'UNSET'):'no-trade')+']';
-    var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' score='+Math.round(sig.score||0)+'%'+rawTxt+expTxt;
+    var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' score='+Math.round(sig.score||0)+'%'+tradedRawTxt+otherRawTxt+tradeLtpTxt+expTxt;
     var hist = v8DiagHistory[key];
     hist.push(entry); // every second, no dedup -- repeats are meaningful (shows data is stale between real updates)
     if(hist.length>8) hist.shift();
@@ -4653,13 +4675,14 @@ function v8FromRealSignal(sig){
     diagCeCase: sig._diagCeCase, diagPeCase: sig._diagPeCase,
     diagCeGroup: sig._diagCeGroup, diagPeGroup: sig._diagPeGroup, diagMatched: sig._diagMatched,
     diagHistory: (function(){
-      // Append this tick to the running history for this card, keep last 5.
+      // Real fix (2026-08-24): simplified to just seed the array on first render -- the
+      // 1-second v8DiagTick() ticker (which shows the TRADED leg's own data, not just CE)
+      // takes over immediately once the card is in the DOM, so this initial entry is only
+      // ever visible for a fraction of a second before the ticker's richer format replaces it.
       var key = sig.id;
       if(!v8DiagHistory[key]) v8DiagHistory[key] = [];
       var nowTxt = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      var rawTxt = ' [rawCE: oi='+(sig._rawCeOi==null?'?':sig._rawCeOi)+' ltp='+(sig._rawCeLtp==null?'?':sig._rawCeLtp)+' oiChg='+(sig._rawCeOiChange==null?'?':sig._rawCeOiChange)+' prevC='+(sig._rawCePrevClose==null?'?':sig._rawCePrevClose)+']';
-      var expTxt = ' [expiry='+(sig.expiry||'UNSET')+']';
-      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%'+rawTxt+expTxt;
+      var entry = nowTxt+' ce='+(sig._diagCeCase==null?'null':sig._diagCeCase)+' pe='+(sig._diagPeCase==null?'null':sig._diagPeCase)+' '+(t.tierLabel||'')+ ' '+Math.round(sig.score||0)+'%';
       var hist = v8DiagHistory[key];
       // Only append if actually different from the last entry (avoid dup spam when nothing changed)
       var lastEntry = hist.length ? hist[hist.length-1].replace(/^\S+\s/,'') : null;
