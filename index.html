@@ -1446,6 +1446,10 @@ var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorag
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
 if(u=f.atmStrike||0,f.chain&&f.chain.length)for(var h=f.chain.slice().sort(function(e,t){return Math.abs(e.strike-s)-Math.abs(t.strike-s)}),k=0;k<h.length;k++){var E="CE"===v?h[k].CE_ltp||0:h[k].PE_ltp||0;if(E>0){y=E,u=h[k].strike,pPrevClose=("CE"===v?h[k].CE_prevClose:h[k].PE_prevClose)||0;break}}g.ceWalls&&g.ceWalls.length||(g.ceWalls=f.ceWalls||[]),g.peFloors&&g.peFloors.length||(g.peFloors=f.peFloors||[]),g.ceSignal||(g.ceSignal=f.ceSignal||null),g.peSignal||(g.peSignal=f.peSignal||null),g.rameshTrapped||(g.rameshTrapped=f.rameshTrapped||!1),g.atmCeOIChange=f.atmCeOIChange||0,g.atmPeOIChange=f.atmPeOIChange||0,g.strikeFlags=f.strikeFlags||[],f.expiry&&(g.expiry=f.expiry);
+// Real fix (2026-08-24): user wants to verify in the Activity Log itself which expiry
+// month each stock's scan actually resolved to, not just on the card badge -- direct
+// confirmation the scan loop is genuinely using the correct (September) contract.
+if(typeof addLog==='function' && f.expiry){ addLog('📅 '+e+' '+v+' scan using expiry: '+f.expiry,''); }
 // Real fix (2026-08-24): auto-scan signals never got the ceCase/peCase/raw diagnostic
 // fields that Manual Check signals get -- user wants the same 1s live diagnostic badge
 // working for auto-scan cards too, to check which expiry month is actually being used
