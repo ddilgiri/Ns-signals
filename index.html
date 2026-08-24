@@ -3932,12 +3932,25 @@ function v8CreateInstantSignal(stock, strike, side, entry, lots){
     return null;
   }
   var liveSpot=(typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[symUpper]) ? LIVE_PRICES[symUpper] : entryNum;
+  // Real fix (2026-08-24): a second Manual Check submission for the SAME stock+strike+side
+  // was silently creating a brand-new signal/trade instead of merging into the existing
+  // open one -- because realSig.id always baked in Date.now(), so addPaperTrade's
+  // sigId-based lookup could never find the earlier trade. This meant the average premium
+  // shown was just the second submission's price, not a real weighted average across both
+  // (e.g. 10 lots @17 + 5 lots @16.2 should average to 16.73, but showed 16.2 flat --
+  // the first 10 lots were silently orphaned in a separate, invisible trade record).
+  // Now: if an OPEN trade already exists for this exact sym+strike+side, reuse its real
+  // signal id so addPaperTrade's existing merge logic (lotPrices push + true average)
+  // actually runs, instead of branching into "create new".
+  var strikeNum=parseFloat(strike)||0;
+  var existingOpenTrade=(typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.find(function(pt){ return pt.sym===symUpper && pt.strike===strikeNum && pt.type===side && pt.status==='OPEN'; }) : null;
+  var reusedId = existingOpenTrade ? existingOpenTrade.sigId : null;
   // Real signal object, shaped exactly like the scan engine's own output, created
   // with the user's real typed data right away -- score/verdict start as real
   // NEUTRAL/MODERATE placeholders (not a fake high-confidence number) until the
   // background analysis genuinely completes and overwrites them in place.
   var realSig={
-    id: symUpper+'_'+side+'_'+Date.now(),
+    id: reusedId || (symUpper+'_'+side+'_'+Date.now()),
     sym: symUpper, type: side, strike: parseFloat(strike)||0,
     lot: lotSize, score: 50, verdict: 'MODERATE',
     spotPrice: liveSpot, premium: entryNum, entryPremium: entryNum,
@@ -3949,9 +3962,15 @@ function v8CreateInstantSignal(stock, strike, side, entry, lots){
     rameshTrapped: false, sureshTrapped: false, staleMove: false
   };
   if(typeof S !== 'undefined' && S.signals){
+    if(reusedId){
+      // Reusing an existing trade's id -- remove its old S.signals entry first so we
+      // don't leave a stale duplicate with the same id sitting in the array.
+      var _oldIdx=S.signals.findIndex(function(s){return s.id===reusedId;});
+      if(_oldIdx>=0) S.signals.splice(_oldIdx,1);
+    }
     S.signals.unshift(realSig);
     S.signals.length>50 && S.signals.pop();
-    v8MDiag('instant signal pushed to S.signals, new length: '+S.signals.length);
+    v8MDiag('instant signal pushed to S.signals, new length: '+S.signals.length+(reusedId?' (merged into existing trade '+reusedId+')':''));
   }
   // Real fix per confirmed requirement: Manual Check now creates a genuine paper trade
   // immediately, matching the typed lot count -- signal card and trade are the same
