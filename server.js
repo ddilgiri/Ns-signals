@@ -1508,10 +1508,18 @@ app.post("/live-trade-prices",async(req,res)=>{
         const expDate=parseExp(best.expiry);
         if(expDate){const expEnd=new Date(expDate);expEnd.setHours(15,30,0,0);if(expEnd<now){expired[key]=true;continue;}}
       } else {
-        // Legacy fallback path (no expiry supplied by caller) — nearest live contract.
-        const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp&&(()=>{const e=new Date(i._exp);e.setHours(15,30,0,0);return e>=now;})()).sort((a,b)=>a._exp-b._exp);
-        if(!sorted.length){expired[key]=true;continue;}
-        best=sorted[0];
+        // Real fix (2026-08-24): the "nearest live contract" fallback here was the exact
+        // mechanism silently pricing trades against the WRONG (nearest/current, often
+        // near-expiry) month whenever a trade's expiry hadn't resolved yet -- confirmed
+        // live on both INFY and BAJFINANCE, each stuck showing August pricing on a real
+        // position with real money at risk, zero visible error. The dte<=2 rollover rule
+        // was always correct where it actually ran -- the problem was this path bypassing
+        // it entirely. A trade with no resolved expiry must never be silently priced
+        // against a guessed contract -- skip it, mark as pending, and let it resolve for
+        // real once analysis completes (matches the STRICT wantExpiry path's own
+        // no-silent-substitution principle, applied here too).
+        debugMisses.push({key,reason:"no expiry resolved yet -- refusing to guess nearest contract",symCandidatesFound:matches.length,searchedStrike:strike,searchedType:type});
+        continue;
       }
       tokenMap[key]=String(best.token);
       tokenToKey[String(best.token)]=key;
