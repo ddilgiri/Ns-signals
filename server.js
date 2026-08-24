@@ -130,7 +130,7 @@ function getExpiryWeekInfo(symbol){
     const dteToCurMonth=Math.round((curMonthLastTue-now)/86400000);
     const INDICES_LIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
     const isIndexSym=INDICES_LIST.includes(sym);
-    if(!isIndexSym && dteToCurMonth<=1){
+    if(!isIndexSym && dteToCurMonth<=2){
       // Stock on or after the day before expiry — use NEXT month's last Tuesday instead
       const nextMonthDate=new Date(year,month+1,1);
       const nm=nextMonthDate.getMonth(),ny=nextMonthDate.getFullYear();
