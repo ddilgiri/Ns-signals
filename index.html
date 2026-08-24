@@ -3833,11 +3833,19 @@ function v8RefreshDashboardSignals(){
   // global app refresh, not the baseline, not the F&O list. Reuses the same real
   // functions already driving the normal 5s/15s/25s live loops, just triggered
   // immediately on tap instead of waiting for the next cycle.
+  // Real fix (2026-08-24): batchUpdatePrices() only fetches raw LTP/spot -- it does
+  // NOT re-score anything. The actual OI/verdict data that drives the sentence text
+  // only came from refreshSignalOI(), which is throttled to run once every 9 price-poll
+  // cycles AND skips entirely whenever a scan is in progress (S.scanning). So a tap on
+  // this button could update prices instantly while leaving the verdict text completely
+  // unchanged, silently, most of the time. Now force-calls refreshSignalOI(true) so the
+  // button genuinely refreshes both price AND verdict every single tap, scan or no scan.
   var btn = document.getElementById('v8DashRefreshBtn');
   if(btn) btn.classList.add('spinning');
   var tasks = [];
   if(typeof batchUpdatePrices==='function') tasks.push(batchUpdatePrices());
   if(typeof refreshOpenTradePrices==='function') tasks.push(refreshOpenTradePrices());
+  if(typeof refreshSignalOI==='function') tasks.push(refreshSignalOI(true));
   Promise.all(tasks).then(function(){
     if(typeof v8SyncFromRealSignals==='function') v8SyncFromRealSignals();
     if(typeof toast==='function') toast('👁️ Signals refreshed');
