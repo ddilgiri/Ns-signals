@@ -1425,6 +1425,11 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // and description text kept fresh, no matter how weak this scan's signal quality
   // looks. Day-exclusion only applies to fresh discovery candidates you haven't acted on.
   var _hasOpenTradeForThis = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.some(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN'; }) : false;
+  // Day-exclusion threshold fixed at 35% per user decision 2026-08-24 -- decoupled from
+  // the Setup "Min Confidence %" slider (l), which the user may set higher (e.g. 60%) just
+  // for display filtering. 35% is a hardcoded floor: only genuinely weak scores get excluded
+  // for the rest of the day; everything 35%-and-up keeps scanning every cycle regardless of l.
+  var DAY_EXCLUDE_FLOOR=35;
   if(window._avoidedToday[_avoidKey] && !_hasOpenTradeForThis){continue;}
   try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");
   // Day-exclusion threshold now tied directly to the Setup "Min Confidence %" slider
@@ -1432,8 +1437,8 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // one number, one meaning. If the slider changes, both display filtering and scan
   // exclusion move together automatically.
   if(g.score<l){
-    if(!_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
-    addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%"+(_hasOpenTradeForThis?" (open trade — still scanning every cycle, not excluded)":", excluded from scanning for rest of today"),"warn");
+    if(g.score<DAY_EXCLUDE_FLOOR && !_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
+    addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%"+(g.score<DAY_EXCLUDE_FLOOR&&!_hasOpenTradeForThis?", excluded from scanning for rest of today":", skipped this cycle"),"warn");
     if(!_hasOpenTradeForThis) continue;
   }
   if(("AVOID"===g.verdict||"TRAP"===g.verdict) && !_hasOpenTradeForThis)continue;
