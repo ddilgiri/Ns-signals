@@ -354,7 +354,7 @@ body.v8-login-only #pg-setup .btn-primary{background:var(--purple)!important;bor
           </svg>
           <div class="v8baseline-ring-label">
             <div class="num" id="v8BaselineCountNow">0</div>
-            <div class="total" id="v8BaselineCountTotal">of 210</div>
+            <div class="total" id="v8BaselineCountTotal">of --</div>
           </div>
         </div>
       </div>
@@ -3464,7 +3464,10 @@ function v8StartBaselineDownload(isManualRetry){
 function v8RunBaselineTick(count){
   var screenEl=document.getElementById('v8BaselineScreen');
   if(!screenEl || screenEl.style.display==='none') return;
-  var total=210;
+  // Real fix (2026-08-24): no hardcoded total anywhere -- derive it from the real F&O
+  // stock list length, whatever that actually is this session (209, 210, 207, etc.),
+  // instead of a fixed number that silently drifts from reality.
+  var total=(typeof v8FnoStocks!=='undefined' && v8FnoStocks.length) ? v8FnoStocks.length : 0;
   var willFailThisAttempt=(v8BaselineAttempt<3);
   var failPoint=90;
 
