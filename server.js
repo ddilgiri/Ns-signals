@@ -552,21 +552,21 @@ function calcATR(e,t=14){if(e.length<t+1)return null;const a=[];for(let t=1;t<e.
 // not ahead of us, so a Case2/6 read right now is describing exhaustion, not a fresh entry.
 function isMoveAlreadyStale(candles,lookback=6){
   if(!candles||candles.length<2*lookback)return false;
-  // Real fix (2026-08-24): user confirmed live -- once staleMove flipped true, it kept
-  // showing STALE even after price genuinely started moving again (LTP 30.35->33, P&L
-  // recovered -12,823->-4,635 over ~20 minutes on a real position), because the 6-vs-6
-  // candle range comparison below is a lagging, historical-only view -- it can't "see"
-  // a fresh move happening in just the last 1-2 candles until enough new candles have
-  // accumulated to shift the whole recent-window average. Added a fast-path override:
-  // if either of the last 2 candles moved meaningfully more than its own immediate
-  // predecessor's range, treat the move as fresh RIGHT NOW regardless of the slower
-  // historical comparison -- makes STALE genuinely dynamic instead of sticky.
-  const last=candles[candles.length-1],prev=candles[candles.length-2];
-  if(last&&prev){
-    const lastRange=Math.abs(parseFloat(last[2])-parseFloat(last[3]));
-    const prevRange=Math.abs(parseFloat(prev[2])-parseFloat(prev[3]));
-    const lastMove=Math.abs(parseFloat(last[4])-parseFloat(prev[4]));
-    if(lastRange>prevRange*1.5 || lastMove>prevRange*0.8) return false;
+  // Real fix (2026-08-24, revised): user flagged the first version could un-stale on a
+  // single noisy candle -- not genuine. Tightened to require 2 CONSECUTIVE candles moving
+  // the SAME direction with real magnitude, not just one candle's range vs its predecessor.
+  // A single spike (bad tick, thin-liquidity wick) will not pass this; a real, sustained
+  // move -- like the confirmed live case where ADANIENT's LTP recovered 30.35->33 over
+  // several genuine up-candles -- will. Still checked before the slower 6-vs-6 historical
+  // comparison, so a real fresh move un-stales promptly instead of waiting on that average.
+  if(candles.length>=3){
+    const c1=candles[candles.length-3],c2=candles[candles.length-2],c3=candles[candles.length-1];
+    const close1=parseFloat(c1[4]),close2=parseFloat(c2[4]),close3=parseFloat(c3[4]);
+    const move1=close2-close1,move2=close3-close2;
+    const sameDirection=(move1>0&&move2>0)||(move1<0&&move2<0);
+    const avgPriorRange=(Math.abs(parseFloat(c1[2])-parseFloat(c1[3]))+Math.abs(parseFloat(c2[2])-parseFloat(c2[3])))/2;
+    const combinedMove=Math.abs(close3-close1);
+    if(sameDirection && avgPriorRange>0 && combinedMove>avgPriorRange*1.2) return false;
   }
   const recent=candles.slice(-lookback),prior=candles.slice(-2*lookback,-lookback);
   const recentRange=Math.max(...recent.map(c=>parseFloat(c[2])))-Math.min(...recent.map(c=>parseFloat(c[3])));
