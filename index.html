@@ -950,6 +950,21 @@ async function refreshSignalOI(forceDuringScan){
         t.rameshTrapped=n.rameshTrapped||!1;
         t.sureshTrapped=n.sureshTrapped||!1;
         t.strikeFlags=n.strikeFlags||[];
+        // Real fix (2026-08-24): refreshSignalOI() never updated t.ceCase/t.peCase, the
+        // exact fields v8DeriveTier() needs to produce the real Case-based verdict branch
+        // (with genuinely changing sentences) instead of the static wall/floor fallback
+        // text. This meant a card's verdict could NEVER change after its initial creation,
+        // through force-refresh or otherwise -- confirmed live on ADANIENT 3200 CE, stuck
+        // on identical wording even right after a manual force-refresh tap. Now backfills
+        // ceCase/peCase from the traded strike's row in the fresh OI chain, same tolerant
+        // strike-match used elsewhere this session.
+        if(n.chain && n.chain.length){
+          var _refreshStrikeRow = n.chain.find(function(c){ return Math.round(parseFloat(c.strike))===Math.round(t.strike); });
+          if(_refreshStrikeRow){
+            t.ceCase = _refreshStrikeRow.ceCase;
+            t.peCase = _refreshStrikeRow.peCase;
+          }
+        }
         computeLevels(t);
         updateCardCapsules(t);
         updateCardLevels(t);
