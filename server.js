@@ -1710,7 +1710,16 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          if (g && g.status && g.score >= 60 && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
+          // Real fix (2026-08-24): this background auto-scan had its OWN hardcoded
+          // score>=60 gate, completely separate from and never updated alongside the
+          // verdict-tier realignment (MODERATE lowered from 60 to 45) made earlier same
+          // session. Confirmed live: UNITDSPR/COALINDIA/etc scoring 55-66 and correctly
+          // labeled MODERATE in "All Stocks" (a different, independent data path) could
+          // still never reach SERVER_SIGNALS -> auto-trade through THIS path due to this
+          // stale 60 threshold. Now matches the verdict check directly instead of a
+          // separate hardcoded number -- STRONG or MODERATE, same as v4AutoTrade's own
+          // frontend gate, so the two systems can no longer silently disagree again.
+          if (g && g.status && (g.verdict === "STRONG" || g.verdict === "MODERATE")) {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
           }
         }
