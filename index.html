@@ -4169,6 +4169,15 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       realSig.strikeFlags = real.strikeFlags || realSig.strikeFlags;
       realSig.bias = real.bias || realSig.bias;
       realSig.staleMove = real.staleMove || false;
+      // TEMPORARY (2026-08-24, per user request for exact OI marks -- remove after they've
+      // read the numbers off a card): expose the real oiMomentum/dilipOIFormula earned/max
+      // from the server's breakdown object directly, appended to the verdict text.
+      if(real.breakdown){
+        var _om=real.breakdown.oiMomentum, _dof=real.breakdown.dilipOIFormula;
+        if(_om && _dof){
+          realSig._oiMarksTxt=' [OI marks: oiMomentum='+_om.earned+'/'+_om.max+' dilipOIFormula='+_dof.earned+'/'+_dof.max+' combined='+(_om.earned+_dof.earned)+'/'+(_om.max+_dof.max)+']';
+        }
+      }
       realSig.target1 = real.target1; realSig.target2 = real.target2;
       realSig.holdZone = real.holdZone; realSig.exitZone = real.exitZone;
       if(typeof computeLevels === 'function'){ try{ computeLevels(realSig); }catch(e){} }
@@ -4666,7 +4675,7 @@ function v8FromRealSignal(sig){
     planStop: sig.target2 ? '₹'+parseFloat(sig.target2).toLocaleString('en-IN',{maximumFractionDigits:2}) : '—',
     planHold: sig.holdZone || '—',
     planExit: sig.exitZone || '—',
-    verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt,
+    verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt+(sig._oiMarksTxt||''),
     tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
   };
 }
