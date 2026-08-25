@@ -552,6 +552,22 @@ function calcATR(e,t=14){if(e.length<t+1)return null;const a=[];for(let t=1;t<e.
 // not ahead of us, so a Case2/6 read right now is describing exhaustion, not a fresh entry.
 function isMoveAlreadyStale(candles,lookback=6){
   if(!candles||candles.length<2*lookback)return false;
+  // Real fix (2026-08-24): user confirmed live -- once staleMove flipped true, it kept
+  // showing STALE even after price genuinely started moving again (LTP 30.35->33, P&L
+  // recovered -12,823->-4,635 over ~20 minutes on a real position), because the 6-vs-6
+  // candle range comparison below is a lagging, historical-only view -- it can't "see"
+  // a fresh move happening in just the last 1-2 candles until enough new candles have
+  // accumulated to shift the whole recent-window average. Added a fast-path override:
+  // if either of the last 2 candles moved meaningfully more than its own immediate
+  // predecessor's range, treat the move as fresh RIGHT NOW regardless of the slower
+  // historical comparison -- makes STALE genuinely dynamic instead of sticky.
+  const last=candles[candles.length-1],prev=candles[candles.length-2];
+  if(last&&prev){
+    const lastRange=Math.abs(parseFloat(last[2])-parseFloat(last[3]));
+    const prevRange=Math.abs(parseFloat(prev[2])-parseFloat(prev[3]));
+    const lastMove=Math.abs(parseFloat(last[4])-parseFloat(prev[4]));
+    if(lastRange>prevRange*1.5 || lastMove>prevRange*0.8) return false;
+  }
   const recent=candles.slice(-lookback),prior=candles.slice(-2*lookback,-lookback);
   const recentRange=Math.max(...recent.map(c=>parseFloat(c[2])))-Math.min(...recent.map(c=>parseFloat(c[3])));
   const priorRange=Math.max(...prior.map(c=>parseFloat(c[2])))-Math.min(...prior.map(c=>parseFloat(c[3])));
