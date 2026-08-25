@@ -3651,7 +3651,7 @@ function v8RenderStocks(){
     var peCell='<div class="v8mood-pill '+v8ScoreTier(s.pe)+'"><span class="score">'+s.pe+'</span><span class="tier-tag">'+v8TierLabel(s.pe)+'</span></div>';
     var cells = ceFirst ? ceCell+peCell : peCell+ceCell;
     var eyeMark = bestScore>=50 ? '<span title="Crossed 50% — worth watching" style="margin-left:4px">👁</span>' : '';
-    return '<div class="v8stock-row row-'+rowMood+'"><div class="name">'+s.name+eyeMark+'</div>'+cells+'</div>';
+    return '<div class="v8stock-row row-'+rowMood+'" onclick="v8ShowMarksCard(\''+s.name+'\')" style="cursor:pointer;"><div class="name">'+s.name+eyeMark+'</div>'+cells+'</div>';
   }).join('');
 }
 document.getElementById('v8StockSearch').oninput=v8RenderStocks;
@@ -4172,16 +4172,6 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
       // TEMPORARY (2026-08-24, per user request for exact OI marks -- remove after they've
       // read the numbers off a card): expose the real oiMomentum/dilipOIFormula earned/max
       // from the server's breakdown object directly, appended to the verdict text.
-      if(real.breakdown){
-        var _om=real.breakdown.oiMomentum, _dof=real.breakdown.dilipOIFormula;
-        if(_om && _dof){
-          realSig._oiMarksTxt=' [OI marks: oiMomentum='+_om.earned+'/'+_om.max+' dilipOIFormula='+_dof.earned+'/'+_dof.max+' combined='+(_om.earned+_dof.earned)+'/'+(_om.max+_dof.max)+']';
-        } else {
-          realSig._oiMarksTxt=' [OI marks: breakdown present but oiMomentum/dilipOIFormula missing -- keys found: '+Object.keys(real.breakdown).join(',')+']';
-        }
-      } else {
-        realSig._oiMarksTxt=' [OI marks: real.breakdown is '+(real.breakdown===undefined?'undefined':JSON.stringify(real.breakdown))+']';
-      }
       realSig.target1 = real.target1; realSig.target2 = real.target2;
       realSig.holdZone = real.holdZone; realSig.exitZone = real.exitZone;
       if(typeof computeLevels === 'function'){ try{ computeLevels(realSig); }catch(e){} }
@@ -4426,6 +4416,60 @@ function v8Pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 // to avoid hammering a genuinely broken symbol forever -- after that, only a manual
 // force-refresh will keep trying, same as before this fix.
 var v8AutoRetryCount = {};
+// Real feature (2026-08-24, per user request): tapping any stock row in the "All Stocks"
+// tab opens a real marks breakdown card -- fetches fresh /signal-analysis for both CE and
+// PE, shows every scoring component's earned/max side by side. Meant to be a permanent,
+// reusable way to see exactly why a stock scored what it did, not a one-off debug hack.
+async function v8ShowMarksCard(symUpper){
+  var existing = document.getElementById('v8MarksOverlay');
+  if(existing) existing.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'v8MarksOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px 16px 0 0;padding:20px;max-height:80vh;overflow-y:auto;width:100%;max-width:600px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">'+symUpper+' — Score Breakdown</h3><button onclick="document.getElementById(\'v8MarksOverlay\').remove()" style="border:none;background:#eee;border-radius:50%;width:32px;height:32px;font-size:16px;">✕</button></div><div id="v8MarksBody">Loading real breakdown…</div></div>';
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+
+  var stk = (typeof NSE_STOCKS!=='undefined') ? NSE_STOCKS.find(function(s){return s.sym===symUpper;}) : null;
+  var body = document.getElementById('v8MarksBody');
+  if(!stk || !stk.token){ body.innerHTML='<div style="color:#c00;">Could not find token for '+symUpper+'.</div>'; return; }
+
+  try{
+    var spot = (typeof LIVE_PRICES!=='undefined' && LIVE_PRICES[symUpper]) ? LIVE_PRICES[symUpper] : 0;
+    if(!spot){
+      var q = await fetch(getServer()+'/quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'FULL',exchangeTokens:{NSE:[String(stk.token)]}})});
+      var qd = await q.json();
+      spot = parseFloat(qd?.data?.fetched?.[0]?.ltp || 0);
+    }
+    if(!spot){ body.innerHTML='<div style="color:#c00;">Could not fetch live spot price.</div>'; return; }
+
+    var results = {};
+    for(var side of ['CE','PE']){
+      var r = await fetch(getServer()+'/signal-analysis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbolToken:String(stk.token),sym:symUpper,exchange:'NSE',isIndex:false,spotPrice:spot,type:side})});
+      var rd = await r.json();
+      results[side] = rd;
+    }
+
+    var html = '<div style="font-size:13px;color:#666;margin-bottom:12px;">Spot: ₹'+spot.toFixed(2)+'</div>';
+    ['CE','PE'].forEach(function(side){
+      var d = results[side];
+      if(!d || !d.status){ html += '<div style="margin-bottom:16px;"><b>'+side+'</b>: fetch failed — '+((d&&d.message)||'unknown error')+'</div>'; return; }
+      html += '<div style="margin-bottom:16px;border:1px solid #eee;border-radius:8px;padding:12px;">';
+      html += '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><b>'+side+'</b><span>'+d.score+'% — '+d.verdict+'</span></div>';
+      var bd = d.breakdown || {};
+      Object.keys(bd).forEach(function(key){
+        var c = bd[key];
+        if(!c || c.max===0) return;
+        var pct = c.max>0 ? Math.round((c.earned/c.max)*100) : 0;
+        html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f5f5f5;"><span>'+key+'</span><span>'+c.earned+'/'+c.max+' ('+pct+'%)</span></div>';
+      });
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = '<div style="color:#c00;">Error: '+e.message+'</div>';
+  }
+}
 function v8AutoHealStuckTrades(){
   if(typeof S==='undefined' || !S.signals || !S.connected) return;
   if(typeof v8RunManualAnalysisInBackground!=='function') return;
@@ -4679,7 +4723,7 @@ function v8FromRealSignal(sig){
     planStop: sig.target2 ? '₹'+parseFloat(sig.target2).toLocaleString('en-IN',{maximumFractionDigits:2}) : '—',
     planHold: sig.holdZone || '—',
     planExit: sig.exitZone || '—',
-    verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt+(sig._oiMarksTxt||''),
+    verdictEmoji: t.verdictEmoji, verdictTxt: t.verdictTxt,
     tag: t.verdictTxt, // legacy field, unused by current renderer but kept for compatibility
   };
 }
