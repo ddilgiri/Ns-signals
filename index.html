@@ -4176,7 +4176,11 @@ async function v8RunManualAnalysisInBackground(realSig, stock, strike, side, ent
         var _om=real.breakdown.oiMomentum, _dof=real.breakdown.dilipOIFormula;
         if(_om && _dof){
           realSig._oiMarksTxt=' [OI marks: oiMomentum='+_om.earned+'/'+_om.max+' dilipOIFormula='+_dof.earned+'/'+_dof.max+' combined='+(_om.earned+_dof.earned)+'/'+(_om.max+_dof.max)+']';
+        } else {
+          realSig._oiMarksTxt=' [OI marks: breakdown present but oiMomentum/dilipOIFormula missing -- keys found: '+Object.keys(real.breakdown).join(',')+']';
         }
+      } else {
+        realSig._oiMarksTxt=' [OI marks: real.breakdown is '+(real.breakdown===undefined?'undefined':JSON.stringify(real.breakdown))+']';
       }
       realSig.target1 = real.target1; realSig.target2 = real.target2;
       realSig.holdZone = real.holdZone; realSig.exitZone = real.exitZone;
