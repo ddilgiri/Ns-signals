@@ -3346,12 +3346,18 @@ function v8WatchRealBaseline(){
         if(statusTxt && statusTxt.textContent){
           var curStock=document.getElementById('v8BaselineCurrentStock');
           if(curStock) curStock.textContent=statusTxt.textContent;
-          // Real fix: v8BaselineCountNow (the big number in the ring) was never being
-          // updated -- extract the real "N/210" count from dlStatus's actual text.
-          var countMatch = statusTxt.textContent.match(/(\d+)\s*\/\s*210/);
+          // Real fix (2026-08-24, second pass): the regex was hardcoded to only match
+          // "/210" -- but the real F&O list can have a slightly different count (e.g. 209
+          // if one symbol got excluded/deduped that session), so "15/209" never matched
+          // and the big counter stayed stuck at its initial 0 the whole download, even
+          // while the text status below it was genuinely updating. Now matches ANY total,
+          // not just 210, and also updates the "/210" total label to match reality.
+          var countMatch = statusTxt.textContent.match(/(\d+)\s*\/\s*(\d+)/);
           if(countMatch){
             var countEl=document.getElementById('v8BaselineCountNow');
             if(countEl) countEl.textContent=countMatch[1];
+            var totalEl=document.getElementById('v8BaselineCountTotal');
+            if(totalEl) totalEl.textContent='of '+countMatch[2];
           }
           // Real fix: attempt number should reflect the real "Pass X/3" text too.
           var attemptMatch = statusTxt.textContent.match(/Pass\s*(\d+)\s*\/\s*3/);
