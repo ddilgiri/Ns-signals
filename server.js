@@ -1428,7 +1428,14 @@ app.post("/signal-analysis",async(e,t)=>{
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
-  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=60?(C="MODERATE",O="Good setup — consider half position size"):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
+  // Real fix (2026-08-24): user lowered the dashboard's Min Confidence slider to 45%,
+  // but this verdict tier system was a completely separate, hardcoded scale (STRONG>=75,
+  // MODERATE>=60, WEAK>=42) -- meaning a stock scoring 45-59% was labeled WEAK here, and
+  // since auto-trade only fires on STRONG/MODERATE verdicts, it could show as "moderate"
+  // in some other UI reading but never actually surface/auto-trade as a real signal. Now
+  // aligned with the lowered slider: MODERATE starts at 45 (matching the slider), WEAK
+  // at 30, STRONG kept at a genuinely high bar (75) so it still means high conviction.
+  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=45?(C="MODERATE",O="Good setup — consider half position size"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
   // Naresh urgency check: if this side's tier is STALE (sustained buying case but urgency has been fading across real scans), don't let a raw score alone call it STRONG — that's exactly the late-entry trap
   let naresStaleDowngrade=!1;
   if("STRONG"===C&&S.strikeFlags&&S.strikeFlags.length){
