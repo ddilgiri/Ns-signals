@@ -1448,15 +1448,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const oiMax=(N.oiMomentum?.max||0)+(N.dilipOIFormula?.max||0);
   const oiEarned=(N.oiMomentum?.earned||0)+(N.dilipOIFormula?.earned||0);
   const oiFloorPass=oiMax>0?(oiEarned/oiMax)>=0.4:true;
-  // Real fix (2026-08-24): user built a real 7-tier hierarchy per explicit request --
-  // STRONG > MODERATE > NEAR > EDGE > WEAK > AVOID > TRAP. Two things were both called
-  // "WEAK" before (a genuinely low score vs a high score lacking real OI backing) --
-  // now split. EDGE = high score, OI floor not met (technicals carried it, not real
-  // confirmation) -- sits between NEAR and WEAK in severity, distinct from a plain low
-  // score. NEAR tier itself (45-74 with real OI backing, i.e. genuine MODERATE-adjacent)
-  // is represented by MODERATE at the verdict level -- NEAR as a distinct verdict string
-  // would need a finer score band the user hasn't specified yet; revisit if requested.
-  let C,O;A?(C="BLOCKED",O=k):E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):E>=45&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):E>=75||E>=45?(C="EDGE",O="Score high but OI support is weak/contradicting -- technicals alone aren't enough, watch for OI confirmation"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
+  let C,O;A?(C="BLOCKED",O=k):E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):E>=45&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):E>=75||E>=45?(C="WEAK",O="Score high but OI support is weak/contradicting -- technicals alone aren't enough, watch for OI confirmation"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
   // Naresh urgency check: if this side's tier is STALE (sustained buying case but urgency has been fading across real scans), don't let a raw score alone call it STRONG — that's exactly the late-entry trap
   let naresStaleDowngrade=!1;
   if("STRONG"===C&&S.strikeFlags&&S.strikeFlags.length){
