@@ -1453,7 +1453,11 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
     addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%, skipped this cycle","warn");
     continue;
   }
-  if("AVOID"===g.verdict||"TRAP"===g.verdict)continue;
+  // Real fix (2026-08-26): per explicit user request, only STRONG/MODERATE verdicts
+  // ever reach the dashboard now -- WEAK is excluded outright regardless of score, not
+  // just AVOID/TRAP. Min Confidence slider decides the score floor; verdict tier decides
+  // final admission on top of that.
+  if("STRONG"!==g.verdict && "MODERATE"!==g.verdict)continue;
 var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorage.getItem("fxo_scan_cache_"+e);if(_rawCache){var _parsedCache=JSON.parse(_rawCache);if(_parsedCache&&_parsedCache.chain&&_parsedCache.chain.length&&isCacheFromToday(_parsedCache.ts))_cachedChain=_parsedCache.chain;}}catch(_ce){}
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
