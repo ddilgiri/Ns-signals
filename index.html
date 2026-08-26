@@ -1315,8 +1315,38 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // overlapping cycles at once (confirmed in production logs: duplicate OI fetches for the same
   // stock within seconds, not explained by the normal CE-then-PE pattern). This guard makes a
   // new cycle exit immediately if the previous one hasn't completed yet, instead of stacking.
-  if(S._scanInProgress){addLog("Scan cycle already running — skipping this tick to avoid overlap","warn");return;}
+  // Real fix (2026-08-24): the _scanInProgress guard had no failsafe -- if it ever got
+  // stuck true (a hung network call, an uncaught exception path the try/finally didn't
+  // cover), every future scan cycle would silently skip forever with just a warning log,
+  // producing exactly "zero signals no matter the slider" -- confirmed as the user's real
+  // symptom. Added a hard timeout: if the flag has been stuck true for over 60s (well
+  // beyond a normal ~25s cycle), force-clear it and let this cycle proceed instead of
+  // skipping again.
+  if(S._scanInProgress){
+    var stuckMs = S._scanInProgressSince ? (Date.now()-S._scanInProgressSince) : 0;
+    if(stuckMs > 60000){
+      addLog("⚠️ Scan guard stuck for "+Math.round(stuckMs/1000)+"s — force-clearing and resuming","warn");
+      S._scanInProgress=false;
+    } else {
+      addLog("Scan cycle already running — skipping this tick to avoid overlap","warn");
+      return;
+    }
+  }
   S._scanInProgress=true;
+  S._scanInProgressSince=Date.now();
+  // Real fix (2026-08-24): day-exclusion (window._avoidedToday) was PERMANENT for the
+  // rest of the session once a stock scored under the 35% floor -- even if its real
+  // score later genuinely crossed the slider, the scan would never re-check it, exactly
+  // matching the user's confirmed symptom of stocks staying invisible regardless of
+  // where the slider sits. Now decays: excluded stocks get a fresh look every 20 minutes
+  // of continuous scanning, instead of being locked out until the app is fully restarted.
+  if(!S._avoidedResetAt) S._avoidedResetAt=Date.now();
+  if(Date.now()-S._avoidedResetAt > 1200000){
+    var _clearedCount=Object.keys(window._avoidedToday||{}).length;
+    window._avoidedToday={};
+    S._avoidedResetAt=Date.now();
+    if(_clearedCount) addLog("🔄 Day-exclusion reset ("+_clearedCount+" stocks) — giving them a fresh look this cycle","");
+  }
   try{
   if(!getMarketStatus().nseOpen){clearInterval(S.scanInt);S.scanning=!1;document.getElementById("scanBtn").textContent="▶ SCAN";document.getElementById("scanBtn").className="scan-btn go";addLog("NSE closed — scanner stopped","warn");clearScanCache();return;}
   addLog("Scanning cycle...","");
