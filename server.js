@@ -1435,20 +1435,10 @@ app.post("/signal-analysis",async(e,t)=>{
   // in some other UI reading but never actually surface/auto-trade as a real signal. Now
   // aligned with the lowered slider: MODERATE starts at 45 (matching the slider), WEAK
   // at 30, STRONG kept at a genuinely high bar (75) so it still means high conviction.
-  // Real fix (2026-08-24): user's own Ramesh/Suresh/Mahesh manual check on UNITDSPR
-  // (CE score 66, MODERATE) found the OI side genuinely weak/contradicting -- put OI
-  // was UNWINDING (-35.63%, -4.27%) at the nearest strikes, not confirming a bullish
-  // CE read at all. Root cause: only 41 of 100 total points come from OI (oiMomentum 18
-  // + dilipOIFormula 23) -- the other 59 are technical indicators (RSI/MACD/Supertrend/
-  // VWAP/etc), so a stock can score MODERATE almost entirely on technicals with weak or
-  // even contradicting OI, misleadingly implying OI backing that isn't really there.
-  // Added an OI floor: MODERATE/STRONG now also require the combined OI component score
-  // to reach at least 40% of its own max (41*0.4=~16.4) -- if OI itself is too weak,
-  // the verdict is capped at WEAK regardless of how high technicals push the total.
-  const oiMax=(N.oiMomentum?.max||0)+(N.dilipOIFormula?.max||0);
-  const oiEarned=(N.oiMomentum?.earned||0)+(N.dilipOIFormula?.earned||0);
-  const oiFloorPass=oiMax>0?(oiEarned/oiMax)>=0.4:true;
-  let C,O;A?(C="BLOCKED",O=k):E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):E>=45&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):E>=75||E>=45?(C="WEAK",O="Score high but OI support is weak/contradicting -- technicals alone aren't enough, watch for OI confirmation"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
+  // Real fix (2026-08-26): per explicit user request, back to pure original V4 logic --
+  // verdict is purely score-based, no OI-floor requirement or any other extra gating.
+  // Score alone decides the tier; the Min Confidence slider alone decides visibility.
+  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=45?(C="MODERATE",O="Good setup — consider half position size"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
   // Naresh urgency check: if this side's tier is STALE (sustained buying case but urgency has been fading across real scans), don't let a raw score alone call it STRONG — that's exactly the late-entry trap
   let naresStaleDowngrade=!1;
   if("STRONG"===C&&S.strikeFlags&&S.strikeFlags.length){
