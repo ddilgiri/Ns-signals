@@ -1280,6 +1280,16 @@ async function bulkDownload(){
       pctEl.textContent=pct+"%";
       barEl.style.width=pct+"%";
       statusEl.textContent=passLabel+": "+stk.sym+" · "+done+"/"+total+(failedList.length?" ("+failedList.length+" failed so far)":"");
+      // Real fix (2026-08-25): user wants the big ring counter to show REAL stock progress
+      // (e.g. 25/212), not the pass number (1 of 3) -- previously this function never
+      // touched v8BaselineCountNow/v8BaselineCountTotal at all, only the text status below
+      // it updated with real per-stock progress, leaving the visually prominent number stuck.
+      var _ringCount=document.getElementById('v8BaselineCountNow');
+      if(_ringCount) _ringCount.textContent=done;
+      var _ringTotal=document.getElementById('v8BaselineCountTotal');
+      if(_ringTotal) _ringTotal.textContent='of '+total;
+      var _ringEl=document.getElementById('v8BaselineRing');
+      if(_ringEl){ var _circ=2*Math.PI*60; _ringEl.style.strokeDashoffset=String(_circ-(_circ*pct/100)); }
       if(etaEl)etaEl.textContent="~"+(etaS>60?Math.ceil(etaS/60)+"m":etaS+"s")+" remaining";
       var elapsed=Date.now()-callStart;
       if(elapsed<MIN_GAP_MS)await new Promise(function(res){setTimeout(res,MIN_GAP_MS-elapsed);});
