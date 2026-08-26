@@ -1336,45 +1336,14 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   }
   S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",window._avoidedToday={},addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(function(){window.runScan()},25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
-  // RE-ENTRY GUARD (2026-08-13): setInterval(runScan, 25000) fires on a fixed clock with no
-  // awareness of whether the previous 210-stock pass has actually finished. Candle 403/429
-  // retries (each adding a mandatory 2s wait) routinely push a full pass past 25s, so a second
-  // runScan() was starting mid-pass on top of the first -- same stocks getting scanned by two
-  // overlapping cycles at once (confirmed in production logs: duplicate OI fetches for the same
-  // stock within seconds, not explained by the normal CE-then-PE pattern). This guard makes a
-  // new cycle exit immediately if the previous one hasn't completed yet, instead of stacking.
-  // Real fix (2026-08-24): the _scanInProgress guard had no failsafe -- if it ever got
-  // stuck true (a hung network call, an uncaught exception path the try/finally didn't
-  // cover), every future scan cycle would silently skip forever with just a warning log,
-  // producing exactly "zero signals no matter the slider" -- confirmed as the user's real
-  // symptom. Added a hard timeout: if the flag has been stuck true for over 60s (well
-  // beyond a normal ~25s cycle), force-clear it and let this cycle proceed instead of
-  // skipping again.
-  if(S._scanInProgress){
-    var stuckMs = S._scanInProgressSince ? (Date.now()-S._scanInProgressSince) : 0;
-    if(stuckMs > 60000){
-      addLog("⚠️ Scan guard stuck for "+Math.round(stuckMs/1000)+"s — force-clearing and resuming","warn");
-      S._scanInProgress=false;
-    } else {
-      addLog("Scan cycle already running — skipping this tick to avoid overlap","warn");
-      return;
-    }
-  }
+  // Real fix (2026-08-26): per explicit user request, stripped back to the original V4
+  // logic exactly as designed -- runScan() every 25s, loop every F&O stock x CE/PE, score
+  // via /signal-analysis, OI via /oi-analysis, score>=slider and verdict not AVOID/TRAP ->
+  // pushed straight to S.signals -> dashboard. No day-exclusion, no guard timeout
+  // complexity, no extra gating -- just a plain overlap guard so two scans can't corrupt
+  // state by running at once.
+  if(S._scanInProgress){ return; }
   S._scanInProgress=true;
-  S._scanInProgressSince=Date.now();
-  // Real fix (2026-08-24): day-exclusion (window._avoidedToday) was PERMANENT for the
-  // rest of the session once a stock scored under the 35% floor -- even if its real
-  // score later genuinely crossed the slider, the scan would never re-check it, exactly
-  // matching the user's confirmed symptom of stocks staying invisible regardless of
-  // where the slider sits. Now decays: excluded stocks get a fresh look every 20 minutes
-  // of continuous scanning, instead of being locked out until the app is fully restarted.
-  if(!S._avoidedResetAt) S._avoidedResetAt=Date.now();
-  if(Date.now()-S._avoidedResetAt > 1200000){
-    var _clearedCount=Object.keys(window._avoidedToday||{}).length;
-    window._avoidedToday={};
-    S._avoidedResetAt=Date.now();
-    if(_clearedCount) addLog("🔄 Day-exclusion reset ("+_clearedCount+" stocks) — giving them a fresh look this cycle","");
-  }
   try{
   if(!getMarketStatus().nseOpen){clearInterval(S.scanInt);S.scanning=!1;document.getElementById("scanBtn").textContent="▶ SCAN";document.getElementById("scanBtn").className="scan-btn go";addLog("NSE closed — scanner stopped","warn");clearScanCache();return;}
   addLog("Scanning cycle...","");
@@ -1488,33 +1457,14 @@ async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanni
   // Real fix (2026-08-20): once a stock+side genuinely scores AVOID (<42%, covers user's
   // "under 40%" request) today, stop re-checking it for the rest of the trading day --
   // skip BEFORE the /signal-analysis call, saving a real API call each cycle, not just
-  // hiding it after the fact. Different from WEAK, which keeps re-scanning since WEAK can
-  // genuinely improve; AVOID here is a deliberate per-day exclusion the user asked for.
-  // Resets naturally on next login/day since window._avoidedToday is reset at scan start.
-  window._avoidedToday=window._avoidedToday||{};
-  var _avoidKey=e+"_"+v;
-  // Real fix: a stock with a genuine open trade must never be excluded from scanning
-  // regardless of score -- you're already holding it and need live pricing, verdict,
-  // and description text kept fresh, no matter how weak this scan's signal quality
-  // looks. Day-exclusion only applies to fresh discovery candidates you haven't acted on.
-  var _hasOpenTradeForThis = (typeof S!=='undefined' && S.paperTrades) ? S.paperTrades.some(function(pt){ return pt.sym===e && pt.type===v && pt.status==='OPEN'; }) : false;
-  // Day-exclusion threshold fixed at 35% per user decision 2026-08-24 -- decoupled from
-  // the Setup "Min Confidence %" slider (l), which the user may set higher (e.g. 60%) just
-  // for display filtering. 35% is a hardcoded floor: only genuinely weak scores get excluded
-  // for the rest of the day; everything 35%-and-up keeps scanning every cycle regardless of l.
-  var DAY_EXCLUDE_FLOOR=35;
-  if(window._avoidedToday[_avoidKey] && !_hasOpenTradeForThis){continue;}
+  // Real fix (2026-08-26): per explicit user request, back to pure original logic --
+  // no day-exclusion, every stock re-checked every cycle unconditionally.
   try{var m=await fetch(getServer()+"/signal-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbolToken:String(t),sym:e,exchange:"NSE",isIndex:n,spotPrice:s,type:v})}),g=await m.json();if(!g.status){addLog("No signal "+e+" "+v+": "+(g.message||""),"");continue}if(g.volRatio&&g.volRatio>=1.8){S.lastScanVolSpikes=S.lastScanVolSpikes||[];if(!S.lastScanVolSpikes.some(function(vs){return vs.sym===e;}))S.lastScanVolSpikes.push({sym:e,volRatio:g.volRatio});if(S.lastScanVolSpikes.length>30)S.lastScanVolSpikes.shift();}if(g.score>=50||g.hardBlock)addLog((g.hardBlock?"[TRAP]":g.score>=60?"[PASS]":"[NEAR]")+" "+e+" "+v+" "+g.score+"% "+g.verdict,g.score>=60?"ok":"");
-  // Day-exclusion threshold now tied directly to the Setup "Min Confidence %" slider
-  // (variable l, read above) instead of a separate hardcoded 48 -- per user decision:
-  // one number, one meaning. If the slider changes, both display filtering and scan
-  // exclusion move together automatically.
   if(g.score<l){
-    if(g.score<DAY_EXCLUDE_FLOOR && !_hasOpenTradeForThis){ window._avoidedToday[_avoidKey]=true; }
-    addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%"+(g.score<DAY_EXCLUDE_FLOOR&&!_hasOpenTradeForThis?", excluded from scanning for rest of today":", skipped this cycle"),"warn");
-    if(!_hasOpenTradeForThis) continue;
+    addLog("🚫 "+e+" "+v+" "+g.score+"% — under "+l+"%, skipped this cycle","warn");
+    continue;
   }
-  if(("AVOID"===g.verdict||"TRAP"===g.verdict) && !_hasOpenTradeForThis)continue;
+  if("AVOID"===g.verdict||"TRAP"===g.verdict)continue;
 var y=0,u=0,pPrevClose=0;try{var _cachedChain=null;try{var _rawCache=localStorage.getItem("fxo_scan_cache_"+e);if(_rawCache){var _parsedCache=JSON.parse(_rawCache);if(_parsedCache&&_parsedCache.chain&&_parsedCache.chain.length&&isCacheFromToday(_parsedCache.ts))_cachedChain=_parsedCache.chain;}}catch(_ce){}
 var I=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:e,spotPrice:s,clientPriorChain:_cachedChain})});if(!I.ok)throw new Error("bad response");var f=await I.json();if(f.status){
 try{if(f.chain&&f.chain.length)localStorage.setItem("fxo_scan_cache_"+e,JSON.stringify({ts:Date.now(),chain:f.chain.map(function(r){return{strike:r.strike,CE_oi:r.CE_oi,CE_ltp:r.CE_ltp,PE_oi:r.PE_oi,PE_ltp:r.PE_ltp};})}));}catch(_se){}
