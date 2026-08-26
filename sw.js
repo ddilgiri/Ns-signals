@@ -1,5 +1,5 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v133'; // bumped -- fno-v2 was left unchanged since Aug 12 despite dozens of real
+const CACHE = 'fno-v134'; // bumped -- fno-v2 was left unchanged since Aug 12 despite dozens of real
 // index.html fixes landing since (including the real login/splash wiring fix), causing the
 // same stale-cache trap documented in memory: phone kept serving old cached JS (mock forms,
 // dead functions) despite fresh reloads. Bump this on every future index.html change.
