@@ -3532,15 +3532,22 @@ var v8BaselineMaxAttempts=3;
 var v8BaselineTimer=null;
 var v8RingCircumference=377;
 
+// Real fix (2026-08-25): user reported the ring counter showing "mixed" numbers --
+// this whole function was a MOCK/DEMO baseline simulator (willFailThisAttempt deliberately
+// fakes failures on the first 2 attempts, entirely fabricated, unrelated to any real
+// download) that shared the SAME DOM elements (v8BaselineCountNow/Ring/PctStat) as the
+// real download (downloadPass() + v8WatchRealBaseline()), which now already updates
+// those elements correctly with genuine stock-by-stock progress. Having both write to
+// the same elements caused exactly the inconsistent/mixed display reported. This mock
+// function no longer touches the shared counter elements -- retry-tap still resets the
+// attempt state for its own separate simulated views, but the real number always comes
+// only from the real download path now.
 function v8StartBaselineDownload(isManualRetry){
   if(isManualRetry){ v8BaselineAttempt=0; }
   v8BaselineAttempt++;
   document.getElementById('v8BaselineErrorView').style.display='none';
   document.getElementById('v8BaselineProgressView').style.display='flex';
-  document.getElementById('v8BaselineCountNow').textContent='0';
-  document.getElementById('v8BaselineRing').style.strokeDashoffset=v8RingCircumference;
   document.getElementById('v8BaselineAttemptStat').textContent=v8BaselineAttempt;
-  document.getElementById('v8BaselinePctStat').textContent='0%';
   document.getElementById('v8BaselineTicker').innerHTML='';
   v8RunBaselineTick(0);
 }
@@ -3548,9 +3555,6 @@ function v8StartBaselineDownload(isManualRetry){
 function v8RunBaselineTick(count){
   var screenEl=document.getElementById('v8BaselineScreen');
   if(!screenEl || screenEl.style.display==='none') return;
-  // Real fix (2026-08-24): no hardcoded total anywhere -- derive it from the real F&O
-  // stock list length, whatever that actually is this session (209, 210, 207, etc.),
-  // instead of a fixed number that silently drifts from reality.
   var total=(typeof v8FnoStocks!=='undefined' && v8FnoStocks.length) ? v8FnoStocks.length : 0;
   var willFailThisAttempt=(v8BaselineAttempt<3);
   var failPoint=90;
@@ -3566,9 +3570,6 @@ function v8RunBaselineTick(count){
     return;
   }
   if(count>=total){
-    document.getElementById('v8BaselineCountNow').textContent=total;
-    document.getElementById('v8BaselinePctStat').textContent='100%';
-    document.getElementById('v8BaselineRing').style.strokeDashoffset='0';
     setTimeout(function(){
       screenEl.style.display='none';
       document.getElementById('v8DashboardScreen').style.display='block';
@@ -3580,9 +3581,6 @@ function v8RunBaselineTick(count){
     return;
   }
   var pct=Math.round((count/total)*100);
-  document.getElementById('v8BaselineCountNow').textContent=count;
-  document.getElementById('v8BaselinePctStat').textContent=pct+'%';
-  document.getElementById('v8BaselineRing').style.strokeDashoffset=String(v8RingCircumference-(v8RingCircumference*pct/100));
   var sym=v8FnoStocks[count % v8FnoStocks.length];
   document.getElementById('v8BaselineCurrentStock').textContent=sym;
   var ticker=document.getElementById('v8BaselineTicker');
