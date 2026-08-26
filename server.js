@@ -11,8 +11,8 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // requests arrived at once with a cold/stale cache. This lock ensures only one
 // download happens at a time — concurrent callers wait for the same in-flight request.
 let _instrLoadPromise = null;
-async function ensureInstruments(reason, forceRefresh) {
-  if (!forceRefresh && SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
+async function ensureInstruments(reason) {
+  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
@@ -20,7 +20,7 @@ async function ensureInstruments(reason, forceRefresh) {
   }
   _instrLoadPromise = (async () => {
     try {
-      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}${forceRefresh ? " (forced refresh)" : ""}...`, "INFO");
+      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
       const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:30000});
       SESSION._instruments = r.data;
       SESSION._instrFetchTime = Date.now();
@@ -125,13 +125,13 @@ function getExpiryWeekInfo(symbol){
     }
   } else {
     // BANKNIFTY, FINNIFTY, MIDCPNIFTY: monthly, current month till expiry day
-    // Stocks: monthly, but roll to NEXT month once dte<=2 (updated 2026-08-24 per explicit user request) -- matches getExpiryType logic below. Applies identically to Manual Check -- both paths call this same function via /oi-analysis, no separate logic exists.
+    // Stocks: monthly, but roll to NEXT month 5 days before expiry (matches getExpiryType logic)
     const curMonthLastTue=lastWeekdayOfMonth(2);
     const dteToCurMonth=Math.round((curMonthLastTue-now)/86400000);
     const INDICES_LIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
     const isIndexSym=INDICES_LIST.includes(sym);
-    if(!isIndexSym && dteToCurMonth<=2){
-      // Stock on or after the day before expiry — use NEXT month's last Tuesday instead
+    if(!isIndexSym && dteToCurMonth<=5){
+      // Stock within 5 days of expiry — use NEXT month's last Tuesday instead
       const nextMonthDate=new Date(year,month+1,1);
       const nm=nextMonthDate.getMonth(),ny=nextMonthDate.getFullYear();
       const lastDayNext=new Date(ny,nm+1,0);
@@ -399,18 +399,6 @@ function logSignal(sym,type,score,verdict,ltp,breakdown){
   return entry.id;
 }
 
-// Real store of every scanned stock's latest CE/PE score, regardless of whether it
-// qualified as a signal -- powers the Activity Log "All Stocks" tab with genuine live
-// data instead of hardcoded sample numbers. Kept in memory only, resets on server restart
-// (matches how SESSION.signals and other live-scan state already behave).
-const LATEST_SCORES={};
-function recordStockScore(sym,type,score,verdict){
-  if(!sym||!type)return;
-  const key=sym.toUpperCase();
-  if(!LATEST_SCORES[key])LATEST_SCORES[key]={};
-  LATEST_SCORES[key][type]={score:Math.round(score),verdict,ts:Date.now()};
-}
-
 const ANGEL_API="https://apiconnect.angelbroking.com";
 
 function generateTOTP(e){if(!e||e.trim().length<16)return"";try{const t=e.trim().replace(/\s+/g,"").toUpperCase();return speakeasy.totp({secret:t,encoding:"base32",digits:6,step:30,time:Math.floor(Date.now()/1e3)})}catch(e){return log(`TOTP generation failed: ${e.message}`,"WARN"),""}}
@@ -419,26 +407,7 @@ function getHeaders(e=!1){const t={"Content-Type":"application/json",Accept:"app
 let _lastRefreshAttempt=0,_refreshInProgress=!1;
 async function refreshToken(){if(!SESSION.refreshToken||!SESSION.apiKey||!SESSION.clientCode)return!1;const e=Date.now();if(_refreshInProgress)return!1;if(e-_lastRefreshAttempt<3e4)return log("Token refresh skipped — cooldown active","INFO"),!1;_refreshInProgress=!0,_lastRefreshAttempt=e;try{log("Refreshing expired Angel One token...","INFO");const e=await axios.post(`${ANGEL_API}/rest/auth/angelbroking/jwt/v1/generateTokens`,{refreshToken:SESSION.refreshToken},{headers:getHeaders(!1),timeout:15e3});return e.data?.status&&e.data?.data?.jwtToken?(SESSION.jwtToken=e.data.data.jwtToken,SESSION.refreshToken=e.data.data.refreshToken||SESSION.refreshToken,SESSION.expiresAt=Date.now()+288e5,log("Token refreshed successfully","OK"),_refreshInProgress=!1,!0):(_refreshInProgress=!1,!1)}catch(e){return log(`Token refresh failed: ${e.message}`,"WARN"),_refreshInProgress=!1,!1}}
 
-// GLOBAL ANGEL ONE REQUEST GATE — every angelRequest() call (quote, candle, OI, bias, option-chain,
-// option-ltp, live-trade-prices) funnels through this single choke point, so concurrent callers
-// (auto-scan + live-trade-price refresh + baseline download all running at once, as confirmed in
-// production logs showing bursts of 6 simultaneous 403s at 04:52:45 and 04:53:06) get serialized
-// with a shared minimum spacing instead of racing Angel One's rate limit independently. Previously
-// only /candles had its own throttle (_lastCandleCall, 600ms) — /quote and OI-batch calls had none,
-// which is exactly what produced the simultaneous-burst 403 pattern seen in the logs.
-let _angelGateChain=Promise.resolve();
-const ANGEL_MIN_GAP_MS=350;
-let _angelLastCall=0;
-function angelGate(){
-  const runNext=_angelGateChain.then(async()=>{
-    const wait=ANGEL_MIN_GAP_MS-(Date.now()-_angelLastCall);
-    if(wait>0)await new Promise(r=>setTimeout(r,wait));
-    _angelLastCall=Date.now();
-  });
-  _angelGateChain=runNext.catch(()=>{}); // never let one caller's rejection break the chain for the next
-  return runNext;
-}
-async function angelRequest(e,t,a,s={}){await angelGate();try{const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}catch(n){const o=n.response?.status;if(401===o&&SESSION.refreshToken){if(await refreshToken()){await angelGate();const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}}throw 403===o&&await new Promise(e=>setTimeout(e,2e3)),n}}
+async function angelRequest(e,t,a,s={}){try{const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}catch(n){const o=n.response?.status;if(401===o&&SESSION.refreshToken){if(await refreshToken()){const n={headers:getHeaders(!0),timeout:2e4,...s};return"GET"===e?await axios.get(t,n):await axios.post(t,a,n)}}throw 403===o&&await new Promise(e=>setTimeout(e,2e3)),n}}
 
 // ═══════════════════════════════════════════════════════
 // UPGRADE 5: NEW ROUTES
@@ -516,75 +485,15 @@ app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
 
 const BIAS_CACHE={},BIAS_TTL=3e5;
-const OI_CACHE={},OI_CACHE_TTL=15e3;
-// Minimum absolute OI (contracts) for a strike to be trusted as a real wall/floor signal.
-// A strike can look "STRONG" purely relative to a thin trading day's average OI (W) while
-// still being genuinely low-liquidity in absolute terms -- easy to move, easy to fake a
-// wall/floor read on. Below this floor, downgrade to THIN regardless of relative strength,
-// and exclude from WALL_CRACKING (a strike too thin to be a real wall can't meaningfully
-// "crack" either).
-// Relative liquidity gate: previously a flat 300000 for every stock, which is too LOW for heavy
-// names (RELIANCE, bank stocks routinely carry several times that at real walls -- thin strikes
-// could slip through unflagged) and too HIGH for lighter F&O names (which may never reach 3 lakh
-// at any strike even on an active day -- their genuinely strongest levels could get mislabeled
-// THIN). Fixed by scaling the threshold to each stock's own average per-strike OI (W, already
-// computed per-scan from that stock's own chain) instead of one number for all 209 stocks.
-// MIN_OI_ABS_FLOOR is a small absolute backstop so extremely illiquid stocks don't get a
-// near-zero threshold that lets through genuinely untradeable OI.
-const MIN_OI_REL_FRACTION=0.3,MIN_OI_ABS_FLOOR=50000;
-function minOiThreshold(avgOi){return Math.max(MIN_OI_ABS_FLOOR,MIN_OI_REL_FRACTION*(avgOi||0));}
 let _lastAngelCall=0;
-async function angelRateLimit(){const e=Date.now()-_lastAngelCall;e<700&&await new Promise(t=>setTimeout(t,700-e)),_lastAngelCall=Date.now()}
+async function angelRateLimit(){const e=Date.now()-_lastAngelCall;e<300&&await new Promise(t=>setTimeout(t,300-e)),_lastAngelCall=Date.now()}
 let _lastCandleCall=0;
-async function throttledCandleRequest(e,t){const a=Date.now()-_lastCandleCall;return a<900&&await new Promise(e=>setTimeout(e,900-a)),_lastCandleCall=Date.now(),angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e)}
+async function throttledCandleRequest(e,t){const a=Date.now()-_lastCandleCall;return a<600&&await new Promise(e=>setTimeout(e,600-a)),_lastCandleCall=Date.now(),angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e)}
 
 function calcEMA(e,t){if(e.length<t)return null;const a=2/(t+1);let s=e.slice(0,t).reduce((e,t)=>e+t,0)/t;for(let n=t;n<e.length;n++)s=e[n]*a+s*(1-a);return parseFloat(s.toFixed(2))}
 function calcRSI14(e){if(e.length<15)return 50;let t=0,a=0;for(let s=1;s<=14;s++){const n=e[s]-e[s-1];n>0?t+=n:a-=n}let s=t/14,n=a/14;for(let t=15;t<e.length;t++){const a=e[t]-e[t-1];s=(13*s+Math.max(a,0))/14,n=(13*n+Math.max(-a,0))/14}return 0===n?100:parseFloat((100-100/(1+s/n)).toFixed(2))}
 function calcMACD(e,t=12,a=26,s=9){if(e.length<a+s)return null;const n=[],o=[],r=2/(t+1),i=2/(a+1);let l=e.slice(0,t).reduce((e,t)=>e+t,0)/t;n.push(l);for(let a=t;a<e.length;a++)l=e[a]*r+l*(1-r),n.push(l);let c=e.slice(0,a).reduce((e,t)=>e+t,0)/a;o.push(c);for(let t=a;t<e.length;t++)c=e[t]*i+c*(1-i),o.push(c);const u=a-t,p=o.map((e,t)=>parseFloat((n[t+u]-e).toFixed(4)));if(p.length<s)return null;const d=2/(s+1);let g=p.slice(0,s).reduce((e,t)=>e+t,0)/s;const m=[g];for(let e=s;e<p.length;e++)g=p[e]*d+g*(1-d),m.push(g);const h=p[p.length-1],S=m[m.length-1],E=p[p.length-2],f=m[m.length-2],I=parseFloat((h-S).toFixed(4));let N="NONE";return void 0!==E&&void 0!==f&&(E<=f&&h>S?N="BULLISH":E>=f&&h<S&&(N="BEARISH")),{macdLine:parseFloat(h.toFixed(4)),signalLine:parseFloat(S.toFixed(4)),histogram:I,crossover:N,aboveSignal:h>S}}
 function calcATR(e,t=14){if(e.length<t+1)return null;const a=[];for(let t=1;t<e.length;t++){const s=parseFloat(e[t][2]),n=parseFloat(e[t][3]),o=parseFloat(e[t-1][4]);a.push(Math.max(s-n,Math.abs(s-o),Math.abs(n-o)))}let s=a.slice(0,t).reduce((e,t)=>e+t,0)/t;for(let e=t;e<a.length;e++)s=(s*(t-1)+a[e])/t;return parseFloat(s.toFixed(2))}
-
-// USER-PROVIDED, adapted to this app's candle format (Angel One rows: [ts,open,high,low,close,volume],
-// indices 2/3/4 = high/low/close) and to 15-min bars (this app's existing candle fetch interval --
-// deliberately reused rather than adding a separate 5-min fetch, to avoid more Angel One calls on
-// top of the rate-limiting work already done this session). Both operate on the full raw candle
-// array 'g' already fetched for EMA/RSI/MACD/Supertrend -- no new API calls needed.
-// Detects a move that already happened and has since gone flat -- the big OI+LTP move is behind us,
-// not ahead of us, so a Case2/6 read right now is describing exhaustion, not a fresh entry.
-function isMoveAlreadyStale(candles,lookback=6){
-  if(!candles||candles.length<2*lookback)return false;
-  // Real fix (2026-08-24, revised): user flagged the first version could un-stale on a
-  // single noisy candle -- not genuine. Tightened to require 2 CONSECUTIVE candles moving
-  // the SAME direction with real magnitude, not just one candle's range vs its predecessor.
-  // A single spike (bad tick, thin-liquidity wick) will not pass this; a real, sustained
-  // move -- like the confirmed live case where ADANIENT's LTP recovered 30.35->33 over
-  // several genuine up-candles -- will. Still checked before the slower 6-vs-6 historical
-  // comparison, so a real fresh move un-stales promptly instead of waiting on that average.
-  if(candles.length>=3){
-    const c1=candles[candles.length-3],c2=candles[candles.length-2],c3=candles[candles.length-1];
-    const close1=parseFloat(c1[4]),close2=parseFloat(c2[4]),close3=parseFloat(c3[4]);
-    const move1=close2-close1,move2=close3-close2;
-    const sameDirection=(move1>0&&move2>0)||(move1<0&&move2<0);
-    const avgPriorRange=(Math.abs(parseFloat(c1[2])-parseFloat(c1[3]))+Math.abs(parseFloat(c2[2])-parseFloat(c2[3])))/2;
-    const combinedMove=Math.abs(close3-close1);
-    if(sameDirection && avgPriorRange>0 && combinedMove>avgPriorRange*1.2) return false;
-  }
-  const recent=candles.slice(-lookback),prior=candles.slice(-2*lookback,-lookback);
-  const recentRange=Math.max(...recent.map(c=>parseFloat(c[2])))-Math.min(...recent.map(c=>parseFloat(c[3])));
-  const priorRange=Math.max(...prior.map(c=>parseFloat(c[2])))-Math.min(...prior.map(c=>parseFloat(c[3])));
-  return priorRange>recentRange*2;
-}
-// Detects a range-bound/chopping stock (low net-move efficiency vs total range) vs a genuinely
-// trending one -- a valid Case score on a chopping stock has much lower edge than the same Case
-// on a trending stock, and this wasn't previously distinguished.
-function isChoppy(candles,lookback=20){
-  if(!candles||candles.length<lookback)return false;
-  const slice=candles.slice(-lookback);
-  const totalRange=Math.max(...slice.map(c=>parseFloat(c[2])))-Math.min(...slice.map(c=>parseFloat(c[3])));
-  if(totalRange<=0)return false;
-  const netMove=Math.abs(parseFloat(slice[slice.length-1][4])-parseFloat(slice[0][4]));
-  const efficiency=netMove/totalRange;
-  return efficiency<0.35;
-}
 function calcSupertrend(e,t=10,a=3){if(e.length<t+2)return null;const s=e.map(e=>parseFloat(e[2])),n=e.map(e=>parseFloat(e[3])),o=e.map(e=>parseFloat(e[4])),r=[0];for(let t=1;t<e.length;t++)r.push(Math.max(s[t]-n[t],Math.abs(s[t]-o[t-1]),Math.abs(n[t]-o[t-1])));let i=r.slice(1,t+1).reduce((e,t)=>e+t,0)/t;const l=new Array(t+1).fill(0);l.push(i);for(let a=t+1;a<e.length;a++)i=(i*(t-1)+r[a])/t,l.push(i);const c=[],u=[];for(let t=0;t<e.length;t++){const e=(s[t]+n[t])/2;c.push(e+a*(l[t]||0)),u.push(e-a*(l[t]||0))}const p=[...c],d=[...u],g=new Array(e.length).fill(0),m=new Array(e.length).fill(1);for(let a=t+1;a<e.length;a++)p[a]=c[a]<p[a-1]||o[a-1]>p[a-1]?c[a]:p[a-1],d[a]=u[a]>d[a-1]||o[a-1]<d[a-1]?u[a]:d[a-1],g[a-1]===p[a-1]?g[a]=o[a]>p[a]?d[a]:p[a]:g[a]=o[a]<d[a]?p[a]:d[a],m[a]=o[a]>g[a]?1:-1;const h=e.length-1,S=m[h-1],E=m[h];let f="HOLD";return-1===S&&1===E&&(f="BUY"),1===S&&-1===E&&(f="SELL"),{supertrend:parseFloat(g[h].toFixed(2)),trend:1===E?"UP":"DOWN",signal:f}}
 function calcMaxPain(e){if(!e||0===e.length)return null;const t=e.map(e=>e.strike);let a=1/0,s=null;for(const n of t){let t=0;for(const a of e){t+=(a.CE_oi?Math.max(0,n-a.strike)*(a.CE_oi||0):0)+(a.PE_oi?Math.max(0,a.strike-n)*(a.PE_oi||0):0)}t<a&&(a=t,s=n)}return s}
 
@@ -600,14 +509,14 @@ app.post("/market-bias",async(e,t)=>{
   if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
   const n=BIAS_CACHE[a];
   if(n&&Date.now()-n.fetchTime<BIAS_TTL)return t.json(n.data);
-  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 4s then retrying (attempt 1)`,"WARN"),await new Promise(e=>setTimeout(e,4e3)),_lastCandleCall=Date.now();try{d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}catch(e2){const t2=e2.response?.status;if(403!==t2&&429!==t2)throw e2;log(`Candle 403/429 for ${a} — waiting 4s then retrying (attempt 2, final)`,"WARN"),await new Promise(e=>setTimeout(e,4e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g);
+  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g);
   const expiryInfo=getExpiryWeekInfo("");
   let B=0,j=0;k.forEach(e=>{const t=(parseFloat(e[2])+parseFloat(e[3])+parseFloat(e[4]))/3,a=parseFloat(e[5]);B+=t*a,j+=a});const H=j>0?parseFloat((B/j).toFixed(2)):null;
 // Volume+Price direction match
 const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseFloat(c[5]),0)/Math.max(recentCandles.length,1);const priceUp=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])>parseFloat(recentCandles[0][4]);const priceDown=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])<parseFloat(recentCandles[0][4]);const volMatch=L>=1.2&&((f==="BULLISH"&&priceUp)||(f==="BEARISH"&&priceDown));const volFake=L>=1.2&&((f==="BULLISH"&&priceDown)||(f==="BEARISH"&&priceUp));
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
-const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1,staleMove:isMoveAlreadyStale(g),chopRange:isChoppy(g)};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
+const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -665,8 +574,8 @@ function getExpiryType(e){
     }
     return"MONTHLY";
   }
-  // STOCKS only — switch to next month once dte<=2 (updated 2026-08-24 per explicit user request). Same function used for Manual Check, no separate path.
-  if(dte<=2){
+  // STOCKS only — switch to next month 5 days before expiry
+  if(dte<=5){
     log(`${t}: ${dte}d to expiry — stock switching to next month`,"INFO");
     return"NEXT_MONTH";
   }
@@ -674,381 +583,6 @@ function getExpiryType(e){
 }
 
 app.get("/india-vix",async(e,t)=>{if(VIX_CACHE.data&&Date.now()-VIX_CACHE.fetchTime<3e5)return t.json(VIX_CACHE.data);try{const e=await getNSECookie(),a={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",Accept:"application/json, text/plain, */*",Referer:"https://www.nseindia.com/",Origin:"https://www.nseindia.com","sec-ch-ua-platform":'"Windows"',"Sec-Fetch-Dest":"empty","Sec-Fetch-Mode":"cors","Sec-Fetch-Site":"same-origin"};e&&(a.Cookie=e);const s=await axios.get("https://www.nseindia.com/api/allIndices",{headers:a,timeout:12e3}),n=(s.data?.data||[]).find(e=>"INDIA VIX"===e.index);if(!n){const e=await axios.get("https://www.nseindia.com/api/quote-derivative?symbol=INDIAVIX",{headers:a,timeout:12e3}),s=e.data?.underlyingValue||null;if(s){const e=buildVixResult(parseFloat(s),null,null,null);return VIX_CACHE.data=e,VIX_CACHE.fetchTime=Date.now(),t.json(e)}return t.json({status:!1,message:"India VIX not found in NSE indices"})}const o=buildVixResult(parseFloat(n.last||0),parseFloat(n.change||0),parseFloat(n.percentChange||0),parseFloat(n.previousClose||0));VIX_CACHE.data=o,VIX_CACHE.fetchTime=Date.now(),log(`India VIX: ${o.vix} (${o.regime}) chg=${o.changePct}%`,"INFO"),t.json(o)}catch(e){if(log(`India VIX fetch failed: ${e.message}`,"WARN"),VIX_CACHE.data)return t.json({...VIX_CACHE.data,stale:!0});t.json({status:!0,vix:null,regime:"UNKNOWN",premiumBuyable:!0,message:"VIX unavailable"})}})
-
-// ===== Case-transition flag engine (additive, does not touch existing OI_HISTORY/getOITrend) =====
-const STRIKE_HISTORY={};
-const STRIKE_HISTORY_MAX=6;
-const STRIKE_HISTORY_FILE=path.join(__dirname,"strike_history.json");
-const STRIKE_FLAG_LOG=[];
-const STRIKE_FLAG_LOG_FILE=path.join(__dirname,"strike_flag_log.json");
-const STRIKE_FLAG_LOG_MAX=500;
-function loadStrikeHistory(){
-  try{
-    if(fs.existsSync(STRIKE_HISTORY_FILE)){
-      const raw=JSON.parse(fs.readFileSync(STRIKE_HISTORY_FILE,"utf8"));
-      const cutoff=Date.now()-4*60*60*1000;
-      Object.keys(raw).forEach(sym=>{
-        const fresh=(raw[sym]||[]).filter(s=>s.ts&&s.ts>cutoff);
-        if(fresh.length)STRIKE_HISTORY[sym]=fresh.slice(-STRIKE_HISTORY_MAX);
-      });
-      log(`Strike history loaded — ${Object.keys(STRIKE_HISTORY).length} symbols`,"OK");
-    }
-    if(fs.existsSync(STRIKE_FLAG_LOG_FILE)){
-      const rawLog=JSON.parse(fs.readFileSync(STRIKE_FLAG_LOG_FILE,"utf8"));
-      if(Array.isArray(rawLog))STRIKE_FLAG_LOG.push(...rawLog.slice(-STRIKE_FLAG_LOG_MAX));
-    }
-  }catch(e){log(`Strike history load failed: ${e.message}`,"WARN");}
-}
-function saveStrikeHistory(){
-  try{fs.writeFileSync(STRIKE_HISTORY_FILE,JSON.stringify(STRIKE_HISTORY),"utf8");}
-  catch(e){log(`Strike history save failed: ${e.message}`,"WARN");}
-}
-function saveStrikeFlagLog(){
-  try{fs.writeFileSync(STRIKE_FLAG_LOG_FILE,JSON.stringify(STRIKE_FLAG_LOG.slice(-STRIKE_FLAG_LOG_MAX)),"utf8");}
-  catch(e){log(`Strike flag log save failed: ${e.message}`,"WARN");}
-}
-loadStrikeHistory();
-
-// Classify one side (CE or PE) at one strike into Case 1-8, mirrors Ramesh/Suresh manual logic
-// Thresholds tuned for ~45s scan-to-scan comparison (much smaller moves than manual multi-minute checks)
-function classifyCase(oiChangePct,ltpChangePct){
-  if(oiChangePct==null||ltpChangePct==null)return null;
-  const oiUp=oiChangePct>0.5, oiDown=oiChangePct<-0.5;
-  const ltpUp=ltpChangePct>0.5, ltpDownSharp=ltpChangePct<-3, ltpDownMild=ltpChangePct<=-0.5&&ltpChangePct>=-3, ltpFlat=Math.abs(ltpChangePct)<=0.5;
-  if(oiUp&&ltpDownSharp)return 1;
-  if(oiUp&&ltpUp)return 6;
-  if(oiUp&&ltpDownMild)return 3;
-  if(oiUp&&ltpFlat)return 4;
-  if(oiDown&&ltpDownMild)return 5;
-  if(oiDown&&ltpFlat)return 7;
-  if(oiDown&&ltpUp)return 8;
-  return null;
-}
-
-function urgencyScore(oiChangePct,ltpChangePct){
-  if(oiChangePct==null||ltpChangePct==null)return 0;
-  const magnitude=Math.min(100,Math.abs(oiChangePct)*0.6+Math.abs(ltpChangePct)*0.8);
-  return Math.round(magnitude);
-}
-
-function pctChange(curr,prev){
-  if(prev==null||prev===0||curr==null)return null;
-  return ((curr-prev)/Math.abs(prev))*100;
-}
-
-// Compares current chain snapshot against the last stored one for this symbol, returns flags per strike
-function computeStrikeFlags(symbol,chain,confluence,atmStrike){
-  confluence=confluence||{};
-  const hasRsi=typeof confluence.rsi==="number";
-  const hasVwap=confluence.aboveVwap===true||confluence.aboveVwap===false;
-  // Strike-proximity weighting: count actual array position distance from ATM in the sorted chain
-  // (this respects each stock's own real strike gap — e.g. PAYTM's ₹20 gaps vs a ₹5-gap stock — since
-  // it's counting chain positions, not a fixed rupee distance)
-  const sortedStrikes=chain.map(r=>r.strike).slice().sort((a,b)=>a-b);
-  const atmIdx=atmStrike?sortedStrikes.reduce((best,s,idx)=>Math.abs(s-atmStrike)<Math.abs(sortedStrikes[best]-atmStrike)?idx:best,0):null;
-  function strikesAway(strike){
-    if(atmIdx==null)return null;
-    const idx=sortedStrikes.indexOf(strike);
-    return idx<0?null:Math.abs(idx-atmIdx);
-  }
-  function proximityWeight(strike){
-    const away=strikesAway(strike);
-    if(away==null)return"UNKNOWN";
-    if(away<=3)return"HIGH";      // 0-3 strikes from ATM — directly tradeable range, full relevance
-    if(away<=6)return"MEDIUM";    // 4-6 strikes — worth noting, secondary relevance
-    return"LOW";                 // far OTM — informational only, not actionable near-term
-  }
-  const now=Date.now();
-  const history=STRIKE_HISTORY[symbol]||[];
-  const prevSnap=history.length?history[history.length-1]:null;
-  const flags=[];
-  const currentByStrike={};
-
-  // Per-stock average OI (this chain's own scale), used to make the thin-strike gate relative
-  // to each stock instead of one flat number for all 209 -- see minOiThreshold() above.
-  const chainAvgOi=chain.length?(chain.reduce((s,r)=>s+(r.CE_oi||0)+(r.PE_oi||0),0))/(2*chain.length):0;
-  const chainMinOi=minOiThreshold(chainAvgOi);
-
-  chain.forEach(row=>{
-    const prevRow=prevSnap?(prevSnap.rows||[]).find(r=>r.strike===row.strike):null;
-    // Day-baseline fallback: on the true first scan for a strike (no prior in-app snapshot yet), derive
-    // oiPct/ltpPct from Angel One's own oiChange field (today's OI delta vs yesterday, already fetched
-    // live every scan) and prevClose, instead of returning null and showing zero flags until scan #2.
-    const ceOiBaseline=row.CE_oi&&row.CE_oiChange!=null&&(row.CE_oi-row.CE_oiChange)!==0?(row.CE_oiChange/(row.CE_oi-row.CE_oiChange))*100:null;
-    const peOiBaseline=row.PE_oi&&row.PE_oiChange!=null&&(row.PE_oi-row.PE_oiChange)!==0?(row.PE_oiChange/(row.PE_oi-row.PE_oiChange))*100:null;
-    const ceLtpBaseline=row.CE_ltp!=null&&row.CE_prevClose?pctChange(row.CE_ltp,row.CE_prevClose):null;
-    const peLtpBaseline=row.PE_ltp!=null&&row.PE_prevClose?pctChange(row.PE_ltp,row.PE_prevClose):null;
-    const usingBaseline=!prevRow;
-
-    const ceOiPct=prevRow?pctChange(row.CE_oi,prevRow.CE_oi):ceOiBaseline;
-    const ceLtpPct=prevRow&&prevRow.CE_ltp?pctChange(row.CE_ltp,prevRow.CE_ltp):ceLtpBaseline;
-    const peOiPct=prevRow?pctChange(row.PE_oi,prevRow.PE_oi):peOiBaseline;
-    const peLtpPct=prevRow&&prevRow.PE_ltp?pctChange(row.PE_ltp,prevRow.PE_ltp):peLtpBaseline;
-    const ceCase=classifyCase(ceOiPct,ceLtpPct);
-    const peCase=classifyCase(peOiPct,peLtpPct);
-    const ceUrgency=urgencyScore(ceOiPct,ceLtpPct);
-    const peUrgency=urgencyScore(peOiPct,peLtpPct);
-
-    currentByStrike[row.strike]={ceCase,peCase,ceUrgency,peUrgency};
-
-    const prevCe=prevRow?prevRow.ceCase:null;
-    const prevPe=prevRow?prevRow.peCase:null;
-    const prevCeUrgency=prevRow?prevRow.ceUrgency:null;
-    const prevPeUrgency=prevRow?prevRow.peUrgency:null;
-
-    const recentPeCases=history.slice(-2).map(h=>{const r=(h.rows||[]).find(rr=>rr.strike===row.strike);return r?r.peCase:null;}).concat([peCase]);
-    const recentCeCases=history.slice(-2).map(h=>{const r=(h.rows||[]).find(rr=>rr.strike===row.strike);return r?r.ceCase:null;}).concat([ceCase]);
-    const peFlipping=new Set(recentPeCases.filter(c=>c!=null)).size>=2 && recentPeCases.filter(c=>c!=null).length>=2 && recentPeCases.some((c,idx)=>idx>0&&c!==recentPeCases[idx-1]&&recentPeCases[idx-1]!=null);
-    const ceFlipping=new Set(recentCeCases.filter(c=>c!=null)).size>=2 && recentCeCases.filter(c=>c!=null).length>=2 && recentCeCases.some((c,idx)=>idx>0&&c!==recentCeCases[idx-1]&&recentCeCases[idx-1]!=null);
-
-    // UNWIND_RISK: OI rate-of-change negative (writers/holders actively covering) while LTP still trends the same
-    // direction as before — the move is continuing on momentum alone, not fresh position-building. Checked only
-    // when this side WAS the confirmed dominant/buying side last scan (a trade you'd already be trusting),
-    // and is now showing OI unwinding while price hasn't reversed yet — the early warning before Case flips to 8.
-    const peWasBuyingPrior=prevPe===6||prevPe===2;
-    const ceWasBuyingPrior=prevCe===6||prevCe===2;
-    const peUnwindRisk=peWasBuyingPrior&&peOiPct!=null&&peOiPct<0&&peLtpPct!=null&&peLtpPct>0;
-    const ceUnwindRisk=ceWasBuyingPrior&&ceOiPct!=null&&ceOiPct<0&&ceLtpPct!=null&&ceLtpPct>0;
-
-    const strikeFlags=[];
-    // Confluence note (PE=bearish direction check: RSI high/overbought + below VWAP agrees with fresh PE buying)
-    function confluenceNote(side){
-      if(!hasRsi&&!hasVwap)return"";
-      const bits=[];
-      if(hasRsi){
-        const rsiAgrees=side==="PE"?confluence.rsi>=55:confluence.rsi<=45;
-        bits.push(rsiAgrees?"RSI agrees":"RSI conflicts");
-      }
-      if(hasVwap){
-        const vwapAgrees=side==="PE"?confluence.aboveVwap===false:confluence.aboveVwap===true;
-        bits.push(vwapAgrees?"VWAP agrees":"VWAP conflicts");
-      }
-      return bits.length?" ("+bits.join(", ")+")":"";
-    }
-    if(peCase!=null){
-      const peBuying=peCase===6||peCase===2;
-      const peWasBuying=prevPe===6||prevPe===2;
-      const peSellingOrFading=peCase===8||peCase===5||peCase===7;
-      if(!peWasBuying&&peBuying)strikeFlags.push({side:"PE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`PE Case ${peCase} newly appearing${confluenceNote("PE")}`});
-      if(peWasBuying&&peSellingOrFading)strikeFlags.push({side:"PE",type:"WEAKENING",label:"⚠️ Weakening",detail:`PE Case ${prevPe}→${peCase} — buying conviction fading`});
-      if(peFlipping)strikeFlags.push({side:"PE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"PE case flipping across recent scans"});
-      if(peBuying&&peUrgency>=8){
-        if(peFlipping){
-          // Squeeze-vs-buildup distinction: urgency is a pure magnitude score (|OI%|*0.6 + |LTP%|*0.8)
-          // with no sense of WHY the move is large. A genuine squeeze (writers panic-covering) produces
-          // the exact same sharp OI/LTP spike as real fresh conviction -- the only tell is that the case
-          // itself has been flipping/unstable across recent scans rather than building steadily. Flag
-          // these separately so a spike on a choppy case reads as "likely to fade fast" rather than the
-          // same confidence as urgency built on a stable, already-confirmed case.
-          strikeFlags.push({side:"PE",type:"SQUEEZE_URGENCY",label:"🌪️ Squeeze Urgency — case unstable",detail:`PE urgency ${peUrgency} but case has been flipping — likely a short-covering spike, not steady conviction; treat as fast in/out only`});
-        }else{
-          strikeFlags.push({side:"PE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`PE urgency ${peUrgency}`});
-        }
-      }
-      if(peWasBuying&&peBuying&&prevPeUrgency!=null&&peUrgency<prevPeUrgency-3)strikeFlags.push({side:"PE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`PE urgency dropped ${prevPeUrgency}→${peUrgency}, case not yet flipped`});
-      if(peUnwindRisk)strikeFlags.push({side:"PE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`PE OI falling (${peOiPct.toFixed(1)}%) while LTP still rising (${peLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
-      // PSYCHOLOGY/DISCIPLINE LAYER: Exhaustion flag -- extreme one-sided OI crowding on an
-      // already-buying Case often precedes reversal rather than confirming more room to run.
-      // Additive only, does not change Case classification or any existing flag.
-      // FIXED (2026-08-08, real PGEL transcript): the actual PGEL loss showed a 22700%+ OI%
-      // reading on 660 PE that was mathematically meaningless -- it came from a near-zero prior
-      // base OI, not genuine crowding. A percentage alone cannot distinguish "real exhaustion"
-      // from "tiny base inflated the ratio." Now requires the PRIOR scan's base OI to already
-      // be above this stock's own relative liquidity floor (chainMinOi, same threshold used for
-      // THIN_SIGNAL) before the percentage is trusted at all -- genuine exhaustion needs real
-      // OI behind it, not just an extreme ratio.
-      {
-        const peBaseOi=prevRow?prevRow.PE_oi:null;
-        const peBaseIsReal=peBaseOi!=null&&peBaseOi>=chainMinOi;
-        if(peOiPct!=null&&peOiPct>300&&peBaseIsReal)strikeFlags.push({side:"PE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`PE OI change ${peOiPct.toFixed(0)}% off a real base of ${peBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
-        else if(peOiPct!=null&&peOiPct>300&&!peBaseIsReal)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI change ${peOiPct.toFixed(0)}% looks extreme but prior base was only ${(peBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
-      }
-      // OI VELOCITY CHECK (2026-08-08, user-described mechanism): distinguishes a sudden vertical
-      // OI spike in the most recent scan (retail/"dummy" momentum crowd piling in fast, likely to
-      // exit just as fast, leaving late entrants trapped) from steady multi-scan accumulation
-      // (real structural buying building gradually). Uses the last 3 stored scans (STRIKE_HISTORY
-      // already retains up to 6, only Case comparison used them before -- raw OI/LTP across scans
-      // sat unused). Additive only, separate flag from EXHAUSTION/SQUEEZE_URGENCY, does not modify
-      // either -- purely a new, independently-checkable warning.
-      if(history.length>=2){
-        const peHist=history.slice(-2).map(h=>(h.rows||[]).find(r=>r.strike===row.strike)?.PE_oi).filter(v=>v!=null);
-        peHist.push(row.PE_oi);
-        if(peHist.length===3&&peHist[0]>0){
-          const earlyMove=Math.abs((peHist[1]-peHist[0])/peHist[0]*100);
-          const lateMove=peHist[1]>0?Math.abs((peHist[2]-peHist[1])/peHist[1]*100):0;
-          if(lateMove>100&&earlyMove<lateMove*0.3){
-            strikeFlags.push({side:"PE",type:"OI_SPIKE",label:"📈 Sudden OI Spike",detail:`PE OI jumped ${lateMove.toFixed(0)}% just this scan after being flat — looks like fast momentum money piling in, not steady buildup; likely to exit just as fast`});
-          }
-        }
-      }
-    }
-    if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi>=chainMinOi)strikeFlags.push({side:"PE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`PE-side wall Case ${prevPe}→${peCase} — seller wall losing strength`});
-    else if((prevPe===1||prevPe===3)&&(peCase===4||peCase===3)&&row.PE_oi<chainMinOi)strikeFlags.push({side:"PE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`PE OI only ${row.PE_oi.toLocaleString("en-IN")} contracts (this stock's threshold: ${Math.round(chainMinOi).toLocaleString("en-IN")}) — too thin to trust as a real wall, excluded from Wall Cracking`});
-    if(ceCase!=null){
-      const ceBuying=ceCase===6||ceCase===2;
-      const ceWasBuying=prevCe===6||prevCe===2;
-      const ceSellingOrFading=ceCase===8||ceCase===5||ceCase===7;
-      if(!ceWasBuying&&ceBuying)strikeFlags.push({side:"CE",type:"FRESH_SIGNAL",label:"🔥 Fresh Signal",detail:`CE Case ${ceCase} newly appearing${confluenceNote("CE")}`});
-      if(ceWasBuying&&ceSellingOrFading)strikeFlags.push({side:"CE",type:"WEAKENING",label:"⚠️ Weakening",detail:`CE Case ${prevCe}→${ceCase} — buying conviction fading`});
-      if(ceFlipping)strikeFlags.push({side:"CE",type:"CHOP_WARNING",label:"🌀 Chop Warning",detail:"CE case flipping across recent scans"});
-      if(ceBuying&&ceUrgency>=8){
-        if(ceFlipping){
-          strikeFlags.push({side:"CE",type:"SQUEEZE_URGENCY",label:"🌪️ Squeeze Urgency — case unstable",detail:`CE urgency ${ceUrgency} but case has been flipping — likely a short-covering spike, not steady conviction; treat as fast in/out only`});
-        }else{
-          strikeFlags.push({side:"CE",type:"HIGH_URGENCY",label:"⚡ High Urgency",detail:`CE urgency ${ceUrgency}`});
-        }
-      }
-      if(ceWasBuying&&ceBuying&&prevCeUrgency!=null&&ceUrgency<prevCeUrgency-3)strikeFlags.push({side:"CE",type:"FADING_URGENCY",label:"🐌 Fading Urgency",detail:`CE urgency dropped ${prevCeUrgency}→${ceUrgency}, case not yet flipped`});
-      if(ceUnwindRisk)strikeFlags.push({side:"CE",type:"UNWIND_RISK",label:"🚨 Unwind Risk",detail:`CE OI falling (${ceOiPct.toFixed(1)}%) while LTP still rising (${ceLtpPct.toFixed(1)}%) — dominant side covering, reversal risk rising`});
-      {
-        const ceBaseOi=prevRow?prevRow.CE_oi:null;
-        const ceBaseIsReal=ceBaseOi!=null&&ceBaseOi>=chainMinOi;
-        if(ceOiPct!=null&&ceOiPct>300&&ceBaseIsReal)strikeFlags.push({side:"CE",type:"EXHAUSTION",label:"⚠️ Extreme — possible exhaustion",detail:`CE OI change ${ceOiPct.toFixed(0)}% off a real base of ${ceBaseOi.toLocaleString("en-IN")} — genuine crowding, watch for reversal risk`});
-        else if(ceOiPct!=null&&ceOiPct>300&&!ceBaseIsReal)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI change ${ceOiPct.toFixed(0)}% looks extreme but prior base was only ${(ceBaseOi||0).toLocaleString("en-IN")} contracts — percentage is distorted by a near-zero starting point, not real exhaustion`});
-      }
-      if(history.length>=2){
-        const ceHist=history.slice(-2).map(h=>(h.rows||[]).find(r=>r.strike===row.strike)?.CE_oi).filter(v=>v!=null);
-        ceHist.push(row.CE_oi);
-        if(ceHist.length===3&&ceHist[0]>0){
-          const earlyMove=Math.abs((ceHist[1]-ceHist[0])/ceHist[0]*100);
-          const lateMove=ceHist[1]>0?Math.abs((ceHist[2]-ceHist[1])/ceHist[1]*100):0;
-          if(lateMove>100&&earlyMove<lateMove*0.3){
-            strikeFlags.push({side:"CE",type:"OI_SPIKE",label:"📈 Sudden OI Spike",detail:`CE OI jumped ${lateMove.toFixed(0)}% just this scan after being flat — looks like fast momentum money piling in, not steady buildup; likely to exit just as fast`});
-          }
-        }
-      }
-    }
-    if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi>=chainMinOi)strikeFlags.push({side:"CE",type:"WALL_CRACKING",label:"🧱 Wall Cracking",detail:`CE Case 1→${ceCase} — seller wall losing strength`});
-    else if(prevCe===1&&(ceCase===3||ceCase===4)&&row.CE_oi<chainMinOi)strikeFlags.push({side:"CE",type:"THIN_SIGNAL",label:"🪶 Thin — low conviction",detail:`CE OI only ${row.CE_oi.toLocaleString("en-IN")} contracts (this stock's threshold: ${Math.round(chainMinOi).toLocaleString("en-IN")}) — too thin to trust as a real wall, excluded from Wall Cracking`});
-
-    // Confidence tier: CLEAR / MIXED / STALE — answers "how much should I trust this right now", not just "what case is it"
-    function computeTier(side,caseNow,urgencyNow,wasBuying,flipping,confirmedByMahesh){
-      const buyingNow=caseNow===6||caseNow===2;
-      if(!buyingNow)return null;
-      // STALE: this side has been in a buying case for 3+ consecutive snapshots with urgency trending down each time — the early move is over
-      const recentAll=history.map(h=>{
-        const r=(h.rows||[]).find(rr=>rr.strike===row.strike);
-        return r?{c:side==="PE"?r.peCase:r.ceCase,u:side==="PE"?r.peUrgency:r.ceUrgency}:null;
-      }).filter(x=>x&&x.c!=null);
-      const recent=recentAll.slice(-3);
-      const allBuying=recent.length>=3&&recent.every(x=>x.c===6||x.c===2);
-      // Strict monotonic deceleration: each successive urgency reading smaller than the one before it,
-      // not just first-vs-last — catches a fade-recover-fade pattern the old first-vs-last check missed
-      const urgencyDeclining=recent.length>=3&&recent.every((x,idx)=>idx===0||(x.u!=null&&recent[idx-1].u!=null&&x.u<recent[idx-1].u));
-      if(allBuying&&urgencyDeclining)return"STALE";
-      // MIXED: buying but internally contradicting itself — chop, or buying with negligible urgency (no real conviction behind it)
-      if(flipping)return"MIXED";
-      if(buyingNow&&urgencyNow<5)return"MIXED";
-      // CLEAR: buying, real urgency, no chop — best case, extra credibility if Mahesh also agrees
-      if(buyingNow&&urgencyNow>=8)return confirmedByMahesh?"CLEAR+":"CLEAR";
-      return"MIXED";
-    }
-
-    // Mahesh cross-check: does a PE-side bearish-supporting flag line up with a CE-side flag confirming the same direction, same strike, same scan?
-    const peBearishFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
-    const ceWeakFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
-    const ceBullishFlags=strikeFlags.filter(f=>f.side==="CE"&&(f.type==="FRESH_SIGNAL"||f.type==="HIGH_URGENCY"));
-    const peWeakFlags=strikeFlags.filter(f=>f.side==="PE"&&(f.type==="WEAKENING"||f.type==="WALL_CRACKING"));
-    const peMaheshOk=peBearishFlags.length&&ceWeakFlags.length;
-    const ceMaheshOk=ceBullishFlags.length&&peWeakFlags.length;
-    if(peMaheshOk){
-      strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`PE strength + CE weakness agree at ${row.strike} — bearish cross-check confirmed`});
-    }else if(ceMaheshOk){
-      strikeFlags.push({side:"BOTH",type:"MAHESH_CONFIRMED",label:"🤝 Mahesh Confirmed",detail:`CE strength + PE weakness agree at ${row.strike} — bullish cross-check confirmed`});
-    }
-
-    const peTier=computeTier("PE",peCase,peUrgency,prevPe===6||prevPe===2,peFlipping,!!peMaheshOk);
-    const ceTier=computeTier("CE",ceCase,ceUrgency,prevCe===6||prevCe===2,ceFlipping,!!ceMaheshOk);
-    const tierMeta={CLEAR:{label:"🟢 CLEAR",note:"fresh, confirmed, act on it"},"CLEAR+":{label:"🟢🤝 CLEAR+",note:"fresh, confirmed, Mahesh agrees — highest conviction"},MIXED:{label:"🟡 MIXED",note:"signal fighting itself — size down, tighter stop"},STALE:{label:"🔴 STALE",note:"move likely already happened — late entry risk"}};
-    if(peTier)strikeFlags.push({side:"PE",type:"TIER_"+peTier.replace("+",""),label:tierMeta[peTier].label,detail:`PE confidence: ${tierMeta[peTier].note}`});
-    if(ceTier)strikeFlags.push({side:"CE",type:"TIER_"+ceTier.replace("+",""),label:tierMeta[ceTier].label,detail:`CE confidence: ${tierMeta[ceTier].note}`});
-    // KEI 6000 CE pattern: a strong standalone CLEAR/CLEAR+ tier at a LOW-proximity (far-OTM) strike is
-    // genuine framework support — real fresh conviction, not a blind gamble — but it needs distinct
-    // distance-risk treatment given how far price still has to travel. Doesn't require same-strike Mahesh
-    // agreement, since the confirmed zone is often a different, closer strike (as it was for KEI: 5400).
-    const _weight=proximityWeight(row.strike);
-    const _awayNow=strikesAway(row.strike);
-    if(_weight==="LOW"){
-      if(peTier==="CLEAR"||peTier==="CLEAR+")strikeFlags.push({side:"PE",type:"FAR_OTM_SUPPORTED",label:"🎯 Far OTM — Supported",detail:`PE Case ${peCase} genuinely fresh at ${row.strike}, ${_awayNow} strikes from spot — real setup, not a gamble, but needs tighter partial-profit discipline given the distance`});
-      if(ceTier==="CLEAR"||ceTier==="CLEAR+")strikeFlags.push({side:"CE",type:"FAR_OTM_SUPPORTED",label:"🎯 Far OTM — Supported",detail:`CE Case ${ceCase} genuinely fresh at ${row.strike}, ${_awayNow} strikes from spot — real setup, not a gamble, but needs tighter partial-profit discipline given the distance`});
-    }
-
-    // RANGE_LOCK (2026-08-08): Call Case1 (seller wall holding) + Put Case5 (seller wall holding)
-    // at the SAME strike simultaneously means sellers are winning on BOTH sides -- price is pinned
-    // in range, not breaking either way. Distinct from the existing Mahesh conflict/wait rule
-    // (which checks Case2 vs Case6 disagreement, i.e. both sides showing BUYING conviction that
-    // contradicts each other) -- this is the opposite scenario, both sides showing SELLING/wall
-    // conviction that reinforces a stuck range. Same tier as Squeeze/Exhaustion/Thin -- suppresses
-    // signal generation, wired into scoreSignal()'s hard-block check alongside those three.
-    if(ceCase===1&&peCase===5){
-      strikeFlags.push({side:"CE",type:"RANGE_LOCK",label:"🔒 Range Lock",detail:`Call wall (Case 1) and Put wall (Case 5) both holding at ${row.strike} — sellers winning both sides, market pinned in range`});
-      strikeFlags.push({side:"PE",type:"RANGE_LOCK",label:"🔒 Range Lock",detail:`Call wall (Case 1) and Put wall (Case 5) both holding at ${row.strike} — sellers winning both sides, market pinned in range`});
-    }
-    if(strikeFlags.length){
-      const weight=proximityWeight(row.strike);
-      const away=strikesAway(row.strike);
-      strikeFlags.forEach(f=>{f.proximity=weight;f.strikesAway=away;f.usingBaseline=usingBaseline;if(usingBaseline)f.detail+=" [day-baseline, first scan]";});
-      flags.push({strike:row.strike,proximity:weight,strikesAway:away,usingBaseline,flags:strikeFlags});
-      strikeFlags.forEach(f=>{
-        STRIKE_FLAG_LOG.push({ts:now,symbol,strike:row.strike,side:f.side,type:f.type,label:f.label,detail:f.detail,proximity:weight,strikesAway:away,usingBaseline,outcome:null});
-      });
-    }
-  });
-
-  // PSYCHOLOGY/DISCIPLINE LAYER: Strike-rank check -- when multiple strikes in the same chain
-  // show a buying Case (2 or 6) on the same side, rank them by LTP% momentum so the strongest
-  // is clearly distinguished from weaker/laggard strikes on the same side, instead of every
-  // Case-2/6 strike looking equally actionable. Additive only -- does not change any Case
-  // classification or existing flag; UI can dim/de-emphasize rank > 2 per the original spec.
-  ["PE","CE"].forEach(side=>{
-    const candidates=[];
-    flags.forEach(entry=>{
-      const sideFlags=(entry.flags||[]).filter(f=>f.side===side);
-      const hasBuyingCase=currentByStrike[entry.strike]&&(side==="PE"?currentByStrike[entry.strike].peCase:currentByStrike[entry.strike].ceCase);
-      const caseVal=side==="PE"?currentByStrike[entry.strike]?.peCase:currentByStrike[entry.strike]?.ceCase;
-      if(caseVal===2||caseVal===6){
-        const row=chain.find(r=>r.strike===entry.strike);
-        const ltpPct=row?(side==="PE"?pctChange(row.PE_ltp,(STRIKE_HISTORY[symbol]||[]).slice(-1)[0]?.rows?.find(rr=>rr.strike===entry.strike)?.PE_ltp||row.PE_ltp):pctChange(row.CE_ltp,(STRIKE_HISTORY[symbol]||[]).slice(-1)[0]?.rows?.find(rr=>rr.strike===entry.strike)?.CE_ltp||row.CE_ltp)):0;
-        candidates.push({entry,ltpPct:ltpPct||0});
-      }
-    });
-    candidates.sort((a,b)=>b.ltpPct-a.ltpPct);
-    candidates.forEach((c,i)=>{
-      c.entry.flags.forEach(f=>{if(f.side===side)f.strikeRank=i+1;});
-    });
-  });
-
-  if(!STRIKE_HISTORY[symbol])STRIKE_HISTORY[symbol]=[];
-  STRIKE_HISTORY[symbol].push({
-    ts:now,
-    rows:chain.map(row=>({strike:row.strike,CE_oi:row.CE_oi,CE_ltp:row.CE_ltp,PE_oi:row.PE_oi,PE_ltp:row.PE_ltp,ceCase:currentByStrike[row.strike]?.ceCase??null,peCase:currentByStrike[row.strike]?.peCase??null,ceUrgency:currentByStrike[row.strike]?.ceUrgency??null,peUrgency:currentByStrike[row.strike]?.peUrgency??null}))
-  });
-  if(STRIKE_HISTORY[symbol].length>STRIKE_HISTORY_MAX)STRIKE_HISTORY[symbol].shift();
-  saveStrikeHistory();
-  if(flags.length)saveStrikeFlagLog();
-
-  return flags;
-}
-
-app.post("/flag-outcome",(req,res)=>{
-  const{symbol:sym,strike:strk,type:typ,ts:tsVal,outcome:out}=req.body;
-  if(!sym||!strk||!typ||!tsVal||!out)return res.status(400).json({status:false,message:"symbol, strike, type, ts, outcome required"});
-  const entry=STRIKE_FLAG_LOG.find(f=>f.symbol===sym&&f.strike===strk&&f.type===typ&&f.ts===tsVal);
-  if(!entry)return res.status(404).json({status:false,message:"Flag entry not found"});
-  entry.outcome=out;
-  saveStrikeFlagLog();
-  log(`Flag outcome tagged: ${sym} ${strk} ${typ} = ${out}`,"INFO");
-  res.json({status:true,message:"Outcome saved"});
-});
-
-app.get("/flag-log",(req,res)=>{
-  const{symbol:sym,limit:lim}=req.query;
-  let entries=STRIKE_FLAG_LOG;
-  if(sym)entries=entries.filter(f=>f.symbol===String(sym).toUpperCase());
-  const n=lim?parseInt(lim):100;
-  res.json({status:true,count:entries.length,entries:entries.slice(-n).reverse()});
-});
-// ===== End Case-transition flag engine =====
 
 app.post("/oi-analysis",async(e,t)=>{
   if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
@@ -1058,19 +592,9 @@ app.post("/oi-analysis",async(e,t)=>{
     log(`OI analysis blocked — market ${ms.code}`,"WARN");
     return t.status(400).json({status:!1,message:`Market is ${ms.label} — OI data will be stale. Scan only between 9:15 AM and 3:30 PM IST.`,marketStatus:ms});
   }
-  const{symbol:a,spotPrice:s,expiry:n,rsi:rsiVal,aboveVwap:aboveVwapVal,clientPriorChain}=e.body;
+  const{symbol:a,spotPrice:s,expiry:n}=e.body;
   if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});
   const o=n||getExpiryType(a);
-  // Real fix: OI chain data is identical regardless of which side (CE/PE) is being scored,
-  // but scanSymbol() calls /signal-analysis once per side, each independently re-fetching
-  // this same data -- confirmed real, measurable duplication. Short-lived cache (15s, well
-  // under the 25s scan-cycle interval and the CE-then-PE gap within one stock's scan) lets
-  // the second call reuse the first's real result instead of hitting Angel One again.
-  const _oiCacheKey=a.toUpperCase()+"|"+o;
-  const _oiCached=OI_CACHE[_oiCacheKey];
-  if(_oiCached && Date.now()-_oiCached.fetchTime<OI_CACHE_TTL){
-    return t.json(_oiCached.data);
-  }
   try{await ensureInstruments("OI analysis");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=new Date(e);return isNaN(o)?null:o}// Use 3:30 PM IST as expiry cutoff (not midnight) so today's contracts included until close
 const _expiryEnd=new Date(c);_expiryEnd.setHours(15,30,0,0);
 const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tEnd=new Date(t);_tEnd.setHours(15,30,0,0);if(_tEnd<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(!p.length)return t.json({status:!1,message:`No NFO options for ${i}`});const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);let g;if("MONTHLY"===o){
@@ -1078,16 +602,7 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
   g=(he[he.length-1]||d[0])?.raw;
 }else if("NEXT_MONTH"===o){
   const Se=(c.getMonth()+1)%12,Ee=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),fe=d.filter(e=>e.date.getMonth()===Se&&e.date.getFullYear()===Ee);
-  // Real fix (2026-08-24): previously silently fell back to d[1]/d[0] -- the NEAREST
-  // (often current-month) expiry -- if next month's contracts weren't listed yet by
-  // Angel One. That meant a genuine data gap could serve the WRONG (old) month with
-  // zero error surfaced, exactly the bug the user hit on rollover day for INFY. Now:
-  // if next month truly has no listed contracts, fail loudly instead of guessing.
-  if(!fe.length){
-    log(`NEXT_MONTH requested for ${i} but no ${Se+1}/${Ee} contracts found in instrument master -- refusing to silently fall back to current month`,"ERROR");
-    return t.json({status:!1,message:`Next month's option chain for ${i} is not yet available from the exchange. Try again shortly.`});
-  }
-  g=fe[fe.length-1].raw;
+  g=(fe[fe.length-1]||d[1]||d[0])?.raw;
   log(`NEXT_MONTH expiry selected: ${g}`,"INFO");
 }else if("NIFTY_NEXT_WEEKLY"===o){
   // Next Tuesday's contract — skip today's expiry, take next available Tuesday
@@ -1105,24 +620,11 @@ const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.ins
   log(`NIFTY_WEEKLY expiry selected: ${g}`,"INFO");
 }else{
   g="NEXT"===o?(d[1]||d[0])?.raw:d[0]?.raw;
-}if(!g)return t.json({status:!1,message:"No valid expiry"});const m=p.filter(e=>e.expiry===g),h=[...new Set(m.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t),S=h.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,h[0]),E=h.indexOf(S),f=10,I=h.slice(Math.max(0,E-f),E+f+1),N=[],A={};for(const Ie of I){const Ne=100*Ie,Ae=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("CE")),ke=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("PE"));Ae[0]?.token&&(N.push(String(Ae[0].token)),A[String(Ae[0].token)]={strike:Ie,type:"CE"}),ke[0]?.token&&(N.push(String(ke[0].token)),A[String(ke[0].token)]={strike:Ie,type:"PE"})}const k={},C=50;for(let Ce=0;Ce<N.length;Ce+=C){const Oe=N.slice(Ce,Ce+C);try{const Te=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{NFO:Oe}});Te.data.status&&Te.data.data?.fetched&&Te.data.data.fetched.forEach(e=>{const t=A[String(e.symbolToken)];t&&(k[t.strike]||(k[t.strike]={}),k[t.strike][t.type]={ltp:parseFloat(e.ltp||e.close||0),oi:parseInt(e.opnInterest||e.openInterest||e.oi||0),oiChange:parseInt(e.netChangeOI||e.netChange||e.oiChange||0),volume:parseInt(e.tradeVolume||e.volume||0),prevClose:parseFloat(e.close||e.previousClose||0)})})}catch(ye){log(`OI batch fetch error: ${ye.message}`,"WARN")}}
+}if(!g)return t.json({status:!1,message:"No valid expiry"});const m=p.filter(e=>e.expiry===g),h=[...new Set(m.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t),S=h.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,h[0]),E=h.indexOf(S),f=10,I=h.slice(Math.max(0,E-f),E+f+1),N=[],A={};for(const Ie of I){const Ne=100*Ie,Ae=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("CE")),ke=m.filter(e=>Math.round(parseFloat(e.strike))===Ne&&e.symbol?.toUpperCase().endsWith("PE"));Ae[0]?.token&&(N.push(String(Ae[0].token)),A[String(Ae[0].token)]={strike:Ie,type:"CE"}),ke[0]?.token&&(N.push(String(ke[0].token)),A[String(ke[0].token)]={strike:Ie,type:"PE"})}const k={},C=50;for(let Ce=0;Ce<N.length;Ce+=C){const Oe=N.slice(Ce,Ce+C);try{const Te=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{NFO:Oe}},{headers:getHeaders(!0),timeout:2e4});Te.data.status&&Te.data.data?.fetched&&Te.data.data.fetched.forEach(e=>{const t=A[String(e.symbolToken)];t&&(k[t.strike]||(k[t.strike]={}),k[t.strike][t.type]={ltp:parseFloat(e.ltp||e.close||0),oi:parseInt(e.opnInterest||e.openInterest||e.oi||0),oiChange:parseInt(e.netChangeOI||e.netChange||e.oiChange||0),volume:parseInt(e.tradeVolume||e.volume||0),prevClose:parseFloat(e.close||e.previousClose||0)})})}catch(ye){log(`OI batch fetch error: ${ye.message}`,"WARN")}}
   const exInfo=getExpiryWeekInfo(i);
   const thMul=exInfo.thresholdMultiplier;
-  const O=I.map(e=>({strike:e,isATM:e===S,CE_ltp:k[e]?.CE?.ltp??null,CE_oi:k[e]?.CE?.oi??0,CE_oiChange:k[e]?.CE?.oiChange??0,CE_vol:k[e]?.CE?.volume??0,CE_prevClose:k[e]?.CE?.prevClose??null,PE_ltp:k[e]?.PE?.ltp??null,PE_oi:k[e]?.PE?.oi??0,PE_oiChange:k[e]?.PE?.oiChange??0,PE_vol:k[e]?.PE?.volume??0,PE_prevClose:k[e]?.PE?.prevClose??null,ceCase:classifyCase(k[e]?.CE?.oiChange??null,k[e]?.CE?.ltp&&k[e]?.CE?.prevClose?((k[e].CE.ltp-k[e].CE.prevClose)/k[e].CE.prevClose*100):null),peCase:classifyCase(k[e]?.PE?.oiChange??null,k[e]?.PE?.ltp&&k[e]?.PE?.prevClose?((k[e].PE.ltp-k[e].PE.prevClose)/k[e].PE.prevClose*100):null)})),T=O.reduce((e,t)=>e+(t.CE_oi||0),0),y=O.reduce((e,t)=>e+(t.PE_oi||0),0),w=T>0?parseFloat((y/T).toFixed(3)):null,b=null===w?"NEUTRAL":w>1.3?"BULLISH":w<.7?"BEARISH":"NEUTRAL",_=calcMaxPain(O),F=O.length>1?Math.abs(O[1].strike-O[0].strike):5,R=O.filter(e=>e.strike>S),x=O.filter(e=>e.strike<S),P=O.find(e=>e.strike===S)||{},L=R.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi),D=L[0]||null,$=R.reduce((e,t)=>e+(t.CE_oi||0),0),M=x.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi),U=M[0]||null,v=x.reduce((e,t)=>e+(t.PE_oi||0),0),B=x.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),j=B>.3*$,H=R.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),V=H>.3*v,W=(T+y)/(2*O.length||1),G=D&&D.oi>1.5*W*thMul,X=U&&U.oi>1.5*W*thMul,K=!D||D.oi<.7*W*thMul,Y=!U||U.oi<.7*W*thMul;let q="NEUTRAL",J="";G&&Y?(q="PE",J=`High CE ceiling (${D?.oi?.toLocaleString("en-IN")}) + weak PE floor = price free to fall`):X&&K?(q="CE",J=`High PE floor (${U?.oi?.toLocaleString("en-IN")}) + weak CE ceiling = price free to rise`):G&&X?(q="AVOID",J="Both sides strong = price trapped = avoid"):(q="NEUTRAL",J="No clear OI dominance");const Z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.PE_oiChange||0),0)/4,z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.CE_oiChange||0),0)/4,Q=Z>50&&"BEARISH"!==b,ee=z>50&&"BULLISH"!==b,te=(()=>{const e=z>5,t="BULLISH"===b;return e&&!t?{signal:"SHORT_BUILDUP",action:"BUY_PE",note:"Ramesh adding ceiling — bearish"}:e&&t?{signal:"LONG_BUILDUP",action:"CAUTION",note:"Both adding — uncertain"}:e||t?!e&&t?{signal:"SHORT_COVERING",action:"BUY_CE",note:"Ramesh RUNNING — buy CE fast!"}:{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Ramesh booking profit"}})(),ae=(()=>{const e=Z>5,t="BEARISH"===b;return e&&t?{signal:"LONG_BUILDUP",action:"BUY_CE",note:"Suresh adding floor — bullish"}:e&&!t?{signal:"PUT_TRAP",action:"AVOID_PE",note:"⚠️ PUT TRAP! Suresh collecting premium!"}:!e&&t?{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Suresh booking profit"}:e||t?{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"PUT_COVERING",action:"BUY_PE",note:"Suresh RUNNING — buy PE fast!"}})();let se="NEUTRAL",ne=0,oe=[];"CE"===q?(ne+=40,se="CE",oe.push(`Formula: ${J}`)):"PE"===q?(ne+=40,se="PE",oe.push(`Formula: ${J}`)):"AVOID"===q&&oe.push("Formula: Both trapped — avoid"),("BUY_CE"===te.action&&"PE"!==se||"BUY_PE"===te.action&&"CE"!==se)&&(ne+=20,oe.push(`CE: ${te.note}`)),("BUY_CE"===ae.action&&"CE"===se||"BUY_PE"===ae.action&&"PE"===se)&&(ne+=20,oe.push(`PE: ${ae.note}`)),"PE"===se&&Q&&(ne-=30,oe.push("⚠️ PUT TRAP risk detected!")),"CE"===se&&ee&&(ne-=30,oe.push("⚠️ CALL TRAP risk detected!")),"CE"===se&&j&&(ne+=20,oe.push("Ramesh trapped below = short covering likely")),"PE"===se&&V&&(ne+=20,oe.push("Suresh trapped above = put covering likely"));
-// MARICO-pattern Mahesh bonus: checks near-spot strikes (within 2 gaps) for genuine two-sided price
-// conviction -- Call OI up + Call LTP falling (writers winning) on one side, Put OI up + Put LTP rising
-// (buyers winning) on the other, at the SAME zone. This can fire even when the OI-magnitude Formula
-// above lands NEUTRAL/AVOID, since that check only measures dominance size, not whether both sides are
-// showing real opposing price conviction near spot -- which is the stronger, more actionable pattern.
-const nearStrikes=O.filter(e=>Math.abs(e.strike-S)<=2*F);
-const ceWeakening=nearStrikes.filter(e=>(e.CE_oiChange||0)>20&&e.CE_prevClose&&e.CE_ltp&&e.CE_ltp<e.CE_prevClose*0.9).length;
-const peStrengthening=nearStrikes.filter(e=>(e.PE_oiChange||0)>20&&e.PE_prevClose&&e.PE_ltp&&e.PE_ltp>e.PE_prevClose*1.05).length;
-const peWeakening=nearStrikes.filter(e=>(e.PE_oiChange||0)>20&&e.PE_prevClose&&e.PE_ltp&&e.PE_ltp<e.PE_prevClose*0.9).length;
-const ceStrengthening=nearStrikes.filter(e=>(e.CE_oiChange||0)>20&&e.CE_prevClose&&e.CE_ltp&&e.CE_ltp>e.CE_prevClose*1.05).length;
-if("PE"===se&&ceWeakening>=2&&peStrengthening>=1){ne+=15;oe.push(`Mahesh: Call wall weakening (${ceWeakening} strikes) + Put floor building (${peStrengthening} strikes) near spot — cross-confirmed`);}
-else if("CE"===se&&peWeakening>=2&&ceStrengthening>=1){ne+=15;oe.push(`Mahesh: Put floor weakening (${peWeakening} strikes) + Call wall building (${ceStrengthening} strikes) near spot — cross-confirmed`);}
-ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expiry week (${exInfo.daysToNSEExpiry}d left) — OI thresholds tighter, gamma elevated`);}
-  const re=ne>=70?"STRONG":ne>=50?"MODERATE":ne>=30?"WEAK":"AVOID",ie=R.filter(e=>e.CE_oi>0).sort((e,t)=>e.strike-t.strike)[0]?.strike||null,le=x.filter(e=>e.PE_oi>0).sort((e,t)=>t.strike-e.strike)[0]?.strike||null,ceMinOi=minOiThreshold(W),ce=L.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi<ceMinOi?"THIN":e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),ue=M.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi<ceMinOi?"THIN":e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),pe=O.map(e=>({strike:e.strike,pcr:e.CE_oi>0?parseFloat((e.PE_oi/e.CE_oi).toFixed(2)):null,CE_oi:e.CE_oi,PE_oi:e.PE_oi,CE_change:e.CE_oiChange,PE_change:e.PE_oiChange,position:e.strike>S?"ABOVE":e.strike<S?"BELOW":"ATM",rameshStrength:e.CE_oi<ceMinOi?"THIN":e.CE_oi>1.5*W?"STRONG":e.CE_oi>.7*W?"MEDIUM":"WEAK",sureshStrength:e.PE_oi<ceMinOi?"THIN":e.PE_oi>1.5*W?"STRONG":e.PE_oi>.7*W?"MEDIUM":"WEAK"}));
+  const O=I.map(e=>({strike:e,isATM:e===S,CE_ltp:k[e]?.CE?.ltp??null,CE_oi:k[e]?.CE?.oi??0,CE_oiChange:k[e]?.CE?.oiChange??0,CE_vol:k[e]?.CE?.volume??0,CE_prevClose:k[e]?.CE?.prevClose??null,PE_ltp:k[e]?.PE?.ltp??null,PE_oi:k[e]?.PE?.oi??0,PE_oiChange:k[e]?.PE?.oiChange??0,PE_vol:k[e]?.PE?.volume??0,PE_prevClose:k[e]?.PE?.prevClose??null})),T=O.reduce((e,t)=>e+(t.CE_oi||0),0),y=O.reduce((e,t)=>e+(t.PE_oi||0),0),w=T>0?parseFloat((y/T).toFixed(3)):null,b=null===w?"NEUTRAL":w>1.3?"BULLISH":w<.7?"BEARISH":"NEUTRAL",_=calcMaxPain(O),F=O.length>1?Math.abs(O[1].strike-O[0].strike):5,R=O.filter(e=>e.strike>S),x=O.filter(e=>e.strike<S),P=O.find(e=>e.strike===S)||{},L=R.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi),D=L[0]||null,$=R.reduce((e,t)=>e+(t.CE_oi||0),0),M=x.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi),U=M[0]||null,v=x.reduce((e,t)=>e+(t.PE_oi||0),0),B=x.map(e=>({strike:e.strike,oi:e.CE_oi,change:e.CE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),j=B>.3*$,H=R.map(e=>({strike:e.strike,oi:e.PE_oi,change:e.PE_oiChange})).sort((e,t)=>t.oi-e.oi).reduce((e,t)=>e+(t.oi||0),0),V=H>.3*v,W=(T+y)/(2*O.length||1),G=D&&D.oi>1.5*W*thMul,X=U&&U.oi>1.5*W*thMul,K=!D||D.oi<.7*W*thMul,Y=!U||U.oi<.7*W*thMul;let q="NEUTRAL",J="";G&&Y?(q="PE",J=`High CE ceiling (${D?.oi?.toLocaleString("en-IN")}) + weak PE floor = price free to fall`):X&&K?(q="CE",J=`High PE floor (${U?.oi?.toLocaleString("en-IN")}) + weak CE ceiling = price free to rise`):G&&X?(q="AVOID",J="Both sides strong = price trapped = avoid"):(q="NEUTRAL",J="No clear OI dominance");const Z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.PE_oiChange||0),0)/4,z=O.filter(e=>e.strike>=S-2*F&&e.strike<=S+2*F).reduce((e,t)=>e+(t.CE_oiChange||0),0)/4,Q=Z>50&&"BEARISH"!==b,ee=z>50&&"BULLISH"!==b,te=(()=>{const e=z>5,t="BULLISH"===b;return e&&!t?{signal:"SHORT_BUILDUP",action:"BUY_PE",note:"Ramesh adding ceiling — bearish"}:e&&t?{signal:"LONG_BUILDUP",action:"CAUTION",note:"Both adding — uncertain"}:e||t?!e&&t?{signal:"SHORT_COVERING",action:"BUY_CE",note:"Ramesh RUNNING — buy CE fast!"}:{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Ramesh booking profit"}})(),ae=(()=>{const e=Z>5,t="BEARISH"===b;return e&&t?{signal:"LONG_BUILDUP",action:"BUY_CE",note:"Suresh adding floor — bullish"}:e&&!t?{signal:"PUT_TRAP",action:"AVOID_PE",note:"⚠️ PUT TRAP! Suresh collecting premium!"}:!e&&t?{signal:"LONG_UNWINDING",action:"HOLD_CE",note:"Suresh booking profit"}:e||t?{signal:"NEUTRAL",action:"WAIT",note:"No clear signal"}:{signal:"PUT_COVERING",action:"BUY_PE",note:"Suresh RUNNING — buy PE fast!"}})();let se="NEUTRAL",ne=0,oe=[];"CE"===q?(ne+=40,se="CE",oe.push(`Formula: ${J}`)):"PE"===q?(ne+=40,se="PE",oe.push(`Formula: ${J}`)):"AVOID"===q&&oe.push("Formula: Both trapped — avoid"),("BUY_CE"===te.action&&"PE"!==se||"BUY_PE"===te.action&&"CE"!==se)&&(ne+=20,oe.push(`CE: ${te.note}`)),("BUY_CE"===ae.action&&"CE"===se||"BUY_PE"===ae.action&&"PE"===se)&&(ne+=20,oe.push(`PE: ${ae.note}`)),"PE"===se&&Q&&(ne-=30,oe.push("⚠️ PUT TRAP risk detected!")),"CE"===se&&ee&&(ne-=30,oe.push("⚠️ CALL TRAP risk detected!")),"CE"===se&&j&&(ne+=20,oe.push("Ramesh trapped below = short covering likely")),"PE"===se&&V&&(ne+=20,oe.push("Suresh trapped above = put covering likely")),ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expiry week (${exInfo.daysToNSEExpiry}d left) — OI thresholds tighter, gamma elevated`);}
+  const re=ne>=70?"STRONG":ne>=50?"MODERATE":ne>=30?"WEAK":"AVOID",ie=R.filter(e=>e.CE_oi>0).sort((e,t)=>e.strike-t.strike)[0]?.strike||null,le=x.filter(e=>e.PE_oi>0).sort((e,t)=>t.strike-e.strike)[0]?.strike||null,ce=L.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),ue=M.slice(0,3).map(e=>({strike:e.strike,oi:e.oi,oiChange:e.change,strength:e.oi>2*W?"STRONG":e.oi>W?"MEDIUM":"WEAK"})),pe=O.map(e=>({strike:e.strike,pcr:e.CE_oi>0?parseFloat((e.PE_oi/e.CE_oi).toFixed(2)):null,CE_oi:e.CE_oi,PE_oi:e.PE_oi,CE_change:e.CE_oiChange,PE_change:e.PE_oiChange,position:e.strike>S?"ABOVE":e.strike<S?"BELOW":"ATM",rameshStrength:e.CE_oi>1.5*W?"STRONG":e.CE_oi>.7*W?"MEDIUM":"WEAK",sureshStrength:e.PE_oi>1.5*W?"STRONG":e.PE_oi>.7*W?"MEDIUM":"WEAK"}));
   // Detect gamma blast
   const exInfoForGamma=getExpiryWeekInfo(i);
   // Pass real VIX from cache if available
@@ -1130,7 +632,6 @@ ne=Math.max(0,Math.min(100,ne));if(exInfo.isNSEExpiryWeek){oe.push(`⚠️ Expir
   const _isIndexSym=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"].includes(i);
 const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,totalCeOI:T,totalPeOI:y},exInfoForGamma,_vixForGamma,_isIndexSym);
   const oiResult={status:!0,symbol:i,expiry:g,atmStrike:S,spotPrice:l,pcr:w,pcrBias:b,maxPain:_,totalCeOI:T,totalPeOI:y,chain:O,nearMaxPain:!!_&&Math.abs(l-_)/l<.01,nearSupport:!!le&&Math.abs(l-le)/l<.005,nearResistance:!!ie&&Math.abs(l-ie)/l<.005,supportStrike:le,resistStrike:ie,ceWalls:ce,peFloors:ue,rameshTrapped:j,sureshTrapped:V,rameshTrappedOI:B,sureshTrappedOI:H,dilipFormula:q,dilipFormulaNote:J,ceSignal:te,peSignal:ae,putTrapRisk:Q,callTrapRisk:ee,oiRecommendation:se,oiScore:ne,oiVerdict:re,oiNotes:oe,strikePCR:pe,atmCeOI:P.CE_oi||0,atmPeOI:P.PE_oi||0,atmPCR:P.CE_oi>0?parseFloat((P.PE_oi/P.CE_oi).toFixed(2)):null,oiBattleBias:"CE"===se?"BULLISH":"PE"===se?"BEARISH":"NEUTRAL",oiBattleSummary:oe,expiryWeek:exInfo.isNSEExpiryWeek,daysToExpiry:exInfo.daysToNSEExpiry,gammaWarning:exInfo.gammaWarning,gammaBlast:gbResult};
-  OI_CACHE[_oiCacheKey]={data:oiResult,fetchTime:Date.now()};
   // Save OI snapshot for trend tracking
   // Mahesh confirmation: OI direction + LTP direction at Ramesh wall / Suresh floor
   try{
@@ -1152,60 +653,11 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   }catch(maheshErr){ log(`Mahesh check skipped: ${maheshErr.message}`,"WARN"); }
 
   saveOISnapshot(i, oiResult);
-
-  // Case-transition flags (additive) — isolated so any failure here never breaks the main scan
-  try{
-    // If the server has no memory of this symbol (fresh restart/redeploy wiped STRIKE_HISTORY) but the
-    // client sent its own last-known scan (browser-cached, survives server restarts), seed history from
-    // that instead of falling back to day-baseline — bridges exactly the Render free-tier disk-wipe gap.
-    if((!STRIKE_HISTORY[i]||!STRIKE_HISTORY[i].length)&&clientPriorChain&&Array.isArray(clientPriorChain)&&clientPriorChain.length){
-      const seedRows=clientPriorChain.filter(r=>r&&typeof r.strike==="number").map(r=>({strike:r.strike,CE_oi:r.CE_oi??0,CE_ltp:r.CE_ltp??null,PE_oi:r.PE_oi??0,PE_ltp:r.PE_ltp??null,ceCase:null,peCase:null,ceUrgency:null,peUrgency:null}));
-      if(seedRows.length){
-        STRIKE_HISTORY[i]=[{ts:Date.now()-6e4,rows:seedRows}];
-        log(`Seeded ${i} history from client cache — ${seedRows.length} strikes (server memory was empty)`,"INFO");
-      }
-    }
-    oiResult.strikeFlags=computeStrikeFlags(i,O,{rsi:rsiVal,aboveVwap:aboveVwapVal},S);
-  }catch(flagErr){
-    log(`Strike flag computation skipped: ${flagErr.message}`,"WARN");
-    oiResult.strikeFlags=[];
-  }
-
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
-// gammaBlast removed from stock scoring per user request (2026-08-08) -- it's an index/expiry-week
-// specific setup, not meaningful for general individual-stock signal scoring. Weight set to 0
-// rather than deleting the block, so gammaBlast data can still be computed/displayed elsewhere
-// without contributing to the score or shifting MAX_SCORE's meaning for any other component.
-const SIGNAL_WEIGHTS={marketBias:15,supertrend:8,rsi:8,macd:4,aboveVwap:8,orbBreakout:6,volumeConfirm:10,newsSentiment:0,geoRisk:0,oiMomentum:18,gammaBlast:0,dilipOIFormula:23},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
-function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);
-  // REMOVED PER EXPLICIT USER DECISION (2026-08-13): the squeeze/exhaustion/thin 2-of-3 hard
-  // block and the RANGE_LOCK standalone block (both originally added 2026-08-08 after the PGEL
-  // loss) were found by the user to be contributing to a broader "no signals appearing" problem.
-  // After discussion of alternatives (require 3-of-3, or convert to a score penalty instead of a
-  // full block), user explicitly chose full removal of this gate. SQUEEZE_URGENCY, EXHAUSTION,
-  // THIN_SIGNAL, and RANGE_LOCK flags themselves are UNCHANGED and still compute/display normally
-  // on cards (still visible in strikeFlags) -- only their consequence of blocking scoreSignal()
-  // outright has been removed. STALE_MOVE and CHOP_RANGE (added same day as this gate, but not
-  // targeted by this request) are untouched below.
-  // STALE_MOVE (2026-08-08, hard-block REMOVED 2026-08-20 per user decision): originally blocked
-  // scoreSignal() outright when staleMove was true and the Case read as fresh buying, on the theory
-  // that a Case2/6 read after the big move already happened was exhaustion, not fresh entry. User
-  // flagged the real problem with this: a stock that looks "stale" by this narrow 2-window candle-
-  // range check can still turn into a genuinely good signal shortly after -- the hard block was
-  // silently preventing the scan from ever surfacing it at all, same failure mode as the earlier
-  // Squeeze/Exhaustion/Thin/RANGE_LOCK removal above. staleMove is still computed on every scan and
-  // still shown on cards (via strikeFlags / the STALE tier badge in the UI) so the information isn't
-  // lost -- it just no longer prevents the signal from being generated and scored.
-  // (Block intentionally removed -- do not re-add without a fresh explicit decision.)
-  // CHOP_RANGE (2026-08-08): a chopping/range-bound stock (low net-move efficiency vs total range
-  // over the last ~20 candles) has much lower edge than the same Case score on a genuinely
-  // trending stock. Per user spec: "reduce confidence / suggest skip even if Case is valid" --
-  // implemented as a moderate score penalty rather than a full hard block, since a valid Case can
-  // still occasionally break out of a chop zone; a full block would be too aggressive here.
-  let chopPenalty=0,chopNote="";
-  if(!n&&e.chopRange){chopPenalty=0.15;chopNote=" Stock has been choppy/range-bound over recent candles (low trend efficiency) -- confidence reduced, consider skipping even though the Case itself qualifies.";}{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
 const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
 const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
 const orbNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
@@ -1236,7 +688,26 @@ else{
   n=Math.min(Math.max(Math.round(base+dirBonus+dryPenalty+oiVolBonus),0),t);
   o=baseNote+dirNote+dryNote+oiVolNote;
   s.volumeConfirm={earned:n,max:t,pass:n>=t*0.4,note:o};
-}}{const t=SIGNAL_WEIGHTS.newsSentiment,n=e.newsSentimentScore||50;let o=0,r="";a?n>=60?(o=t,r=`News bullish (${n}%) ✓`):n>=40?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bearish (${n}%)`):n<=40?(o=t,r=`News bearish (${n}%) ✓`):n<=60?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bullish (${n}%)`),s.newsSentiment={earned:o,max:t,pass:o>=.5*t,note:r}}{const t=SIGNAL_WEIGHTS.geoRisk,a=e.newsGeoRisk||0;let n=0,o="";0===a?(n=t,o="No geopolitical risk ✓"):a<=3?(n=.7*t,o=`Low geo risk (${a})`):a<=6?(n=.3*t,o=`Moderate geo risk (${a})`):(n=0,o=`High geo risk (${a}) — caution`),s.geoRisk={earned:n,max:t,pass:a<=6,note:o}}
+}}{const t=SIGNAL_WEIGHTS.instFlow;let n=0,o="";a?"BULLISH"===e.instBias?(n=t,o=`FII/DII bullish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bearish ₹${e.fiiNet}Cr`):"BEARISH"===e.instBias?(n=t,o=`FII/DII bearish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bullish ₹${e.fiiNet}Cr`),s.instFlow={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.pcrBias;if(e.pcr){let n=0,o="";a?"BULLISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bullish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bearish`):"BEARISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bearish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bullish`),s.pcrBias={earned:n,max:t,pass:n>=.5*t,note:o}}else s.pcrBias={earned:.5*t,max:t,pass:null,note:"PCR unavailable"}}{const t=SIGNAL_WEIGHTS.vixRegime,a=e.vixRegime||"UNKNOWN",n=e.vixValue;let o=0,r="";"VERY_LOW"===a?(o=t,r=`VIX ${n} — very low, cheap options ✓✓`):"LOW"===a?(o=t,r=`VIX ${n} — low, good conditions ✓`):"NORMAL"===a?(o=.7*t,r=`VIX ${n} — normal`):"ELEVATED"===a?(o=.4*t,r=`VIX ${n} — elevated, options pricey`):"HIGH"===a?(o=.1*t,r=`VIX ${n} — high, reduce size`):"EXTREME"===a?(o=0,r=`VIX ${n} — extreme, hard block`):(o=.5*t,r="VIX unknown — neutral"),s.vixRegime={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.newsSentiment,n=e.newsSentimentScore||50;let o=0,r="";a?n>=60?(o=t,r=`News bullish (${n}%) ✓`):n>=40?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bearish (${n}%)`):n<=40?(o=t,r=`News bearish (${n}%) ✓`):n<=60?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bullish (${n}%)`),s.newsSentiment={earned:o,max:t,pass:o>=.5*t,note:r}}{const t=SIGNAL_WEIGHTS.geoRisk,a=e.newsGeoRisk||0;let n=0,o="";0===a?(n=t,o="No geopolitical risk ✓"):a<=3?(n=.7*t,o=`Low geo risk (${a})`):a<=6?(n=.3*t,o=`Moderate geo risk (${a})`):(n=0,o=`High geo risk (${a}) — caution`),s.geoRisk={earned:n,max:t,pass:a<=6,note:o}}{
+// EXPIRY RISK scoring (replaces old expiryDay)
+const t=SIGNAL_WEIGHTS.expiryRisk;
+let exEarned=t,exNote="";
+const dte=e.daysToExpiry;
+// Use OI-analysis daysToExpiry (which reflects actual contract being scanned — next month on expiry day)
+// NOT isExpiryDay which always refers to current month expiry
+// dte = days to expiry of the CONTRACT being scanned
+// >5 = safe (normal trading), 1-5 = expiry week (caution), <=0 = expiry day (avoid)
+const tradingCurrentExpiry = typeof dte==="number" && dte <= 0;
+const inExpiryWeek = typeof dte==="number" && dte > 0 && dte <= 5;
+const safeContract = typeof dte!=="number" || dte > 5;
+if(tradingCurrentExpiry){
+  exEarned=0;exNote="⚠️ Expiry day contract — avoid, switch to next";
+} else if(inExpiryWeek){
+  exEarned=Math.round(t*0.3);exNote=`⚠️ Expiry week (${dte}d left) — gamma elevated, reduce size`;
+} else {
+  exEarned=t;exNote=`Safe contract (${typeof dte==="number"?dte+"d":"?"} to expiry) ✓`;
+}
+s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};}
 // ── ATM DISTANCE scoring (bonus factor, not in weights — adjusts score quality)
 // Adds up to 5 bonus points if spot is close to strike (ATM signal = higher probability)
 {const spotPrice=e.ltp||0;const strikePrice=e.atmStrike||e.strike||0;
@@ -1295,9 +766,35 @@ omNote+=` (${oiH.snapCount} snaps, ${oiH.firstSnap}→${oiH.lastSnap}${velNote})
 }
 s.oiMomentum={earned:omEarned,max:t,pass:omEarned>=t*0.5,note:omNote};
 }{
+// PCR DELTA SCORING — sudden PCR shift between scans
+// Uses oiTrendData.history PCR values (already available)
+const PCR_DELTA_MAX=SIGNAL_WEIGHTS.pcrDelta||8;
+let pcrDeltaEarned=0,pcrDeltaNote="No PCR history — neutral";
+try{
+  const hist=e.oiTrendData?.history;
+  if(hist&&hist.length>=2){
+    const latestPCR=hist[hist.length-1]?.pcr||0;
+    const prevPCR=hist[hist.length-2]?.pcr||0;
+    if(prevPCR>0){
+      const pcrShift=((latestPCR-prevPCR)/prevPCR)*100; // % change
+      if(a){// CE signal — rising PCR = Suresh arriving = bullish
+        if(pcrShift>=20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR spike +${pcrShift.toFixed(1)}% — Suresh army arriving ✓✓`;}
+        else if(pcrShift>=10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift ✓`;}
+        else if(pcrShift<=-15){pcrDeltaEarned=0;pcrDeltaNote=`PCR dropping ${pcrShift.toFixed(1)}% — bearish shift, CE caution`;}
+        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
+      }else{// PE signal — falling PCR = Ramesh arriving = bearish
+        if(pcrShift<=-20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR drop ${pcrShift.toFixed(1)}% — Ramesh army arriving ✓✓`;}
+        else if(pcrShift<=-10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR falling ${pcrShift.toFixed(1)}% — bearish shift ✓`;}
+        else if(pcrShift>=15){pcrDeltaEarned=0;pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift, PE caution`;}
+        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
+      }
+    }
+  }
+}catch(pcrErr){}
+s.pcrDelta={earned:pcrDeltaEarned,max:PCR_DELTA_MAX,pass:pcrDeltaEarned>=PCR_DELTA_MAX*0.4,note:pcrDeltaNote};
 }{
 // GAMMA BLAST scoring
-const t=SIGNAL_WEIGHTS.gammaBlast||0;
+const t=SIGNAL_WEIGHTS.gammaBlast||15;
 const gb=e.gammaBlast||null;
 if(!gb||!gb.isGammaBlast){
   // Not a gamma blast setup — neutral score
@@ -1407,11 +904,7 @@ if(oiWrongDir){
   const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
   if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
 }
-if(chopPenalty>0&&!n){
-  finalScore=Math.round(finalScore*(1-chopPenalty));
-  o=o?o+chopNote:chopNote.trim();
-}
-return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o,chopPenaltyApplied:chopPenalty>0}}
+return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
 app.post("/signal-analysis",async(e,t)=>{
   if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
@@ -1423,141 +916,108 @@ app.post("/signal-analysis",async(e,t)=>{
   const{symbolToken:a,sym:s,exchange:n="NSE",isIndex:o=!1,spotPrice:r,type:i}=e.body;
   try{const[e,o,l,c,u]=await Promise.allSettled([axios.post(`http://localhost:${PORT}/market-bias`,{symbolToken:a,exchange:n},{headers:{"Content-Type":"application/json"}}),Promise.resolve({data:FII_DII_CACHE.data||{instBias:"NEUTRAL",fiiNet:0,diiNet:0,fiiBuy:0,fiiSell:0,diiBuy:0,diiSell:0}}),
     Promise.resolve({data:VIX_CACHE.data||{vix:null,regime:"UNKNOWN",premiumBuyable:true,guidance:""}}),
-    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bias:p.bias||"NEUTRAL",staleMove:p.staleMove||!1,chopRange:p.chopRange||!1,ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],strikeFlags:h?.strikeFlags||[],expiry:h?.expiry||null};
+    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[]};
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
-  // Real fix (2026-08-24): user lowered the dashboard's Min Confidence slider to 45%,
-  // but this verdict tier system was a completely separate, hardcoded scale (STRONG>=75,
-  // MODERATE>=60, WEAK>=42) -- meaning a stock scoring 45-59% was labeled WEAK here, and
-  // since auto-trade only fires on STRONG/MODERATE verdicts, it could show as "moderate"
-  // in some other UI reading but never actually surface/auto-trade as a real signal. Now
-  // aligned with the lowered slider: MODERATE starts at 45 (matching the slider), WEAK
-  // at 30, STRONG kept at a genuinely high bar (75) so it still means high conviction.
-  // Real fix (2026-08-26): per explicit user request, back to pure original V4 logic --
-  // verdict is purely score-based, no OI-floor requirement or any other extra gating.
-  // Score alone decides the tier; the Min Confidence slider alone decides visibility.
-  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=45?(C="MODERATE",O="Good setup — consider half position size"):E>=30?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
-  // Naresh urgency check: if this side's tier is STALE (sustained buying case but urgency has been fading across real scans), don't let a raw score alone call it STRONG — that's exactly the late-entry trap
-  let naresStaleDowngrade=!1;
-  if("STRONG"===C&&S.strikeFlags&&S.strikeFlags.length){
-    const relevantTiers=S.strikeFlags.flatMap(sf=>sf.flags).filter(fl=>fl.side===i&&fl.type&&fl.type.indexOf("TIER_")===0&&fl.proximity==="HIGH");
-    if(relevantTiers.some(fl=>fl.type==="TIER_STALE")){
-      C="MODERATE";
-      O="High score, but Naresh urgency has faded (STALE) — likely late entry, sized down to MODERATE";
-      naresStaleDowngrade=!0;
-      log(`Naresh: ${s} ${i} downgraded STRONG→MODERATE — urgency faded (STALE)`,"WARN");
-    }
-  }let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
+  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=60?(C="MODERATE",O="Good setup — consider half position size"):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
-  recordStockScore(s,i,E,C);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
-  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,naresStaleDowngrade,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
+  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
 const MCX_SYMBOLS=["GOLD","SILVER","CRUDEOIL","NATURALGAS","COPPER","ALUMINIUM","ZINC","LEAD","NICKEL"];
 async function getMCXTokens(){try{await ensureInstruments("MCX tokens");}catch(e){return log("Instrument master download failed: "+e.message,"WARN"),{}}const e=new Date,t={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function a(e){if(!e)return null;const a=String(e).trim().toUpperCase(),s=a.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(s){const e=t[s[2]];if(void 0!==e)return new Date(+s[3],e,+s[1])}const n=a.match(/^(\d{4})(\d{2})(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=a.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(o)return new Date(+o[1],+o[2]-1,+o[3]);const r=new Date(e);return isNaN(r)?null:r}const s={};for(const t of MCX_SYMBOLS){const n=SESSION._instruments.filter(s=>{if("MCX"!==s.exch_seg)return!1;if(!s.name||s.name.toUpperCase()!==t)return!1;if("FUTCOM"!==s.instrumenttype)return!1;const n=a(s.expiry);return n&&n>=e}).sort((e,t)=>a(e.expiry)-a(t.expiry));n.length>0&&(s[t]=n[0].token,log(`MCX ${t}: token ${n[0].token} exp ${n[0].expiry}`,"INFO"))}return s}
 
-app.get("/mcx",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const e=await getMCXTokens(),a=Object.values(e);if(!a.length)return t.json({status:!1,message:"Could not resolve MCX tokens from instrument master"});const s=(await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{MCX:a}})).data;if(s.status&&s.data?.fetched){const a={};return s.data.fetched.forEach(t=>{const s=Object.keys(e).find(a=>String(e[a])===String(t.symbolToken));if(s){const e=parseFloat(t.ltp||0),n=parseFloat(t.close||0);a[s]={ltp:e,open:parseFloat(t.open||0),high:parseFloat(t.high||0),low:parseFloat(t.low||0),close:n,change:e-n,changePct:n>0?((e-n)/n*100).toFixed(2):"0.00",tradingSymbol:t.tradingSymbol||s}}}),t.json({status:!0,data:a})}t.json({status:!1,message:s.message||"No MCX data returned"})}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
+app.get("/mcx",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const e=await getMCXTokens(),a=Object.values(e);if(!a.length)return t.json({status:!1,message:"Could not resolve MCX tokens from instrument master"});const s=(await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"FULL",exchangeTokens:{MCX:a}},{headers:getHeaders(!0),timeout:15e3})).data;if(s.status&&s.data?.fetched){const a={};return s.data.fetched.forEach(t=>{const s=Object.keys(e).find(a=>String(e[a])===String(t.symbolToken));if(s){const e=parseFloat(t.ltp||0),n=parseFloat(t.close||0);a[s]={ltp:e,open:parseFloat(t.open||0),high:parseFloat(t.high||0),low:parseFloat(t.low||0),close:n,change:e-n,changePct:n>0?((e-n)/n*100).toFixed(2):"0.00",tradingSymbol:t.tradingSymbol||s}}}),t.json({status:!0,data:a})}t.json({status:!1,message:s.message||"No MCX data returned"})}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
 app.get("/pcr",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const e=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/market/v1/putCallRatio`,{headers:getHeaders(!0),timeout:15e3});t.json(e.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
-app.post("/option-ltp",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,strike:s,type:n,expiry:o}=e.body;if(!a||!s||!n)return t.status(400).json({status:!1,message:"symbol, strike, type required"});try{await ensureInstruments("option-ltp");const i={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=i[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const l=a.toUpperCase(),c=n.toUpperCase(),u=parseFloat(s),p=new Date,d=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype?.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tLtp=new Date(t);_tLtp.setHours(15,30,0,0);if(_tLtp<p)return!1;const a=Math.round(parseFloat(e.strike));if(!(a===Math.round(100*u)||a===Math.round(u)))return!1;if(!e.symbol?.toUpperCase().endsWith(c))return!1;if(e.name?.toUpperCase()===l)return!0;const s=e.symbol.toUpperCase();return!!(s.startsWith(l)&&s.length>l.length&&/\d/.test(s[l.length]))});if(!d.length)return t.json({status:!1,message:`No NFO instrument for ${l} ${s} ${c}`});const g=d.map(e=>({...e,_exp:r(e.expiry)})).filter(e=>e._exp).sort((e,t)=>e._exp-t._exp);let m;if("MONTHLY"===o){const E=p.getMonth(),f=p.getFullYear(),I=g.filter(e=>e._exp.getMonth()===E&&e._exp.getFullYear()===f);m=I[I.length-1]||g[g.length-1]}else if("NEXT_MONTH"===o){const nm=(p.getMonth()+1)%12,ny=p.getMonth()===11?p.getFullYear()+1:p.getFullYear(),nf=g.filter(e=>e._exp.getMonth()===nm&&e._exp.getFullYear()===ny);m=nf[nf.length-1]||g[1]||g[0]}else m="NEXT"===o&&g[1]||g[0];if(!m)return t.json({status:!1,message:`No valid expiry for ${l} ${s} ${c}`});log(`Option-LTP token: ${m.symbol} (${m.token})`,"INFO"),await angelRateLimit();
-let h;
-try{
-  h=(await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:[String(m.token)]}})).data;
-}catch(firstErr){
-  if(firstErr.response?.status===403){
-    log(`Option-LTP 403 for ${m.symbol} — waiting 2s then retrying once`,"WARN");
-    await new Promise(res=>setTimeout(res,2000));
-    await angelRateLimit();
-    h=(await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:[String(m.token)]}})).data;
-  }else{throw firstErr;}
-}
-if(h.status&&h.data?.fetched?.length){const N=h.data.fetched[0],A=parseFloat(N.ltp||0)>0?parseFloat(N.ltp):parseFloat(N.close||0);return log(`✅ Option LTP: ${m.symbol} = ₹${A}`,"OK"),t.json({status:!0,ltp:A,symbolToken:m.token,tradingSymbol:m.symbol,expiry:m.expiry})}return t.json({status:!1,message:"LTP fetch returned no data"})}catch(k){const C=k.response?.data?.message||k.message;log(`Option LTP error: ${C}`,"WARN"),t.status(500).json({status:!1,message:C})}})
+app.post("/option-ltp",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,strike:s,type:n,expiry:o}=e.body;if(!a||!s||!n)return t.status(400).json({status:!1,message:"symbol, strike, type required"});try{await ensureInstruments("option-ltp");const i={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=i[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const l=a.toUpperCase(),c=n.toUpperCase(),u=parseFloat(s),p=new Date,d=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype?.includes("OPT"))return!1;const t=r(e.expiry);if(!t)return!1;const _tLtp=new Date(t);_tLtp.setHours(15,30,0,0);if(_tLtp<p)return!1;const a=Math.round(parseFloat(e.strike));if(!(a===Math.round(100*u)||a===Math.round(u)))return!1;if(!e.symbol?.toUpperCase().endsWith(c))return!1;if(e.name?.toUpperCase()===l)return!0;const s=e.symbol.toUpperCase();return!!(s.startsWith(l)&&s.length>l.length&&/\d/.test(s[l.length]))});if(!d.length)return t.json({status:!1,message:`No NFO instrument for ${l} ${s} ${c}`});const g=d.map(e=>({...e,_exp:r(e.expiry)})).filter(e=>e._exp).sort((e,t)=>e._exp-t._exp);let m;if("MONTHLY"===o){const E=p.getMonth(),f=p.getFullYear(),I=g.filter(e=>e._exp.getMonth()===E&&e._exp.getFullYear()===f);m=I[I.length-1]||g[g.length-1]}else if("NEXT_MONTH"===o){const nm=(p.getMonth()+1)%12,ny=p.getMonth()===11?p.getFullYear()+1:p.getFullYear(),nf=g.filter(e=>e._exp.getMonth()===nm&&e._exp.getFullYear()===ny);m=nf[nf.length-1]||g[1]||g[0]}else m="NEXT"===o&&g[1]||g[0];if(!m)return t.json({status:!1,message:`No valid expiry for ${l} ${s} ${c}`});log(`Option-LTP token: ${m.symbol} (${m.token})`,"INFO"),await angelRateLimit();const h=(await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:[String(m.token)]}},{headers:getHeaders(!0),timeout:15e3})).data;if(h.status&&h.data?.fetched?.length){const N=h.data.fetched[0],A=parseFloat(N.ltp||0)>0?parseFloat(N.ltp):parseFloat(N.close||0);return log(`✅ Option LTP: ${m.symbol} = ₹${A}`,"OK"),t.json({status:!0,ltp:A,symbolToken:m.token,tradingSymbol:m.symbol,expiry:m.expiry})}return t.json({status:!1,message:"LTP fetch returned no data"})}catch(k){const C=k.response?.data?.message||k.message;log(`Option LTP error: ${C}`,"WARN"),t.status(500).json({status:!1,message:C})}})
 
 // ═══════════════════════════════════════════════════════
 // LIVE TRADE PRICES — batch LTP for all open paper trades
 // POST /live-trade-prices
-// Body: { trades: [{symbol, strike, type, expiry}] }  -- expiry is the raw string (e.g. "28AUG2025")
-// the trade was actually created with. When present, matching is STRICT: only that exact
-// expiry's contract is ever priced. If that contract is no longer live, the key is returned
-// in `expired` instead of silently substituting a different month's price at the same strike.
-// Returns: { status:true, prices: {"NBCC_109_CE_28AUG2025": 4.25, ...}, expired: {"...": true} }
+// Body: { trades: [{symbol, strike, type}] }
+// Returns: { status:true, prices: {"NBCC_109_CE": 4.25, ...} }
 // ═══════════════════════════════════════════════════════
 app.post("/live-trade-prices",async(req,res)=>{
   if(!isAuthenticated())return res.status(401).json({status:false,message:"Not authenticated"});
   const{trades}=req.body;
   if(!trades||!trades.length)return res.json({status:true,prices:{}});
-  const debugMisses=[]; // real diagnostic: exact reason each trade's price lookup failed
   try{
     await ensureInstruments("live trade prices");
     const MONTHS={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};
     function parseExp(e){if(!e)return null;const s=String(e).trim().toUpperCase();const m=s.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(m&&MONTHS[m[2]]!==undefined)return new Date(+m[3],MONTHS[m[2]],+m[1]);const d=new Date(e);return isNaN(d)?null:d;}
-    const tokenMap={};const tokenToKey={};const now=new Date();const expired={};
+    const tokenMap={};const tokenToKey={};const now=new Date();
     for(const trade of trades){
       const sym=(trade.symbol||"").toUpperCase();
       const strike=parseFloat(trade.strike);
       const type=(trade.type||"CE").toUpperCase();
-      const wantExpiry=trade.expiry?String(trade.expiry).trim().toUpperCase():null;
-      const key=`${sym}_${strike}_${type}_${wantExpiry||""}`;
+      const key=`${sym}_${strike}_${type}`;
       const matches=SESSION._instruments.filter(inst=>{
         if(inst.exch_seg!=="NFO")return false;
         if(!inst.instrumenttype?.includes("OPT"))return false;
-        const exp=parseExp(inst.expiry);if(!exp)return false;
+        const exp=parseExp(inst.expiry);if(!exp)return false;const _expEnd=new Date(exp);_expEnd.setHours(15,30,0,0);if(_expEnd<now)return false;
         const is=Math.round(parseFloat(inst.strike));
         if(!(is===Math.round(100*strike)||is===Math.round(strike)))return false;
         if(!inst.symbol?.toUpperCase().endsWith(type))return false;
-        if(!(inst.name?.toUpperCase()===sym||(()=>{const s2=inst.symbol.toUpperCase();return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);})()))return false;
-        return true;
+        if(inst.name?.toUpperCase()===sym)return true;
+        const s2=inst.symbol.toUpperCase();
+        return s2.startsWith(sym)&&s2.length>sym.length&&/\d/.test(s2[sym.length]);
       });
-      if(!matches.length){
-        log(`live-trade-prices: no instrument for ${key}`,"WARN");
-        const symCandidates=SESSION._instruments.filter(inst=>inst.exch_seg==="NFO"&&inst.instrumenttype?.includes("OPT")&&(inst.name?.toUpperCase()===sym||inst.symbol?.toUpperCase().startsWith(sym))).length;
-        debugMisses.push({key,reason:"no matching instrument",symCandidatesFound:symCandidates,searchedStrike:strike,searchedType:type});
-        continue;
-      }
+      if(!matches.length){log(`live-trade-prices: no instrument for ${key}`,"WARN");continue;}
+      const sorted=matches.map(i=>({...i,_exp:parseExp(i.expiry)})).filter(i=>i._exp).sort((a,b)=>a._exp-b._exp);
+      // Match same expiry logic as getExpiryType: if dte<0 use next month, else current month
+      const nowIST=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Kolkata'}));
+      function lastTueOf2(yr,mn){const last=new Date(yr,mn,0);const diff=last.getDay()>=2?last.getDay()-2:last.getDay()+5;last.setDate(last.getDate()-diff);last.setHours(0,0,0,0);return last;}
+      const todayMid2=new Date(nowIST.getFullYear(),nowIST.getMonth(),nowIST.getDate());
+      const curLastTue2=lastTueOf2(nowIST.getFullYear(),nowIST.getMonth()+1);
+      const dte2=Math.round((curLastTue2-todayMid2)/86400000);
       let best;
-      if(wantExpiry){
-        // STRICT: only ever match the exact expiry the trade was created with.
-        // Never silently fall back to a different month's contract at the same strike —
-        // that produces a real-looking but wrong price with no indication the month changed.
-        best=matches.find(inst=>String(inst.expiry).trim().toUpperCase()===wantExpiry);
-        if(!best){
-          expired[key]=true;
-          debugMisses.push({key,reason:"exact expiry not found (likely expired)",symCandidatesFound:matches.length,searchedStrike:strike,searchedType:type,wantExpiry});
-          continue;
+      // Indices use current month till expiry day; stocks switch 5 days before
+      // NIFTY: always nearest contract (weekly) — sorted[0]
+      // BANKNIFTY/FINNIFTY/MIDCPNIFTY: current month till expiry passed (dte<0)
+      // STOCKS: next month 5 days before expiry (dte<=5)
+      const _NIFTY_IDXLIST=["BANKNIFTY","FINNIFTY","MIDCPNIFTY"];
+      if(sym==="NIFTY"){
+        best=sorted[0]; // always nearest weekly contract
+      } else if(_NIFTY_IDXLIST.includes(sym)){
+        if(dte2<0){
+          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
+          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
+          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[0];
+        } else {
+          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
+          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
+          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
         }
-        const expDate=parseExp(best.expiry);
-        if(expDate){const expEnd=new Date(expDate);expEnd.setHours(15,30,0,0);if(expEnd<now){expired[key]=true;continue;}}
       } else {
-        // Real fix (2026-08-24): the "nearest live contract" fallback here was the exact
-        // mechanism silently pricing trades against the WRONG (nearest/current, often
-        // near-expiry) month whenever a trade's expiry hadn't resolved yet -- confirmed
-        // live on both INFY and BAJFINANCE, each stuck showing August pricing on a real
-        // position with real money at risk, zero visible error. The dte<=2 rollover rule
-        // was always correct where it actually ran -- the problem was this path bypassing
-        // it entirely. A trade with no resolved expiry must never be silently priced
-        // against a guessed contract -- skip it, mark as pending, and let it resolve for
-        // real once analysis completes (matches the STRICT wantExpiry path's own
-        // no-silent-substitution principle, applied here too).
-        debugMisses.push({key,reason:"no expiry resolved yet -- refusing to guess nearest contract",symCandidatesFound:matches.length,searchedStrike:strike,searchedType:type});
-        continue;
+        // STOCKS — next month 5 days before
+        if(dte2<=5){
+          const nm=(nowIST.getMonth()+1)%12;const ny=nowIST.getMonth()===11?nowIST.getFullYear()+1:nowIST.getFullYear();
+          const nextMonthOpts=sorted.filter(i=>i._exp.getMonth()===nm&&i._exp.getFullYear()===ny);
+          best=nextMonthOpts[nextMonthOpts.length-1]||sorted[sorted.length-1]||sorted[0];
+        } else {
+          const cm=nowIST.getMonth();const cy=nowIST.getFullYear();
+          const curMonthOpts=sorted.filter(i=>i._exp.getMonth()===cm&&i._exp.getFullYear()===cy);
+          best=curMonthOpts[curMonthOpts.length-1]||sorted[0];
+        }
       }
       tokenMap[key]=String(best.token);
       tokenToKey[String(best.token)]=key;
     }
     const tokens=Object.values(tokenMap);
-    if(!tokens.length)return res.json({status:true,prices:{},expired,debugMisses});
+    if(!tokens.length)return res.json({status:true,prices:{}});
     const prices={};const BATCH=50;
     for(let i=0;i<tokens.length;i+=BATCH){
       const batch=tokens.slice(i,i+BATCH);
       try{
         await angelRateLimit();
-        const r=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:batch}});
+        const r=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:batch}},{headers:getHeaders(true),timeout:15000});
         if(r.data.status&&r.data.data?.fetched){
           r.data.data.fetched.forEach(f=>{
             const key=tokenToKey[String(f.symbolToken)];
@@ -1566,12 +1026,12 @@ app.post("/live-trade-prices",async(req,res)=>{
         }
       }catch(bErr){log(`live-trade-prices batch error: ${bErr.message}`,"WARN");}
     }
-    log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}, expired=${Object.keys(expired).length}`,"OK");
-    res.json({status:true,prices,expired,debugMisses});
+    log(`live-trade-prices: fetched ${Object.keys(prices).length}/${trades.length}`,"OK");
+    res.json({status:true,prices});
   }catch(err){log(`live-trade-prices error: ${err.message}`,"ERR");res.status(500).json({status:false,message:err.message});}
 });
 
-app.post("/option-chain",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,spotPrice:s,expiry:n,depth:o=5}=e.body;if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});try{await ensureInstruments("option-chain");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t||t<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(0===p.length)return log(`No NFO options found for ${i} (checked ${SESSION._instruments?.length} instruments)`,"WARN"),t.json({status:!1,message:`No NFO options found for ${i}`});log(`Option chain ${i}: ${p.length} options matched`,"INFO");const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);if(!d.length)return t.json({status:!1,message:`No valid future expiries for ${i}`});let g;if("MONTHLY"===n){const b=c.getMonth(),_=c.getFullYear(),F=d.filter(e=>e.date.getMonth()===b&&e.date.getFullYear()===_);g=F.length?F[F.length-1]:d[0]}else if("NEXT_MONTH"===n){const R=(c.getMonth()+1)%12,x=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),P=d.filter(e=>e.date.getMonth()===R&&e.date.getFullYear()===x);g=P.length?P[P.length-1]:d[1]||d[0]}else g="NEXT"===n&&d[1]||d[0];const m=g.raw,h=p.filter(e=>e.expiry===m),S=[...new Set(h.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t);if(0===S.length)return t.json({status:!1,message:`No strikes found for ${i} expiry ${m}`});const E=S.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,S[0]),f=S.indexOf(E),I=Math.max(0,f-o),N=Math.min(S.length-1,f+o),A=S.slice(I,N+1),k=[],C={};for(const L of A){const D=Math.round(100*L),$=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("CE")),M=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("PE")),U=$[0],v=M[0];C[L]={CE_token:U?.token??null,PE_token:v?.token??null,CE_sym:U?.symbol??null,PE_sym:v?.symbol??null},U?.token&&k.push(String(U.token)),v?.token&&k.push(String(v.token))}if(log(`Option chain ${i}: expiry=${m}, ATM=${E}, strikes=${A.length}, tokens=${k.length}`,"INFO"),0===k.length)return t.json({status:!1,message:`No tokens found for ${i} — check instrument name matching`});const O={},T=50;for(let B=0;B<k.length;B+=T){const j=k.slice(B,B+T);try{const H=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:j}});H.data.status&&H.data.data?.fetched&&H.data.data.fetched.forEach(e=>{const t=parseFloat(e.ltp||0);parseFloat(e.close||0);if(t>0)O[String(e.symbolToken)]=t;else{const t=parseFloat(e.close||0);t>0&&(O[String(e.symbolToken)]=t)}})}catch(V){log(`LTP batch failed: ${V.message}`,"WARN")}}const y=A.map(e=>{const t=C[e];return{strike:e,isATM:e===E,CE_ltp:t.CE_token?O[String(t.CE_token)]??null:null,PE_ltp:t.PE_token?O[String(t.PE_token)]??null:null,CE_token:t.CE_token,PE_token:t.PE_token,CE_sym:t.CE_sym,PE_sym:t.PE_sym}});return log(`✅ ${i}: ATM=${E}, ltps=${Object.keys(O).length}/${k.length} fetched`,"OK"),t.json({status:!0,symbol:i,spotPrice:l,atmStrike:E,expiry:m,strikes:y})}catch(W){const G=W.response?.data?.message||W.message;log(`Option chain error ${a}: ${G}`,"WARN"),t.status(500).json({status:!1,message:G})}})
+app.post("/option-chain",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});const{symbol:a,spotPrice:s,expiry:n,depth:o=5}=e.body;if(!a||!s)return t.status(400).json({status:!1,message:"symbol and spotPrice required"});try{await ensureInstruments("option-chain");const i=a.toUpperCase(),l=parseFloat(s),c=new Date,u={JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11};function r(e){if(!e)return null;const t=String(e).trim().toUpperCase(),a=t.match(/^(\d{1,2})([A-Z]{3})(\d{4})$/);if(a){const e=u[a[2]];if(void 0!==e)return new Date(+a[3],e,+a[1])}const s=t.match(/^(\d{4})(\d{2})(\d{2})$/);if(s)return new Date(+s[1],+s[2]-1,+s[3]);const n=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(n)return new Date(+n[1],+n[2]-1,+n[3]);const o=t.match(/^(\d{2})-(\d{2})-(\d{4})$/);if(o)return new Date(+o[3],+o[2]-1,+o[1]);const r=new Date(e);return isNaN(r)?null:r}const p=SESSION._instruments.filter(e=>{if("NFO"!==e.exch_seg)return!1;if(!e.instrumenttype||!e.instrumenttype.includes("OPT"))return!1;const t=r(e.expiry);if(!t||t<c)return!1;if(e.name&&e.name.toUpperCase()===i)return!0;if(e.symbol){const t=e.symbol.toUpperCase();if(t.startsWith(i)&&t.length>i.length&&/\d/.test(t[i.length]))return!0}return!1});if(0===p.length)return log(`No NFO options found for ${i} (checked ${SESSION._instruments?.length} instruments)`,"WARN"),t.json({status:!1,message:`No NFO options found for ${i}`});log(`Option chain ${i}: ${p.length} options matched`,"INFO");const d=[...new Set(p.map(e=>e.expiry))].map(e=>({raw:e,date:r(e)})).filter(e=>e.date&&e.date>=c).sort((e,t)=>e.date-t.date);if(!d.length)return t.json({status:!1,message:`No valid future expiries for ${i}`});let g;if("MONTHLY"===n){const b=c.getMonth(),_=c.getFullYear(),F=d.filter(e=>e.date.getMonth()===b&&e.date.getFullYear()===_);g=F.length?F[F.length-1]:d[0]}else if("NEXT_MONTH"===n){const R=(c.getMonth()+1)%12,x=11===c.getMonth()?c.getFullYear()+1:c.getFullYear(),P=d.filter(e=>e.date.getMonth()===R&&e.date.getFullYear()===x);g=P.length?P[P.length-1]:d[1]||d[0]}else g="NEXT"===n&&d[1]||d[0];const m=g.raw,h=p.filter(e=>e.expiry===m),S=[...new Set(h.map(e=>Math.round(parseFloat(e.strike)/100)))].filter(e=>e>0).sort((e,t)=>e-t);if(0===S.length)return t.json({status:!1,message:`No strikes found for ${i} expiry ${m}`});const E=S.reduce((e,t)=>Math.abs(t-l)<Math.abs(e-l)?t:e,S[0]),f=S.indexOf(E),I=Math.max(0,f-o),N=Math.min(S.length-1,f+o),A=S.slice(I,N+1),k=[],C={};for(const L of A){const D=Math.round(100*L),$=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("CE")),M=h.filter(e=>Math.round(parseFloat(e.strike))===D&&e.symbol?.toUpperCase().endsWith("PE")),U=$[0],v=M[0];C[L]={CE_token:U?.token??null,PE_token:v?.token??null,CE_sym:U?.symbol??null,PE_sym:v?.symbol??null},U?.token&&k.push(String(U.token)),v?.token&&k.push(String(v.token))}if(log(`Option chain ${i}: expiry=${m}, ATM=${E}, strikes=${A.length}, tokens=${k.length}`,"INFO"),0===k.length)return t.json({status:!1,message:`No tokens found for ${i} — check instrument name matching`});const O={},T=50;for(let B=0;B<k.length;B+=T){const j=k.slice(B,B+T);try{const H=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/market/v1/quote/`,{mode:"LTP",exchangeTokens:{NFO:j}},{headers:getHeaders(!0),timeout:2e4});H.data.status&&H.data.data?.fetched&&H.data.data.fetched.forEach(e=>{const t=parseFloat(e.ltp||0);parseFloat(e.close||0);if(t>0)O[String(e.symbolToken)]=t;else{const t=parseFloat(e.close||0);t>0&&(O[String(e.symbolToken)]=t)}})}catch(V){log(`LTP batch failed: ${V.message}`,"WARN")}}const y=A.map(e=>{const t=C[e];return{strike:e,isATM:e===E,CE_ltp:t.CE_token?O[String(t.CE_token)]??null:null,PE_ltp:t.PE_token?O[String(t.PE_token)]??null:null,CE_token:t.CE_token,PE_token:t.PE_token,CE_sym:t.CE_sym,PE_sym:t.PE_sym}});return log(`✅ ${i}: ATM=${E}, ltps=${Object.keys(O).length}/${k.length} fetched`,"OK"),t.json({status:!0,symbol:i,spotPrice:l,atmStrike:E,expiry:m,strikes:y})}catch(W){const G=W.response?.data?.message||W.message;log(`Option chain error ${a}: ${G}`,"WARN"),t.status(500).json({status:!1,message:G})}})
 
 app.post("/refresh",async(e,t)=>{if(!SESSION.refreshToken)return t.json({status:!1,message:"No refresh token available"});try{const e=await axios.post(`${ANGEL_API}/rest/secure/angelbroking/jwt/v1/generateTokens`,{refreshToken:SESSION.refreshToken},{headers:getHeaders(!0),timeout:15e3});if(!0===e.data.status&&e.data.data)return SESSION.jwtToken=e.data.data.jwtToken,SESSION.refreshToken=e.data.data.refreshToken,SESSION.expiresAt=Date.now()+288e5,log("Token refreshed","OK"),t.json({status:!0,message:"Token refreshed"});t.json({status:!1,message:"Token refresh failed"})}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
@@ -1590,8 +1050,7 @@ app.post("/resolve-tokens",async(e,t)=>{try{await ensureInstruments("resolve-tok
 
 app.get("/fno-stock-list",async(req,res)=>{
   try{
-    const forceRefresh = req.query.refresh === "1";
-    await ensureInstruments("F&O list", forceRefresh);
+    await ensureInstruments("F&O list");
     const now=new Date();
     const INDICES=["NIFTY","BANKNIFTY","FINNIFTY","MIDCPNIFTY","SENSEX","BANKEX"];
     // Get unique stock names with future NFO options
@@ -1633,20 +1092,6 @@ app.get("/fno-stock-list",async(req,res)=>{
 });
 
 app.get("/token-list",async(e,t)=>{try{await ensureInstruments("token list");const e={};SESSION._instruments.forEach(t=>{if("NSE"!==t.exch_seg)return;const a=(t.symbol||"").replace("-EQ","").toUpperCase();e[a]||(e[a]=String(t.token))}),log("Token list served: "+Object.keys(e).length+" NSE symbols","INFO"),t.json({status:!0,tokens:e,count:Object.keys(e).length})}catch(e){log("token-list error: "+e.message,"WARN"),t.status(500).json({status:!1,message:e.message})}})
-app.get("/all-stock-scores",(req,res)=>{
-  try{
-    const rows=Object.entries(LATEST_SCORES).map(([sym,sides])=>({
-      sym,
-      ce:sides.CE?sides.CE.score:null,
-      ceVerdict:sides.CE?sides.CE.verdict:null,
-      pe:sides.PE?sides.PE.score:null,
-      peVerdict:sides.PE?sides.PE.verdict:null
-    })).filter(r=>r.ce!=null||r.pe!=null).sort((a,b)=>a.sym.localeCompare(b.sym));
-    res.json({status:true,stocks:rows,count:rows.length});
-  }catch(e){
-    res.status(500).json({status:false,message:e.message});
-  }
-});
 
 
 // ─── AUTO SERVER-SIDE SCAN (additive, does not touch existing scan/login code) ───
@@ -1713,16 +1158,7 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          // Real fix (2026-08-24): this background auto-scan had its OWN hardcoded
-          // score>=60 gate, completely separate from and never updated alongside the
-          // verdict-tier realignment (MODERATE lowered from 60 to 45) made earlier same
-          // session. Confirmed live: UNITDSPR/COALINDIA/etc scoring 55-66 and correctly
-          // labeled MODERATE in "All Stocks" (a different, independent data path) could
-          // still never reach SERVER_SIGNALS -> auto-trade through THIS path due to this
-          // stale 60 threshold. Now matches the verdict check directly instead of a
-          // separate hardcoded number -- STRONG or MODERATE, same as v4AutoTrade's own
-          // frontend gate, so the two systems can no longer silently disagree again.
-          if (g && g.status && (g.verdict === "STRONG" || g.verdict === "MODERATE")) {
+          if (g && g.status && g.score >= 60 && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
           }
         }
@@ -1752,25 +1188,10 @@ app.listen(PORT,()=>{
   console.log("╠══════════════════════════════════════════════════════════════╣");
   console.log(`║   Server  : http://localhost:${PORT}                                  ║`);
   console.log("║   v3.1: /market-status /oi-history /signal-log               ║");
-  console.log("║   v3.3: OI momentum in scoring · 100-total weights            ║");
+  console.log("║   v3.2: OI momentum in scoring · expiryRisk weight           ║");
   console.log("║   v3.4: VIX→GammaBlast, NSE cookie refresh, log persist      ║");
   console.log("║   v5.0: Volume scoring · notifications · zero-premium skip   ║");
   console.log("║   v5.1: PCR delta scoring · OI velocity bonus · banner sync  ║");
   console.log("╚══════════════════════════════════════════════════════════════╝\n");
   log("Listening for connections...","OK");
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
