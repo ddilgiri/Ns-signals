@@ -425,6 +425,50 @@ async function loadFnoStockList(forceRefresh){
   S.scannedCount+=t.length;
   // PARALLEL stock scanning — process in groups of 6 concurrent requests
   // (Angel One API can handle moderate concurrency; 6 keeps rate-limit safe)
+  // Real fix (2026-08-27): scanSymbol() previously made one individual /quote call per
+  // stock, and with CONCURRENCY=6, up to 6 of these could fire simultaneously -- easily
+  // exceeding Angel One's documented 1 request/second limit on /quote, confirmed as the
+  // direct cause of a sustained, total 403 outage across all endpoints. Fix: batch-prefetch
+  // spot prices for all stocks BEFORE the main scan loop, 25 stocks per /quote request
+  // (Angel One's FULL mode supports up to 50 symbols per call; 25 chosen as a more
+  // conservative, reliable size per explicit user decision), 1 second between batches to
+  // respect the rate limit, up to 3 retries per batch on failure. This populates
+  // LIVE_PRICES for every stock up front -- scanSymbol()'s own existing `if(!s&&t)` check
+  // then finds the price already cached and skips making its own individual /quote call
+  // entirely, with zero changes needed to scanSymbol() itself or anything downstream of it
+  // (signal-analysis, oi-analysis, scoring, verdicts, dashboard push all untouched).
+  var BATCH_SIZE=25;
+  for(var bp=0;bp<t.length&&S.scanning;bp+=BATCH_SIZE){
+    var priceBatch=t.slice(bp,bp+BATCH_SIZE);
+    var batchTokens=priceBatch.map(function(stk){return String(stk.token);});
+    var batchAttempt=0, batchOk=false;
+    while(batchAttempt<3 && !batchOk && S.scanning){
+      batchAttempt++;
+      try{
+        var bq=await fetch(getServer()+"/quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"FULL",exchangeTokens:{NSE:batchTokens}})});
+        var bd=await bq.json();
+        if(bd.data && bd.data.fetched){
+          bd.data.fetched.forEach(function(item){
+            var stkMatch=priceBatch.find(function(s){return String(s.token)===String(item.symbolToken);});
+            if(stkMatch){
+              var ltpVal=parseFloat(item.ltp||0);
+              if(ltpVal>0 && ltpVal<200000) LIVE_PRICES[stkMatch.sym]=ltpVal;
+              var prevVal=parseFloat(item.close||item.previousClose||ltpVal);
+              if(prevVal>0) LIVE_PREV[stkMatch.sym]=LIVE_PREV[stkMatch.sym]||prevVal;
+            }
+          });
+          batchOk=true;
+        } else {
+          addLog("⚠️ Price batch "+(bp/BATCH_SIZE+1)+" attempt "+batchAttempt+"/3 — no data returned","warn");
+        }
+      }catch(batchErr){
+        addLog("⚠️ Price batch "+(bp/BATCH_SIZE+1)+" attempt "+batchAttempt+"/3 failed: "+batchErr.message,"warn");
+      }
+      if(!batchOk && batchAttempt<3) await new Promise(function(r){setTimeout(r,1000);});
+    }
+    if(!batchOk) addLog("❌ Price batch "+(bp/BATCH_SIZE+1)+" failed after 3 attempts — those "+priceBatch.length+" stocks will fetch individually as fallback","warn");
+    await new Promise(function(r){setTimeout(r,1000);}); // 1s between batches, respects 1 req/sec limit
+  }
   var CONCURRENCY=6;
   for(var bi=0;bi<t.length&&S.scanning;bi+=CONCURRENCY){
     var chunk=t.slice(bi,bi+CONCURRENCY);
