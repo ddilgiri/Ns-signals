@@ -1148,7 +1148,21 @@ app.post("/signal-analysis",async(e,t)=>{
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
-  let C,O;A?(C="BLOCKED",O=k):E>=75?(C="STRONG",O="High conviction — trade with normal size"):E>=60?(C="MODERATE",O="Good setup — consider half position size"):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
+  // Real fix (2026-09-05, #11): OI category minimum gate, per explicit user request --
+  // "main category minimum pass marks... else all dummy signals". Confirmed live and
+  // mathematically today: with the expanded factor set, a stock can score MODERATE/
+  // STRONG (60-70%+) with ZERO real OI backing (dilipOIFormula + oiMomentum = 0/47),
+  // purely on technicals/KAMA/z-scores -- a "dummy" signal that contradicts your own
+  // Ramesh/Suresh/Mahesh OI framework entirely. Fix: MODERATE/STRONG now ALSO require
+  // the combined OI category to reach at least 35% of its own 47-point max (~16.5pts).
+  // If OI itself is too weak, verdict is capped at WEAK regardless of how high the
+  // rest of the score is -- same honesty principle as the regime cap from Stage 1,
+  // now applied to the framework's actual foundation (OI), not just market condition.
+  const oiCatMax=(N.oiMomentum?.max||0)+(N.dilipOIFormula?.max||0);
+  const oiCatEarned=(N.oiMomentum?.earned||0)+(N.dilipOIFormula?.earned||0);
+  const oiCatPct=oiCatMax>0?(oiCatEarned/oiCatMax*100):100;
+  const oiFloorPass=oiCatPct>=35;
+  let C,O;A?(C="BLOCKED",O=k):E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):E>=60&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):(E>=75||E>=60)?(C="WEAK",O=`Score ${E}% would reach ${E>=75?"STRONG":"MODERATE"} but OI backing is only ${oiCatPct.toFixed(0)}% (needs 35%+) -- technicals alone aren't enough, real OI confirmation is missing`):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
   // Real feature (2026-09-05, Stage 1): regime-aware cap -- per the framework's own rule
   // ("TRANSITION → no entry"), a stock in the ambiguous middle zone of its own ADX history
   // (neither clearly trending nor clearly ranging) gets its verdict capped at WEAK, even
