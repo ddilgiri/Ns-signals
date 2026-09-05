@@ -500,6 +500,60 @@ let _lastCandleCall=0;
 async function throttledCandleRequest(e,t){const a=Date.now()-_lastCandleCall;return a<600&&await new Promise(e=>setTimeout(e,600-a)),_lastCandleCall=Date.now(),angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e)}
 
 function calcEMA(e,t){if(e.length<t)return null;const a=2/(t+1);let s=e.slice(0,t).reduce((e,t)=>e+t,0)/t;for(let n=t;n<e.length;n++)s=e[n]*a+s*(1-a);return parseFloat(s.toFixed(2))}
+// Real feature (2026-09-05, #5): KAMA (Kaufman's Adaptive Moving Average), standard
+// KAMA(10,2,30) settings per Kaufman's own recommendation. Adapts its own speed to
+// market noise -- moves fast in trending conditions, slow/flat in choppy/sideways ones
+// (complements the ADX regime detector from Stage 1, doesn't replace it). Uses closes
+// array already computed for RSI/EMA -- zero new API calls.
+// Real feature (2026-09-05, #7): price z-score vs its own rolling mean/std, replacing
+// fixed Bollinger 2-sigma with a genuine statistical measure -- tells you how many
+// standard deviations the CURRENT price is from its own recent normal range, same
+// concept as rsiZScore but applied to raw price instead of RSI. Uses closes array
+// already computed -- zero new API calls.
+// Real feature (2026-09-05, #10): absorption detection -- a candle with unusually HIGH
+// volume but unusually SMALL price range suggests large orders being absorbed without
+// moving price (institutional activity), which per the framework "precedes a move once
+// it completes". Compares the most recent candle's volume/range against the average of
+// the prior N candles. Uses candle array already fetched -- zero new API calls.
+function detectAbsorption(candles,lookback=10){
+  if(!candles||candles.length<lookback+1)return{detected:false,volRatio:null,rangeRatio:null};
+  const recent=candles[candles.length-1];
+  const prior=candles.slice(-lookback-1,-1);
+  const recentVol=parseFloat(recent[5])||0;
+  const recentRange=Math.abs(parseFloat(recent[2])-parseFloat(recent[3]));
+  const avgVol=prior.reduce((a,c)=>a+(parseFloat(c[5])||0),0)/prior.length;
+  const avgRange=prior.reduce((a,c)=>a+Math.abs(parseFloat(c[2])-parseFloat(c[3])),0)/prior.length;
+  if(avgVol===0||avgRange===0)return{detected:false,volRatio:null,rangeRatio:null};
+  const volRatio=parseFloat((recentVol/avgVol).toFixed(2));
+  const rangeRatio=parseFloat((recentRange/avgRange).toFixed(2));
+  // High volume (>1.5x normal) but compressed range (<0.6x normal) = absorption signature
+  const detected=volRatio>1.5&&rangeRatio<0.6;
+  return{detected,volRatio,rangeRatio};
+}
+function priceZScore(closes,period=20){
+  if(closes.length<period)return{zscore:0,mean:null,std:null};
+  const recent=closes.slice(-period);
+  const mean=recent.reduce((a,b)=>a+b,0)/recent.length;
+  const variance=recent.reduce((a,b)=>a+(b-mean)*(b-mean),0)/recent.length;
+  const std=Math.sqrt(variance);
+  const current=closes[closes.length-1];
+  const zscore=std>0?parseFloat(((current-mean)/std).toFixed(2)):0;
+  return{zscore,mean:parseFloat(mean.toFixed(2)),std:parseFloat(std.toFixed(2))};
+}
+function calcKAMA(closes,erPeriod=10,fastPeriod=2,slowPeriod=30){
+  if(closes.length<erPeriod+1)return null;
+  const fastSC=2/(fastPeriod+1),slowSC=2/(slowPeriod+1);
+  let kama=closes.slice(0,erPeriod).reduce((a,b)=>a+b,0)/erPeriod; // seed: simple mean of first window
+  for(let i=erPeriod;i<closes.length;i++){
+    const change=Math.abs(closes[i]-closes[i-erPeriod]);
+    let volatility=0;
+    for(let j=i-erPeriod+1;j<=i;j++)volatility+=Math.abs(closes[j]-closes[j-1]);
+    const er=volatility>0?change/volatility:0;
+    const sc=Math.pow(er*(fastSC-slowSC)+slowSC,2);
+    kama=kama+sc*(closes[i]-kama);
+  }
+  return parseFloat(kama.toFixed(2));
+}
 function calcRSI14(e){if(e.length<15)return 50;let t=0,a=0;for(let s=1;s<=14;s++){const n=e[s]-e[s-1];n>0?t+=n:a-=n}let s=t/14,n=a/14;for(let t=15;t<e.length;t++){const a=e[t]-e[t-1];s=(13*s+Math.max(a,0))/14,n=(13*n+Math.max(-a,0))/14}return 0===n?100:parseFloat((100-100/(1+s/n)).toFixed(2))}
 // Real feature (2026-09-05): Intraday Momentum Index (IMI) -- per user's own research this
 // session, confirmed genuine and specifically recommended for intraday options trading
@@ -613,13 +667,17 @@ app.post("/market-bias",async(e,t)=>{
   const n=BIAS_CACHE[a];
   if(n&&Date.now()-n.fetchTime<BIAS_TTL)return t.json(n.data);
   try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),IMI_val=calcIMI(g),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g),ADX_val=calcADX(g),REGIME=classifyRegime(a,ADX_val),RSI_Z=rsiZScore(a,D);
+  const PRICE_Z=priceZScore(m);
+  const ABSORPTION=detectAbsorption(g);
+  const KAMA_now=calcKAMA(m),KAMA_prev=m.length>1?calcKAMA(m.slice(0,-1)):null;
+  const KAMA_slope=(KAMA_now!=null&&KAMA_prev!=null)?(KAMA_now>KAMA_prev?"UP":KAMA_now<KAMA_prev?"DOWN":"FLAT"):"UNKNOWN";
   const expiryInfo=getExpiryWeekInfo("");
   let B=0,j=0;k.forEach(e=>{const t=(parseFloat(e[2])+parseFloat(e[3])+parseFloat(e[4]))/3,a=parseFloat(e[5]);B+=t*a,j+=a});const H=j>0?parseFloat((B/j).toFixed(2)):null;
 // Volume+Price direction match
 const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseFloat(c[5]),0)/Math.max(recentCandles.length,1);const priceUp=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])>parseFloat(recentCandles[0][4]);const priceDown=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])<parseFloat(recentCandles[0][4]);const volMatch=L>=1.2&&((f==="BULLISH"&&priceUp)||(f==="BEARISH"&&priceDown));const volFake=L>=1.2&&((f==="BULLISH"&&priceDown)||(f==="BEARISH"&&priceUp));
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
-const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
+const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,fromCache:!1,error:o})}})
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -764,7 +822,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // interday, close-to-prevclose). Weight kept modest (8) since it's a new, unproven-in-
 // production factor -- deliberately not weighted as heavily as RSI(10) until its real
 // signal quality is observed over live trading days.
-const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:18,supertrend:10,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -788,6 +846,29 @@ else{
   imbVal<0.7?(o3=t3,r3=`Bid-ask imbalance ${imbVal} — sellers stacking, favors PE ✓`):imbVal<1.0?(o3=.6*t3,r3=`Imbalance ${imbVal} — mild sell pressure`):imbVal<1.3?(o3=.3*t3,r3=`Imbalance ${imbVal} — mild buy pressure`):(o3=0,r3=`Imbalance ${imbVal} — buyers stacking, against PE`);
 }
 s.bidAskImbalance={earned:o3,max:t3,pass:o3>=.4*t3,note:r3}}{
+// Real feature (2026-09-05, #5): KAMA scoring -- price above/below KAMA + slope
+// direction, same confirmation logic style as Supertrend. KAMA adapts its own speed
+// to volatility, so this genuinely differs from the fixed EMA20/50 already in
+// marketBias -- can catch trend confirmation EMA misses in choppy-then-trending stocks.
+const t4=SIGNAL_WEIGHTS.kama,kamaVal=e.kama,kamaSl=e.kamaSlope,ltpNow=e.ltp;let o4=0,r4="";
+if(kamaVal==null||ltpNow==null){o4=.5*t4;r4="KAMA data unavailable — neutral";}
+else{
+  const above=ltpNow>kamaVal;
+  a?above&&"UP"===kamaSl?(o4=t4,r4=`Price above rising KAMA ✓✓`):above?(o4=.6*t4,r4=`Price above KAMA, slope ${kamaSl}`):(o4=0,r4=`Price below KAMA — against CE`):
+  !above&&"DOWN"===kamaSl?(o4=t4,r4=`Price below falling KAMA ✓✓`):!above?(o4=.6*t4,r4=`Price below KAMA, slope ${kamaSl}`):(o4=0,r4=`Price above KAMA — against PE`);
+}
+s.kama={earned:o4,max:t4,pass:o4>=.4*t4,note:r4}}{
+// Real feature (2026-09-05, #7): price z-score mean-reversion scoring. Per the
+// framework's own Step 6 (Range regime, mean reversion): price z-score < -2 =
+// statistically stretched down = favors CE (bounce expected); > +2 = stretched up =
+// favors PE. This is DELIBERATELY a mean-reversion signal, opposite in spirit to
+// trend-following factors like KAMA/Supertrend above -- most useful specifically when
+// regime=RANGE (Stage 1), less relevant in a genuine TREND. Not gated on regime here
+// (keeping it a scored factor, not a hard rule) but the note flags this for transparency.
+const t5=SIGNAL_WEIGHTS.priceZ,pz=e.priceZ||0;let o5=0,r5="";
+a?pz<-2?(o5=t5,r5=`Price z-score ${pz} — stretched down, bounce favors CE ✓`):pz<-1?(o5=.6*t5,r5=`Price z-score ${pz} — mildly stretched down`):pz<1?(o5=.5*t5,r5=`Price z-score ${pz} — normal range`):(o5=.2*t5,r5=`Price z-score ${pz} — stretched up, against CE mean-reversion`):
+pz>2?(o5=t5,r5=`Price z-score ${pz} — stretched up, pullback favors PE ✓`):pz>1?(o5=.6*t5,r5=`Price z-score ${pz} — mildly stretched up`):pz>-1?(o5=.5*t5,r5=`Price z-score ${pz} — normal range`):(o5=.2*t5,r5=`Price z-score ${pz} — stretched down, against PE mean-reversion`);
+s.priceZ={earned:o5,max:t5,pass:o5>=.4*t5,note:r5}}{
 // Real feature (2026-09-05): IMI scoring block, mirrors RSI's exact pattern/thresholds
 // (Chande's own IMI reading convention matches RSI: >70 overbought, <30 oversold) --
 // but computed from close-vs-OPEN per candle (today's real intraday momentum), not
@@ -1005,6 +1086,15 @@ const oiPass=s.dilipOIFormula?.pass;
 
 // Compute raw score FIRST so hard-block logic below can reference it
 let finalScore=Math.round(r/i*100);
+// Real feature (2026-09-05, #10): absorption bonus -- deliberately NOT a standalone
+// weighted factor, since absorption alone doesn't indicate direction (it just means
+// "something's building"). Instead, a small confidence bonus (+3, capped at 100) is
+// applied only when absorption is detected AND the score already leans in a real
+// direction (>=50) -- rewards genuine confirmation, never manufactures a signal from
+// absorption alone on a weak/failing setup.
+if(e.absorptionDetected && finalScore>=50){
+  finalScore=Math.min(100,finalScore+3);
+}
 
 // HARD BLOCK rules:
 // PUT TRAP / CALL TRAP → block ONLY if score < 65 (strong technicals can override trap on non-expiry days)
@@ -1053,7 +1143,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const{symbolToken:a,sym:s,exchange:n="NSE",isIndex:o=!1,spotPrice:r,type:i,bidAskImbalance:imb=null}=e.body;
   try{const[e,o,l,c,u]=await Promise.allSettled([axios.post(`http://localhost:${PORT}/market-bias`,{symbolToken:a,exchange:n},{headers:{"Content-Type":"application/json"}}),Promise.resolve({data:FII_DII_CACHE.data||{instBias:"NEUTRAL",fiiNet:0,diiNet:0,fiiBuy:0,fiiSell:0,diiBuy:0,diiSell:0}}),
     Promise.resolve({data:VIX_CACHE.data||{vix:null,regime:"UNKNOWN",premiumBuyable:true,guidance:""}}),
-    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[]};
+    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,kama:p.kama??null,kamaSlope:p.kamaSlope||"UNKNOWN",priceZ:p.priceZ??0,absorptionDetected:p.absorptionDetected||false,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[]};
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
