@@ -813,6 +813,16 @@ window.addEventListener("DOMContentLoaded",function(){var e=localStorage.getItem
 }
 .v4-card:active{transform:scale(.985)}
 .v4-card.bearish{border-left:3px solid var(--red)}
+@keyframes moodPulseDanger{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(249,115,22,.5)}
+  50%{opacity:.72;box-shadow:0 0 0 4px rgba(249,115,22,0)}
+}
+@keyframes moodPulseSLHit{
+  0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(239,68,68,.6)}
+  50%{opacity:.6;box-shadow:0 0 0 5px rgba(239,68,68,0)}
+}
+.mood-badge-danger{animation:moodPulseDanger 1.3s ease-in-out infinite}
+.mood-badge-slhit{animation:moodPulseSLHit 1s ease-in-out infinite}
 .v4-card.bullish{border-left:3px solid var(--green)}
 .v4-card.strong.bearish{box-shadow:0 0 0 2px rgba(239,68,68,.5),0 4px 24px rgba(239,68,68,.25);border-left:4px solid var(--red)}
 .v4-card.strong.bullish{box-shadow:0 0 0 2px rgba(34,197,94,.5),0 4px 24px rgba(34,197,94,.25);border-left:4px solid var(--green)}
@@ -1819,7 +1829,8 @@ function buildTradeCardV4(tr) {
   var capUsed=avg*(tr.lot||1)*(tr.lots||1)*1.2;
   var capStr2=capUsed>=100000?'₹'+(capUsed/100000).toFixed(1)+'L':capUsed>=1000?'₹'+Math.round(capUsed/1000)+'K':'₹'+Math.round(capUsed);
   html += '<div style="display:flex;align-items:center;gap:5px">';
-  html += '<span style="background:'+moodBgM+';color:'+moodColorM+';font-size:8px;padding:1px 6px;font-weight:800;border-radius:20px;white-space:nowrap">'+moodLabelM+'</span>';
+  var moodAnimClass = moodM==='slhit' ? 'mood-badge-slhit' : (moodM==='danger' ? 'mood-badge-danger' : '');
+  html += '<span class="'+moodAnimClass+'" style="background:'+moodBgM+';color:'+moodColorM+';font-size:8px;padding:1px 6px;font-weight:800;border-radius:20px;white-space:nowrap">'+moodLabelM+'</span>';
   html += '<span style="font-size:10px;font-weight:700;color:var(--blue)">'+capStr2+'</span>';
   html += '</div>';
   html += '</div>';
