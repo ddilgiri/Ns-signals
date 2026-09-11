@@ -1769,7 +1769,7 @@ function buildTradeCardV4(tr) {
 
   // Target & stop
   var target = tr.target1 ? '₹' + parseFloat(tr.target1).toFixed(2) : '--';
-  var stop = avg > 0 ? '₹' + (avg * 0.5).toFixed(2) : '--';
+  var stop = avg > 0 ? '₹' + (avg * 0.9).toFixed(2) : '--';
 
   // Live spot
   var spot = LIVE_PRICES[tr.sym] || 0;
