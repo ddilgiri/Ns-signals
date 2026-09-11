@@ -1775,11 +1775,13 @@ function buildTradeCardV4(tr) {
   var spot = LIVE_PRICES[tr.sym] || 0;
   var spotStr = spot ? spot.toLocaleString('en-IN', {maximumFractionDigits:2}) : '--';
 
-  // Capital used, SL 10% amount, mood
+  // Capital used, SL premium (10% of capital, converted to actual stop premium), mood
   var capUsedM = avg * (tr.lot||1) * (tr.lots||1) * 1.2;
-  var slAmtM = capUsedM * 0.10;
-  var slAmtMStr = slAmtM>=1e5?'₹'+(slAmtM/1e5).toFixed(1)+'L':slAmtM>=1e3?'₹'+Math.round(slAmtM/1e3)+'K':'₹'+Math.round(slAmtM);
-  var slPctM = slAmtM>0 ? Math.round((pnl<0?-pnl:0)/slAmtM*100) : 0;
+  var slLossAmt = capUsedM * 0.10;
+  var slLossPerUnit = slLossAmt / ((tr.lot||1) * (tr.lots||1));
+  var slPremium = Math.max(0, avg - slLossPerUnit);
+  var slPremiumStr = '₹' + slPremium.toFixed(2);
+  var slPctM = slLossAmt>0 ? Math.round((pnl<0?-pnl:0)/slLossAmt*100) : 0;
   var moodM = pnl>0 ? 'profit' : (pnl<0 && slPctM>=100 ? 'slhit' : (pnl<0 && slPctM>=60 ? 'danger' : (pnl<0 ? 'loss' : 'flat')));
   var moodColorM = {profit:'var(--green)',flat:'var(--text3)',loss:'var(--amber)',danger:'#f97316',slhit:'var(--red)'}[moodM];
   var moodBgM = {profit:'rgba(34,197,94,.12)',flat:'rgba(148,163,184,.1)',loss:'rgba(245,158,11,.12)',danger:'rgba(249,115,22,.14)',slhit:'rgba(239,68,68,.16)'}[moodM];
@@ -1816,7 +1818,10 @@ function buildTradeCardV4(tr) {
   html += '</div>';
   var capUsed=avg*(tr.lot||1)*(tr.lots||1)*1.2;
   var capStr2=capUsed>=100000?'₹'+(capUsed/100000).toFixed(1)+'L':capUsed>=1000?'₹'+Math.round(capUsed/1000)+'K':'₹'+Math.round(capUsed);
+  html += '<div style="display:flex;align-items:center;gap:5px">';
+  html += '<span style="background:'+moodBgM+';color:'+moodColorM+';font-size:8px;padding:1px 6px;font-weight:800;border-radius:20px;white-space:nowrap">'+moodLabelM+'</span>';
   html += '<span style="font-size:10px;font-weight:700;color:var(--blue)">'+capStr2+'</span>';
+  html += '</div>';
   html += '</div>';
   html += '</div>'; // content
   html += '</div>'; // header
@@ -1848,7 +1853,6 @@ function buildTradeCardV4(tr) {
   html += '<div style="flex:1;text-align:center">';
   html += '<div style="font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Stop</div>';
   html += '<div style="font-size:13px;font-weight:800;color:var(--red)">'+stop+'</div>';
-  html += '<div style="font-size:8px;color:var(--text3);margin-top:1px">SL(10%): '+slAmtMStr+'</div>';
   html += '</div>';
   html += '</div>';
 
