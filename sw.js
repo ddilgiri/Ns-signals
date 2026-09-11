@@ -1,8 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v137'; // bumped -- fno-v2 was left unchanged since Aug 12 despite dozens of real
-// index.html fixes landing since (including the real login/splash wiring fix), causing the
-// same stale-cache trap documented in memory: phone kept serving old cached JS (mock forms,
-// dead functions) despite fresh reloads. Bump this on every future index.html change.
+const CACHE = 'fno-v138'; // bumped 2026-09-11 -- open-trades P&L pill + SL/mood changes not
+// showing on device despite fresh reloads; bump this on every future index.html change.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
