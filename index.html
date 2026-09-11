@@ -1683,8 +1683,27 @@ function renderTradesV4() {
     openEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div>' +
       '<div class="empty-title">No auto trades yet</div>' +
       '<div class="empty-sub">Engine auto-trades every new signal<br>1 lot · auto-exit on target/stop</div></div>';
+    var pillElO = document.getElementById('open-pnl-pill');
+    if(pillElO) pillElO.style.display = 'none';
   } else {
-    openEl.innerHTML = S.paperTrades.map(function(tr) {
+    var openTotalPnl = S.paperTrades.reduce(function(a,tr){
+      var prem = tr.currentPremium || tr.avgPremium || tr.entryPremium || 0;
+      var avg = tr.avgPremium || tr.entryPremium || 0;
+      return a + (prem - avg) * (tr.lot||1) * (tr.lots||1);
+    }, 0);
+    var openPnlStr = (openTotalPnl >= 0 ? '+' : '') + '₹' + Math.abs(openTotalPnl).toLocaleString('en-IN');
+    var openPnlCol = openTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    var pillElO = document.getElementById('open-pnl-pill');
+    if(pillElO) {
+      pillElO.style.display = 'inline-block';
+      pillElO.style.background = openTotalPnl >= 0 ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)';
+      pillElO.style.color = openPnlCol;
+      pillElO.textContent = openPnlStr + ' P&L';
+    }
+    var openSummary = '<div style="display:flex;justify-content:center;padding:10px 13px;background:var(--card);border-bottom:1px solid var(--border)">' +
+      '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:'+openPnlCol+'">'+openPnlStr+'</div><div style="font-size:9px;color:var(--text3);margin-top:2px">OPEN TRADES P&amp;L ('+S.paperTrades.length+')</div></div>' +
+      '</div>';
+    openEl.innerHTML = openSummary + S.paperTrades.map(function(tr) {
       return buildTradeCardV4(tr);
     }).join('');
   }
@@ -1756,7 +1775,17 @@ function buildTradeCardV4(tr) {
   var spot = LIVE_PRICES[tr.sym] || 0;
   var spotStr = spot ? spot.toLocaleString('en-IN', {maximumFractionDigits:2}) : '--';
 
-  var html = '<div class="v4-card '+(isPE?'bearish':'bullish')+'" id="tcard-'+tr.id+'" onclick="this.classList.toggle(\'open\')" style="position:relative">';
+  // Capital used, SL 10% amount, mood
+  var capUsedM = avg * (tr.lot||1) * (tr.lots||1) * 1.2;
+  var slAmtM = capUsedM * 0.10;
+  var slAmtMStr = slAmtM>=1e5?'₹'+(slAmtM/1e5).toFixed(1)+'L':slAmtM>=1e3?'₹'+Math.round(slAmtM/1e3)+'K':'₹'+Math.round(slAmtM);
+  var slPctM = slAmtM>0 ? Math.round((pnl<0?-pnl:0)/slAmtM*100) : 0;
+  var moodM = pnl>0 ? 'profit' : (pnl<0 && slPctM>=100 ? 'slhit' : (pnl<0 && slPctM>=60 ? 'danger' : (pnl<0 ? 'loss' : 'flat')));
+  var moodColorM = {profit:'var(--green)',flat:'var(--text3)',loss:'var(--amber)',danger:'#f97316',slhit:'var(--red)'}[moodM];
+  var moodBgM = {profit:'rgba(34,197,94,.12)',flat:'rgba(148,163,184,.1)',loss:'rgba(245,158,11,.12)',danger:'rgba(249,115,22,.14)',slhit:'rgba(239,68,68,.16)'}[moodM];
+  var moodLabelM = {profit:'🟢 PROFIT',flat:'⚪ FLAT',loss:'🟡 WATCH',danger:'🟠 NEAR SL',slhit:'🔴 SL HIT'}[moodM];
+
+  var html = '<div class="v4-card '+(isPE?'bearish':'bullish')+'" id="tcard-'+tr.id+'" onclick="this.classList.toggle(\'open\')" style="position:relative;border-left:3px solid '+moodColorM+'">';
 
   // Header row
   html += '<div style="display:flex;align-items:stretch;gap:9px;padding:11px 13px 8px" onclick="this.closest(\'.v4-card\').classList.toggle(\'open\')">';
@@ -1789,6 +1818,10 @@ function buildTradeCardV4(tr) {
   var capStr2=capUsed>=100000?'₹'+(capUsed/100000).toFixed(1)+'L':capUsed>=1000?'₹'+Math.round(capUsed/1000)+'K':'₹'+Math.round(capUsed);
   html += '<span style="font-size:10px;font-weight:700;color:var(--blue)">'+capStr2+'</span>';
   html += '</div>';
+  html += '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:3px">';
+  html += '<span style="background:'+moodBgM+';color:'+moodColorM+';font-size:9px;padding:2px 7px;font-weight:800;border-radius:20px;white-space:nowrap">'+moodLabelM+'</span>';
+  html += '</div>';
+  html += '<div style="text-align:right;font-size:9px;color:var(--text3);margin-top:2px">SL(10%): <span style="color:var(--red);font-weight:700">'+slAmtMStr+'</span></div>';
   html += '</div>'; // content
   html += '</div>'; // header
   // Delete button — shown after live bar row, left aligned, always visible
