@@ -1,4 +1,5 @@
 const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
+const nanaLogic=require("./nanaLogic.js");
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -493,6 +494,37 @@ app.post("/quote",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({
 app.post("/option-greeks",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated — login first"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/optionGreek`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;log(`Option Greeks error: ${a}`,"WARN"),t.status(e.response?.status||500).json({status:!1,message:a})}})
 app.post("/candles",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,e.body);t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(e.response?.status||500).json({status:!1,message:a})}})
 
+// NanaLogic setup endpoint (2026-09-11): fetches ~200 days of daily candles (enough
+// for 52 weekly bars after aggregation), runs the weekly S/R + daily trigger + OI-case
+// setup detector. oiCase (1-8) must be passed in from the caller's own /oi-analysis
+// call (callOiCase for CE checks, putOiCase for PE checks) -- this endpoint does not
+// re-fetch OI itself to avoid a duplicate expensive call per scan cycle.
+app.post("/nana-setup",async(req,res)=>{
+  if(!isAuthenticated())return res.status(401).json({status:false,message:"Not authenticated"});
+  const {symbolToken,exchange,spotPrice,oiCase,atr14}=req.body;
+  if(!symbolToken||!spotPrice)return res.status(400).json({status:false,message:"symbolToken and spotPrice required"});
+  try{
+    const now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+    const todate=now.toISOString().slice(0,10)+" 15:30";
+    const fromDt=new Date(now);
+    fromDt.setDate(fromDt.getDate()-200);
+    const fromdate=fromDt.toISOString().slice(0,10)+" 09:15";
+    const candleResp=await throttledCandleRequest({exchange:exchange||"NSE",symboltoken:String(symbolToken),interval:"ONE_DAY",fromdate,todate},exchange||"NSE");
+    const dailyRaw=candleResp.data?.data||[];
+    if(dailyRaw.length<15){
+      return res.json({status:true,valid:false,reason:`Not enough daily candles (${dailyRaw.length}) for setup check`});
+    }
+    const dailyCandles=nanaLogic.rawDailyToObjects(dailyRaw);
+    const weeklyCandles=nanaLogic.dailyCandlesToWeekly(dailyRaw);
+    const result=nanaLogic.nanaLogicSetup(weeklyCandles,dailyCandles,parseFloat(spotPrice),oiCase!=null?parseInt(oiCase):null,atr14?parseFloat(atr14):null);
+    res.json({status:true,...result,candleCount:dailyRaw.length,weeklyBarCount:weeklyCandles.length});
+  }catch(e){
+    const msg=e.response?.data?.message||e.message;
+    log(`NanaLogic setup error: ${msg}`,"WARN");
+    res.status(e.response?.status||500).json({status:false,message:msg});
+  }
+});
+
 const BIAS_CACHE={},BIAS_TTL=3e5;
 let _lastAngelCall=0;
 async function angelRateLimit(){const e=Date.now()-_lastAngelCall;e<300&&await new Promise(t=>setTimeout(t,300-e)),_lastAngelCall=Date.now()}
@@ -811,6 +843,32 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
     else if(floorOiRising===false) maheshFloor = "FLOOR_BREAKING";
     oiResult.maheshWall = maheshWall;
     oiResult.maheshFloor = maheshFloor;
+
+    // Dilip's locked 8-case OI+LTP framework (2026-07-24), computed directly from
+    // the same raw OI-direction + LTP-direction booleans above -- NOT derived from
+    // the maheshWall/maheshFloor string labels, since those use different polarity
+    // wording for the same underlying facts. Case numbers only, for NanaLogic module.
+    // Call side: 1=sellers win(OI↑LTP↓) 2=buyers win(OI↑LTP↑) 3=unwind(OI↓LTP↓) 4=short-cover(OI↓LTP↑)
+    function callCase(oiUp, ltpUp) {
+      if (oiUp === null || ltpUp === null) return null;
+      if (oiUp && !ltpUp) return 1;
+      if (oiUp && ltpUp) return 2;
+      if (!oiUp && !ltpUp) return 3;
+      return 4;
+    }
+    // Put side: 5=sellers win(OI↑LTP↓) 6=buyers win(OI↑LTP↑) 7=unwind(OI↓LTP↓) 8=short-cover(OI↓LTP↑)
+    function putCase(oiUp, ltpUp) {
+      if (oiUp === null || ltpUp === null) return null;
+      if (oiUp && !ltpUp) return 5;
+      if (oiUp && ltpUp) return 6;
+      if (!oiUp && !ltpUp) return 7;
+      return 8;
+    }
+    oiResult.callOiCase = callCase(wallOiRising, wallLtpUp);
+    oiResult.putOiCase = putCase(floorOiRising, floorLtpUp);
+    // Convenience field for the ATM strike specifically (NanaLogic expects one
+    // oiCase per direction check -- caller picks callOiCase or putOiCase by
+    // whichever side the price-trigger direction is CE or PE)
   }catch(maheshErr){ log(`Mahesh check skipped: ${maheshErr.message}`,"WARN"); }
 
   saveOISnapshot(i, oiResult);
