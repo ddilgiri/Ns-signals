@@ -886,7 +886,7 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -1143,6 +1143,7 @@ const i=Object.values(s).reduce((e,t,idx,arr)=>{
   return e+t.max;
 },0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
+{const t=SIGNAL_WEIGHTS.nanaConfirm||12;let n=0,o="";const ns=e.nanaSetup;if(!ns){n=.5*t,o="NanaLogic not available — neutral"}else if(!ns.valid){n=.4*t,o="NanaLogic: "+(ns.reason||"no weekly zone/trigger confirmation")}else if(a&&"CE"===ns.direction||!a&&"PE"===ns.direction){n=t,o="NanaLogic: weekly zone + daily trigger + OI Case confirmed "+ns.direction+" — SL "+ns.spotSL}else{n=0,o="NanaLogic confirms opposite side ("+ns.direction+") — against "+(a?"CE":"PE")}s.nanaConfirm={earned:n,max:t,pass:n>=.5*t,note:o}}
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
@@ -1211,6 +1212,17 @@ app.post("/signal-analysis",async(e,t)=>{
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
+  // NanaLogic setup check (2026-09-12): now called server-side, inline, BEFORE scoring,
+  // so it can genuinely contribute score points via SIGNAL_WEIGHTS.nanaConfirm instead of
+  // being a cosmetic badge added after scoring already happened. Uses callOiCase/putOiCase
+  // already available on h (the oi-analysis result fetched above in the same Promise.allSettled)
+  // -- zero extra OI calls. Candle fetch is a genuinely new call (weekly S/R needs daily bars
+  // oi-analysis doesn't provide), kept non-fatal so a candle-fetch failure never blocks scoring.
+  try{
+    const _oiCaseForSide="CE"===i?(h?.callOiCase??null):(h?.putOiCase??null);
+    const _nanaResp=await axios.post(`http://localhost:${PORT}/nana-setup`,{symbolToken:a,exchange:n,spotPrice:r,oiCase:_oiCaseForSide,atr14:p.atr||null},{headers:{"Content-Type":"application/json"}});
+    if(_nanaResp.data?.status)S.nanaSetup=_nanaResp.data;
+  }catch(nanaErr){ /* non-fatal -- NanaLogic is additive, never blocks scoring on failure */ }
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
   // Real fix (2026-09-05, #11): OI category minimum gate, per explicit user request --
   // "main category minimum pass marks... else all dummy signals". Confirmed live and
