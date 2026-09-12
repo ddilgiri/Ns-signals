@@ -1,10 +1,15 @@
 // ============================================================
-// NANA LOGIC MODULE — Weekly S/R + OI Case + Sector Confirmation
-// For NS-Signals (ddilgiri/Ns-signals)
-// Zero new API calls beyond candle fetch — reuses existing OI/sector data
+// NANA CAPITAL RULES — Core Trading Logic
+// Weekly S/R retest + spot-based SL + OI confirmation + sector check
+// Named-rule structure (2026-09-12) — math is byte-identical to the
+// original inline version, refactored into testable named functions
+// per Dilip's own reference paste.
 // ============================================================
 
-// ---------- STEP 1+2: Weekly S/R zone + daily trigger candle ----------
+/**
+ * RULE 1: Weekly Support/Resistance Zone Detection
+ * A zone is valid only if price touched it 2+ times historically (real S/R, not noise)
+ */
 function findWeeklySRZones(candles, clusterPct = 0.01) {
   const swingPoints = [];
   for (let i = 2; i < candles.length - 2; i++) {
@@ -28,65 +33,138 @@ function findWeeklySRZones(candles, clusterPct = 0.01) {
     }
   });
 
-  return zones.filter(z => z.touches >= 2); // require 2+ touches to count as real S/R
+  return zones.filter(z => z.touches >= 2);
 }
 
 function findDailySRZones(candles) {
-  return findWeeklySRZones(candles, 0.005); // tighter clustering for daily targets
+  return findWeeklySRZones(candles, 0.005);
 }
 
-// ---------- STEP 1-6: Core setup detector (single stock) ----------
 /**
- * @param {Array} weeklyCandles - [{open,high,low,close,volume}, ...] last ~52 weeks
- * @param {Array} dailyCandles  - [{open,high,low,close,volume}, ...] last ~30 days
- * @param {number} spot - current LTP of underlying
- * @param {number|null} oiCase - 1-8 from callOiCase/putOiCase for the relevant side, or null
- * @param {number|null} atr14 - existing ATR if available, else null
+ * RULE 2: Daily Trigger Candle
+ */
+function checkDailyTrigger(nearestZone, dailyCandles) {
+  const last3 = dailyCandles.slice(-3);
+  if (last3.length < 2) return null;
+  const trigger = last3[last3.length - 1];
+  const prev = last3[last3.length - 2];
+
+  const isBullish = nearestZone.type === 'support' &&
+    trigger.close > trigger.open &&
+    trigger.close > prev.close &&
+    trigger.low <= nearestZone.level * 1.005;
+
+  const isBearish = nearestZone.type === 'resistance' &&
+    trigger.close < trigger.open &&
+    trigger.close < prev.close &&
+    trigger.high >= nearestZone.level * 0.995;
+
+  if (isBullish) return 'CE';
+  if (isBearish) return 'PE';
+  return null;
+}
+
+/**
+ * RULE 3: OI Confirmation Gate
+ */
+function oiConfirms(direction, oiCase) {
+  return (direction === 'CE' && oiCase === 2) || (direction === 'PE' && oiCase === 6);
+}
+
+/**
+ * RULE 4: Spot-based Stop Loss
+ */
+function calcSpotSL(direction, nearestZone, triggerCandle, spot) {
+  const buffer = spot * 0.003;
+  return direction === 'CE'
+    ? Number((Math.min(nearestZone.level, triggerCandle.low) - buffer).toFixed(2))
+    : Number((Math.max(nearestZone.level, triggerCandle.high) + buffer).toFixed(2));
+}
+
+/**
+ * RULE 5: Layered Targets
+ */
+function calcTargets(direction, spot, dailyCandles, weeklyZones) {
+  const dailyZones = findDailySRZones(dailyCandles.slice(-15));
+  const scalpTargets = direction === 'CE'
+    ? dailyZones.filter(z => z.level > spot).sort((a, b) => a.level - b.level).slice(0, 3)
+    : dailyZones.filter(z => z.level < spot).sort((a, b) => b.level - a.level).slice(0, 3);
+
+  const positional = weeklyZones
+    .filter(z => direction === 'CE' ? z.level > spot : z.level < spot)
+    .sort((a, b) => direction === 'CE' ? a.level - b.level : b.level - a.level)[0];
+
+  return {
+    scalpTargets: scalpTargets.map(t => Number(t.level.toFixed(2))),
+    positionalTarget: positional ? Number(positional.level.toFixed(2)) : null
+  };
+}
+
+/**
+ * RULE 6: Strike Selection
+ */
+function strikeRule() {
+  return 'ATM or 1 strike ITM — match spot zone, higher delta, avoid far OTM';
+}
+
+/**
+ * RULE 7: Sector Confirmation
+ */
+function sectorConfirms(symbol, sector, allSignals, direction) {
+  const signalArray = Array.isArray(allSignals) ? allSignals : Object.values(allSignals);
+  const peers = signalArray.filter(s => s.sector === sector && s.symbol !== symbol);
+  if (peers.length < 2) {
+    return { confirmed: false, agreeingCount: 0, totalPeers: peers.length, reason: 'Not enough sector peers to confirm' };
+  }
+
+  const agreeing = peers.filter(p => p.setup && p.setup.valid && p.setup.direction === direction);
+  const confirmed = agreeing.length >= 2;
+  return {
+    confirmed,
+    agreeingCount: agreeing.length,
+    totalPeers: peers.length,
+    agreeingSymbols: agreeing.map(p => p.symbol),
+    reason: confirmed
+      ? `Sector confirmed: ${agreeing.length}/${peers.length} peers show same ${direction} structure`
+      : `Sector NOT confirmed: only ${agreeing.length}/${peers.length} peers agree — isolated, lower conviction`
+  };
+}
+
+/**
+ * RULE 8: Combined conviction badge
+ */
+function getConvictionBadge(setupResult, sectorResult) {
+  if (!setupResult.valid) return { badge: null };
+
+  let score = 0;
+  if (setupResult.oiCase === 2 || setupResult.oiCase === 6) score += 1;
+  if (sectorResult && sectorResult.confirmed) score += 1;
+  if (sectorResult && sectorResult.agreeingCount >= 3) score += 1;
+
+  const badge = score >= 3 ? 'HIGH' : score === 2 ? 'MEDIUM' : 'LOW';
+  return {
+    badge,
+    score,
+    detail: `OI confirmed | Sector: ${sectorResult ? sectorResult.reason : 'not checked'}`
+  };
+}
+
+/**
+ * MASTER FUNCTION — runs all rules in sequence for one stock.
  */
 function nanaLogicSetup(weeklyCandles, dailyCandles, spot, oiCase, atr14 = null) {
-  // STEP 1: nearest weekly S/R zone within 2% of spot
   const zones = findWeeklySRZones(weeklyCandles.slice(-52));
   const nearestZone = zones
     .map(z => ({ ...z, dist: Math.abs(spot - z.level) / spot }))
     .filter(z => z.dist < 0.02)
     .sort((a, b) => a.dist - b.dist)[0];
 
-  if (!nearestZone) {
-    return { valid: false, reason: 'Spot not near any weekly S/R zone' };
-  }
+  if (!nearestZone) return { valid: false, reason: 'Spot not near any weekly S/R zone' };
 
-  // STEP 2: daily trigger candle at that zone
-  const last3Daily = dailyCandles.slice(-3);
-  if (last3Daily.length < 2) {
-    return { valid: false, reason: 'Not enough daily candles for trigger check' };
-  }
-  const triggerCandle = last3Daily[last3Daily.length - 1];
-  const prevCandle = last3Daily[last3Daily.length - 2];
+  const direction = checkDailyTrigger(nearestZone, dailyCandles);
+  if (!direction) return { valid: false, reason: 'At zone but no daily trigger candle yet — wait' };
 
-  const isBullishTrigger =
-    nearestZone.type === 'support' &&
-    triggerCandle.close > triggerCandle.open &&
-    triggerCandle.close > prevCandle.close &&
-    triggerCandle.low <= nearestZone.level * 1.005;
-
-  const isBearishTrigger =
-    nearestZone.type === 'resistance' &&
-    triggerCandle.close < triggerCandle.open &&
-    triggerCandle.close < prevCandle.close &&
-    triggerCandle.high >= nearestZone.level * 0.995;
-
-  if (!isBullishTrigger && !isBearishTrigger) {
-    return { valid: false, reason: 'At zone but no daily trigger candle yet — wait' };
-  }
-
-  const direction = isBullishTrigger ? 'CE' : 'PE';
-
-  // STEP 3: OI confirmation — Mahesh gate (mandatory)
-  // CE needs oiCase===2 (Call buyers winning), PE needs oiCase===6 (Put buyers winning)
-  const oiConfirms = (direction === 'CE' && oiCase === 2) ||
-                      (direction === 'PE' && oiCase === 6);
-
-  if (!oiConfirms) {
+  if (!oiConfirms(direction, oiCase)) {
     return {
       valid: false,
       direction,
@@ -94,23 +172,11 @@ function nanaLogicSetup(weeklyCandles, dailyCandles, spot, oiCase, atr14 = null)
     };
   }
 
-  // STEP 4: spot-based SL
-  const buffer = spot * 0.003; // 0.3% buffer
-  const spotSL = direction === 'CE'
-    ? Math.min(nearestZone.level, triggerCandle.low) - buffer
-    : Math.max(nearestZone.level, triggerCandle.high) + buffer;
+  const last3 = dailyCandles.slice(-3);
+  const triggerCandle = last3[last3.length - 1];
+  const spotSL = calcSpotSL(direction, nearestZone, triggerCandle, spot);
+  const targets = calcTargets(direction, spot, dailyCandles, zones);
 
-  // STEP 5: layered targets
-  const dailyZones = findDailySRZones(dailyCandles.slice(-15));
-  const scalpTargets = direction === 'CE'
-    ? dailyZones.filter(z => z.level > spot).sort((a, b) => a.level - b.level).slice(0, 3)
-    : dailyZones.filter(z => z.level < spot).sort((a, b) => b.level - a.level).slice(0, 3);
-
-  const nextWeeklyZone = zones
-    .filter(z => direction === 'CE' ? z.level > spot : z.level < spot)
-    .sort((a, b) => direction === 'CE' ? a.level - b.level : b.level - a.level)[0];
-
-  // STEP 6: fuel-check note
   const fuelCheckNote = atr14
     ? (atr14 / spot > 0.015 ? 'ATR healthy — room to run' : 'ATR tight — reduce size')
     : 'ATR not passed — run existing fuel-check/IV-room gate before entry';
@@ -119,59 +185,17 @@ function nanaLogicSetup(weeklyCandles, dailyCandles, spot, oiCase, atr14 = null)
     valid: true,
     direction,
     zone: nearestZone,
-    spotSL: Number(spotSL.toFixed(2)),
-    scalpTargets: scalpTargets.map(t => Number(t.level.toFixed(2))),
-    positionalTarget: nextWeeklyZone ? Number(nextWeeklyZone.level.toFixed(2)) : null,
+    spotSL,
+    ...targets,
     oiCase,
     fuelCheckNote,
-    strikePref: 'ATM or 1 strike ITM — match spot zone, avoid far OTM'
+    strikePref: strikeRule()
   };
 }
 
-// ---------- STEP 7: Sector confirmation gate ----------
-function sectorConfirmationGate(symbol, sector, allSignals, direction) {
-  const signalArray = Array.isArray(allSignals) ? allSignals : Object.values(allSignals);
-  const sectorPeers = signalArray.filter(s => s.sector === sector && s.symbol !== symbol);
+const nanaCapitalSetup = nanaLogicSetup;
+const sectorConfirmationGate = sectorConfirms;
 
-  if (sectorPeers.length < 2) {
-    return { confirmed: false, agreeingCount: 0, totalPeers: sectorPeers.length,
-             reason: 'Not enough sector peers tracked to confirm' };
-  }
-
-  const agreeing = sectorPeers.filter(p => p.nanaSetup && p.nanaSetup.valid && p.nanaSetup.direction === direction);
-  const confirmed = agreeing.length >= 2;
-
-  return {
-    confirmed,
-    agreeingCount: agreeing.length,
-    totalPeers: sectorPeers.length,
-    agreeingSymbols: agreeing.map(p => p.symbol),
-    reason: confirmed
-      ? `Sector confirmed: ${agreeing.length}/${sectorPeers.length} peers show same ${direction} structure`
-      : `Sector NOT confirmed: only ${agreeing.length}/${sectorPeers.length} peers agree — isolated, lower conviction`
-  };
-}
-
-// ---------- STEP 8: Combined conviction badge ----------
-function getConvictionBadge(nanaResult, sectorResult) {
-  if (!nanaResult.valid) return { badge: null };
-
-  let score = 0;
-  if (nanaResult.oiCase === 2 || nanaResult.oiCase === 6) score += 1;
-  if (sectorResult && sectorResult.confirmed) score += 1;
-  if (sectorResult && sectorResult.agreeingCount >= 3) score += 1;
-
-  const badge = score >= 3 ? 'HIGH' : score === 2 ? 'MEDIUM' : 'LOW';
-
-  return {
-    badge,
-    score,
-    detail: `OI confirmed | Sector: ${sectorResult ? sectorResult.reason : 'not checked'}`
-  };
-}
-
-// ---------- Helper: convert Angel One ONE_DAY candles into weekly bars ----------
-// Angel candle format: [timestamp, open, high, low, close, volume]
 function dailyCandlesToWeekly(dailyRaw) {
   const daily = dailyRaw.map(c => ({
     date: c[0].slice(0, 10),
@@ -207,10 +231,17 @@ function rawDailyToObjects(dailyRaw) {
 
 module.exports = {
   nanaLogicSetup,
-  sectorConfirmationGate,
-  getConvictionBadge,
+  nanaCapitalSetup,
   findWeeklySRZones,
   findDailySRZones,
+  checkDailyTrigger,
+  oiConfirms,
+  calcSpotSL,
+  calcTargets,
+  strikeRule,
+  sectorConfirms,
+  sectorConfirmationGate,
+  getConvictionBadge,
   dailyCandlesToWeekly,
   rawDailyToObjects
 };
