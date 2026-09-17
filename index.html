@@ -498,13 +498,26 @@ async function loadFnoStockList(forceRefresh){
   var t=moverCandidates.concat(regularBatch.filter(function(s){return !moverSyms[s.sym];}));
   if(moverCandidates.length){
     var reasonIcon={price:"💹",oi:"📊",volume:"🔥"};
-    var moverHtml="⚡ Priority movers: "+moverCandidates.map(function(m){
-      var isUp=(LIVE_PRICES[m.sym]&&LIVE_PREV[m.sym])?(LIVE_PRICES[m.sym]>=LIVE_PREV[m.sym]):true;
-      var color=m._priorityReason==="oi"?"#a855f7":m._priorityReason==="volume"?"#f59e0b":(isUp?"#22c55e":"#ef4444");
-      var icon=reasonIcon[m._priorityReason]||"💹";
-      return "<span style=\"color:"+color+";font-weight:700\">"+icon+m.sym+" "+(m._priorityDetail||"")+"</span>";
-    }).join(", ");
-    addLog(moverHtml,"",true);
+    var logArea=document.getElementById("logArea");
+    if(logArea){
+      var entryDiv=document.createElement("div");
+      var prefixSpan=document.createElement("span");
+      var nowStr=(new Date).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+      entryDiv.appendChild(document.createTextNode("["+nowStr+"] ⚡ Priority movers: "));
+      moverCandidates.forEach(function(m,idx){
+        var isUp=(LIVE_PRICES[m.sym]&&LIVE_PREV[m.sym])?(LIVE_PRICES[m.sym]>=LIVE_PREV[m.sym]):true;
+        var color=m._priorityReason==="oi"?"#a855f7":m._priorityReason==="volume"?"#f59e0b":(isUp?"#22c55e":"#ef4444");
+        var icon=reasonIcon[m._priorityReason]||"💹";
+        var span=document.createElement("span");
+        span.style.color=color;
+        span.style.fontWeight="700";
+        span.textContent=icon+m.sym+" "+(m._priorityDetail||"");
+        entryDiv.appendChild(span);
+        if(idx<moverCandidates.length-1)entryDiv.appendChild(document.createTextNode(", "));
+      });
+      logArea.appendChild(entryDiv);
+      logArea.scrollTop=logArea.scrollHeight;
+    }
   }
   updateMoverTicker();
   S.scannedCount+=t.length;
