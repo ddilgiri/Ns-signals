@@ -127,6 +127,14 @@ async function refreshOpenTradePrices(){
         if(cardEl)cardEl.style.borderLeftColor=moodColor,cardEl.style.boxShadow="0 0 0 1px "+moodColor+"33";
       }
     });
+    // Live total recompute for the big "OPEN TRADES P&L" bar -- was only set at full
+    // render time, causing it to drift stale vs the always-live per-card P&L values.
+    var _bigTotalEl=document.getElementById("openTotalPnlBig");
+    if(_bigTotalEl){
+      var _liveTotal=S.paperTrades.reduce(function(a,tr){return a+(tr.pnl||0);},0);
+      _bigTotalEl.textContent=(_liveTotal>=0?"+":"")+"₹"+Math.abs(_liveTotal).toLocaleString("en-IN");
+      _bigTotalEl.style.color=_liveTotal>=0?"var(--green)":"var(--red)";
+    }
     savePaperTrades();
   }catch(err){console.warn("live-trade-prices fetch failed:",err.message);}
 }
@@ -1767,16 +1775,14 @@ function renderTradesV4() {
     if(pillElO) pillElO.style.display = 'none';
   } else {
     var openTotalPnl = S.paperTrades.reduce(function(a,tr){
-      var prem = tr.currentPremium || tr.avgPremium || tr.entryPremium || 0;
-      var avg = tr.avgPremium || tr.entryPremium || 0;
-      return a + (prem - avg) * (tr.lot||1) * (tr.lots||1);
+      return a + (tr.pnl || 0);
     }, 0);
     var openPnlStr = (openTotalPnl >= 0 ? '+' : '') + '₹' + Math.abs(openTotalPnl).toLocaleString('en-IN');
     var openPnlCol = openTotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
     var pillElO = document.getElementById('open-pnl-pill');
     if(pillElO) pillElO.style.display = 'none';
     var openSummary = '<div style="display:flex;justify-content:center;padding:10px 13px;background:var(--card);border-bottom:1px solid var(--border)">' +
-      '<div style="text-align:center"><div style="font-size:20px;font-weight:900;color:'+openPnlCol+'">'+openPnlStr+'</div><div style="font-size:9px;color:var(--text3);margin-top:2px">OPEN TRADES P&amp;L ('+S.paperTrades.length+')</div></div>' +
+      '<div style="text-align:center"><div id="openTotalPnlBig" style="font-size:20px;font-weight:900;color:'+openPnlCol+'">'+openPnlStr+'</div><div style="font-size:9px;color:var(--text3);margin-top:2px">OPEN TRADES P&amp;L ('+S.paperTrades.length+')</div></div>' +
       '</div>';
     openEl.innerHTML = openSummary + S.paperTrades.map(function(tr) {
       return buildTradeCardV4(tr);
