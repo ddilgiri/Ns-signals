@@ -2418,7 +2418,16 @@ if(_v42RenderTrades) {
     var manual = S.paperTrades.filter(function(t){ return t.manual; });
 
     if(auto.length && manual.length) {
-      // Rebuild with section labels
+      // Rebuild with section labels -- must also rebuild the P&L summary bar here,
+      // since this replaces openEl.innerHTML wholesale and would otherwise wipe out
+      // the bar the base renderTradesV4() just built (real bug found 2026-09-13,
+      // manual trade add was making the summary bar disappear).
+      var _v42TotalPnl = S.paperTrades.reduce(function(a,tr){ return a + (tr.pnl || 0); }, 0);
+      var _v42PnlStr = (_v42TotalPnl >= 0 ? '+' : '') + '₹' + Math.abs(_v42TotalPnl).toLocaleString('en-IN');
+      var _v42PnlCol = _v42TotalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      var summaryHtml = '<div style="display:flex;justify-content:center;padding:10px 13px;background:var(--card);border-bottom:1px solid var(--border)">' +
+        '<div style="text-align:center"><div id="openTotalPnlBig" style="font-size:20px;font-weight:900;color:'+_v42PnlCol+'">'+_v42PnlStr+'</div><div style="font-size:9px;color:var(--text3);margin-top:2px">OPEN TRADES P&amp;L ('+S.paperTrades.length+')</div></div>' +
+        '</div>';
       var html = '';
       if(auto.length) {
         html += '<div class="v42-sec">🤖 Engine Trades</div>';
@@ -2428,7 +2437,7 @@ if(_v42RenderTrades) {
         html += '<div class="v42-sec" style="margin-top:8px">📝 My Predictions</div>';
         manual.forEach(function(tr){ html += buildTradeCardV4(tr); });
       }
-      openEl.innerHTML = '<div style="padding:8px 13px 80px;display:flex;flex-direction:column;gap:8px">'+html+'</div>';
+      openEl.innerHTML = summaryHtml + '<div style="padding:8px 13px 80px;display:flex;flex-direction:column;gap:8px">'+html+'</div>';
     }
   };
 }
