@@ -2802,46 +2802,68 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var peVerdict = peData.score >= 75 ? 'STRONG' : peData.score >= 60 ? 'MODERATE' : peData.score >= 42 ? 'WEAK' : 'AVOID';
   var dominantSide = oiResult.dilipFormula === 'CE' ? 'CE' : oiResult.dilipFormula === 'PE' ? 'PE' : null;
   var maheshText;
+  var verdictConfidence; // 'confirmed' | 'conflict' | 'lean'
   if (dominantSide === 'CE' && (ceVerdict === 'STRONG' || ceVerdict === 'MODERATE')) {
     maheshText = 'OI structure favors CE, and the technical score agrees (' + ceVerdict + ', ' + ceData.score + '%) — confirmed bullish, no conflict.';
+    verdictConfidence = 'confirmed';
   } else if (dominantSide === 'PE' && (peVerdict === 'STRONG' || peVerdict === 'MODERATE')) {
     maheshText = 'OI structure favors PE, and the technical score agrees (' + peVerdict + ', ' + peData.score + '%) — confirmed bearish, no conflict.';
+    verdictConfidence = 'confirmed';
   } else if (dominantSide === 'CE' && (peVerdict === 'STRONG' || peVerdict === 'MODERATE')) {
-    maheshText = 'OI structure favors CE, but the technical score actually leans PE (' + peVerdict + ', ' + peData.score + '%) — conflict zone, wait for spot to confirm a side before entering.';
+    maheshText = 'OI structure favors CE, but the technical score actually leans PE (' + peVerdict + ', ' + peData.score + '%) — conflict zone, treat as lower confidence.';
+    verdictConfidence = 'conflict';
   } else if (dominantSide === 'PE' && (ceVerdict === 'STRONG' || ceVerdict === 'MODERATE')) {
-    maheshText = 'OI structure favors PE, but the technical score actually leans CE (' + ceVerdict + ', ' + ceData.score + '%) — conflict zone, wait for spot to confirm a side before entering.';
+    maheshText = 'OI structure favors PE, but the technical score actually leans CE (' + ceVerdict + ', ' + ceData.score + '%) — conflict zone, treat as lower confidence.';
+    verdictConfidence = 'conflict';
+  } else if (dominantSide) {
+    maheshText = 'OI structure favors ' + dominantSide + ', though the technical score is still weak on both sides (CE ' + ceData.score + '%, PE ' + peData.score + '%) — OI-led lean, not a full confirmation.';
+    verdictConfidence = 'lean';
   } else {
-    maheshText = 'Neither side has a clean confirmed structure right now — OI: ' + (oiResult.dilipFormulaNote || 'no dominance') + '. Technical score: CE ' + ceData.score + '% (' + ceVerdict + ') / PE ' + peData.score + '% (' + peVerdict + '). Best to wait for the chain or the technical score to strengthen on one side.';
+    var leaderSide = ceData.score >= peData.score ? 'CE' : 'PE';
+    maheshText = 'No clear OI dominance (' + (oiResult.dilipFormulaNote || 'no dominance') + '), but technical score leans ' + leaderSide + ' (CE ' + ceData.score + '% vs PE ' + peData.score + '%) — treat as a tentative lean, size small.';
+    verdictConfidence = 'lean';
   }
 
-  var verdictSide = dominantSide;
-  var nareshText = _rsNareshText(null, loudCall, loudPut, verdictSide, ceData.score, peData.score);
+  // Always resolve a real side using live data -- OI dominance when available,
+  // else whichever side scores higher technically. Never null, per explicit
+  // user request: live data should always produce a suggestion, no dead-end.
+  var verdictSide = dominantSide || (ceData.score >= peData.score ? 'CE' : 'PE');
+  var nareshText = _rsNareshText(null, loudCall, loudPut, dominantSide, ceData.score, peData.score);
 
-  // Pick suggested strikes: strongest Case 2 (call) or Case 6 (put) strikes near ATM
+  // Pick suggested strikes: strongest Case 2 (call) or Case 6 (put) strikes near ATM.
+  // When OI itself didn't confirm this side, fall back to the strike closest to
+  // spot with the tightest CE/PE_ltp change data available -- still real, live
+  // numbers, just a lower-confidence pick since no strong Case 2/6 exists.
   var suggestions = [];
   if (verdictSide === 'PE') {
     var goodPutStrikes = putStrikeCases.filter(function(sc) { return sc.case === 6; })
       .sort(function(a, b) { return Math.abs(putOiChangeMap[a.strike]) - Math.abs(putOiChangeMap[b.strike]); }).reverse().slice(0, 2);
+    if (!goodPutStrikes.length) {
+      goodPutStrikes = putStrikeCases.sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
+    }
     goodPutStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
       if (chainRow && chainRow.PE_ltp) {
         suggestions.push({
           strike: sc.strike, type: 'PE', ltp: chainRow.PE_ltp, prevClose: chainRow.PE_prevClose,
           isATM: sc.strike === atmStrike,
-          reason: 'Case 6 · OI ' + _rsFmtPct(putOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(putLtpChangeMap[sc.strike])
+          reason: (sc.case === 6 ? 'Case 6' : 'Case ' + sc.case + ' (tentative)') + ' · OI ' + _rsFmtPct(putOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(putLtpChangeMap[sc.strike])
         });
       }
     });
-  } else if (verdictSide === 'CE') {
+  } else {
     var goodCallStrikes = callStrikeCases.filter(function(sc) { return sc.case === 2; })
       .sort(function(a, b) { return Math.abs(callOiChangeMap[a.strike]) - Math.abs(callOiChangeMap[b.strike]); }).reverse().slice(0, 2);
+    if (!goodCallStrikes.length) {
+      goodCallStrikes = callStrikeCases.sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
+    }
     goodCallStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
       if (chainRow && chainRow.CE_ltp) {
         suggestions.push({
           strike: sc.strike, type: 'CE', ltp: chainRow.CE_ltp, prevClose: chainRow.CE_prevClose,
           isATM: sc.strike === atmStrike,
-          reason: 'Case 2 · OI ' + _rsFmtPct(callOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(callLtpChangeMap[sc.strike])
+          reason: (sc.case === 2 ? 'Case 2' : 'Case ' + sc.case + ' (tentative)') + ' · OI ' + _rsFmtPct(callOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(callLtpChangeMap[sc.strike])
         });
       }
     });
@@ -2874,34 +2896,34 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   html += '<div style="font-size:11px;font-weight:800;color:var(--amber);margin-bottom:6px;letter-spacing:.5px">NARESH — URGENCY</div>';
   html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + nareshText + '</div></div>';
 
-  if (verdictSide) {
-    html += '<div style="margin:0 13px 12px;background:' + (verdictSide === 'PE' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)') + ';border-radius:12px;padding:14px 16px">';
-    html += '<div style="font-size:11px;font-weight:800;color:' + verdictColor + ';margin-bottom:8px;letter-spacing:.5px">VERDICT</div>';
-    html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + (verdictSide === 'PE' ? sureshText : rameshText) + ' ' + maheshText + '</div>';
-    html += '</div>';
+  var confLabel = verdictConfidence === 'confirmed' ? 'CONFIRMED' : verdictConfidence === 'conflict' ? 'CONFLICT — LOW CONFIDENCE' : 'TENTATIVE LEAN';
+  var confColor = verdictConfidence === 'confirmed' ? verdictColor : 'var(--amber)';
+  html += '<div style="margin:0 13px 12px;background:' + (verdictSide === 'PE' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)') + ';border-radius:12px;padding:14px 16px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:11px;font-weight:800;color:' + verdictColor + ';letter-spacing:.5px">VERDICT</div><div style="font-size:9px;font-weight:800;color:' + confColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
+  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + (verdictSide === 'PE' ? sureshText : rameshText) + ' ' + maheshText + '</div>';
+  html += '</div>';
 
-    if (suggestions.length) {
-      html += '<div style="margin:0 13px 8px;font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.5px">SUGGESTED STRIKES</div>';
-      suggestions.forEach(function(s, idx) {
-        var chgPct = s.prevClose > 0 ? ((s.ltp - s.prevClose) / s.prevClose * 100) : 0;
-        var chgAmt = s.ltp - s.prevClose;
-        var chgColor = chgPct >= 0 ? 'var(--green)' : 'var(--red)';
-        var capital = s.ltp * (stockMeta.lot || 1) * 1.2;
-        var capStr = capital >= 1e5 ? '₹' + (capital / 1e5).toFixed(1) + 'L' : capital >= 1e3 ? '₹' + Math.round(capital / 1e3) + 'K' : '₹' + Math.round(capital);
-        html += '<div style="margin:0 13px 10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-        html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + '</div>';
-        html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + s.reason + '</div></div>';
-        html += '<div style="text-align:right"><div style="font-size:16px;font-weight:900;color:var(--text)">₹' + s.ltp.toFixed(2) + '</div>';
-        html += '<div style="font-size:10px;font-weight:700;color:' + chgColor + '">' + (chgPct >= 0 ? '+' : '') + chgAmt.toFixed(2) + ' (' + (chgPct >= 0 ? '+' : '') + chgPct.toFixed(1) + '%)</div></div>';
-        html += '</div>';
-        html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><span>Capital (1 lot)</span><span style="font-weight:700;color:var(--text)">' + capStr + '</span></div>';
-        html += '<div class="paper-btn" style="margin-top:10px" onclick="openResearchConfirm(this,\'' + sym + '\',' + s.strike + ',\'' + s.type + '\',' + s.ltp + ',' + (stockMeta.lot || 1) + ')">➕ Add this strike</div>';
-        html += '</div>';
-      });
-    }
+  if (suggestions.length) {
+    html += '<div style="margin:0 13px 8px;font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.5px">SUGGESTED STRIKES</div>';
+    suggestions.forEach(function(s, idx) {
+      var chgPct = s.prevClose > 0 ? ((s.ltp - s.prevClose) / s.prevClose * 100) : 0;
+      var chgAmt = s.ltp - s.prevClose;
+      var chgColor = chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+      var capital = s.ltp * (stockMeta.lot || 1) * 1.2;
+      var capStr = capital >= 1e5 ? '₹' + (capital / 1e5).toFixed(1) + 'L' : capital >= 1e3 ? '₹' + Math.round(capital / 1e3) + 'K' : '₹' + Math.round(capital);
+      html += '<div style="margin:0 13px 10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + '</div>';
+      html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + s.reason + '</div></div>';
+      html += '<div style="text-align:right"><div style="font-size:16px;font-weight:900;color:var(--text)">₹' + s.ltp.toFixed(2) + '</div>';
+      html += '<div style="font-size:10px;font-weight:700;color:' + chgColor + '">' + (chgPct >= 0 ? '+' : '') + chgAmt.toFixed(2) + ' (' + (chgPct >= 0 ? '+' : '') + chgPct.toFixed(1) + '%)</div></div>';
+      html += '</div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><span>Capital (1 lot)</span><span style="font-weight:700;color:var(--text)">' + capStr + '</span></div>';
+      html += '<div class="paper-btn" style="margin-top:10px" onclick="openResearchConfirm(this,\'' + sym + '\',' + s.strike + ',\'' + s.type + '\',' + s.ltp + ',' + (stockMeta.lot || 1) + ')">➕ Add this strike</div>';
+      html += '</div>';
+    });
   } else {
-    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">No confirmed directional structure — no strike suggested this time.</div>';
+    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">Live premium data unavailable for nearby strikes right now — try again shortly.</div>';
   }
 
   resultEl.innerHTML = html;
