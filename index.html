@@ -2758,7 +2758,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   // ATM ± 4 strikes only, per user's explicit choice
   var strikeGap = chain.length > 1 ? Math.abs(chain[1].strike - chain[0].strike) : 20;
   var nearChain = chain.filter(function(c) {
-    return Math.abs(c.strike - atmStrike) <= 4 * strikeGap;
+    return Math.abs(c.strike - atmStrike) <= 5 * strikeGap;
   }).sort(function(a, b) { return a.strike - b.strike; });
 
   // Build strike->case maps for call and put sides
