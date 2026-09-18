@@ -1,7 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v139'; // bumped 2026-09-13 -- v4.7 verification bump, chasing a raw-HTML-tags
-// display bug in Activity Log (Priority movers line) that couldn't be reproduced from code
-// inspection alone; code on GitHub is confirmed correct (addLog html=true flag present).
+const CACHE = 'fno-v140'; // bumped 2026-09-13 -- v4.8, fixed manual trade (+My Trade modal) and
+// 4 other call sites bypassing renderTradesV4, causing P&L bar to disappear after manual add.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
