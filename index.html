@@ -2633,8 +2633,7 @@ function _rsLoudFactors(breakdown, direction) {
   return loud.slice(0, 3);
 }
 
-function _rsNareshText(direction, loudFactorsCall, loudFactorsPut, verdict) {
-  var side = direction === 'CE' ? 'call' : 'put';
+function _rsNareshText(direction, loudFactorsCall, loudFactorsPut, verdict, ceScore, peScore) {
   var sentences = [];
   if (verdict === 'CE' || verdict === 'PE') {
     var relevantLoud = verdict === 'CE' ? loudFactorsCall : loudFactorsPut;
@@ -2644,6 +2643,14 @@ function _rsNareshText(direction, loudFactorsCall, loudFactorsPut, verdict) {
     } else {
       sentences.push('OI and LTP magnitude moving together on the ' + (verdict === 'CE' ? 'call' : 'put') + ' side signals real conviction, not a thin-volume spike.');
     }
+  } else if (loudFactorsCall.length || loudFactorsPut.length) {
+    var leadSide = loudFactorsCall.length >= loudFactorsPut.length ? 'call' : 'put';
+    var leadFactor = leadSide === 'call' ? loudFactorsCall[0] : loudFactorsPut[0];
+    sentences.push('No confirmed OI structure yet, but ' + leadSide + ' side technicals lean loudest — ' + leadFactor.note.toLowerCase() + '. Not enough alone to size up, worth watching if OI catches up.');
+  } else if (typeof ceScore === 'number' && typeof peScore === 'number' && ceScore !== peScore) {
+    var higherSide = ceScore > peScore ? 'call' : 'put';
+    var higherScore = Math.max(ceScore, peScore);
+    sentences.push('Neither side confirmed, but ' + higherSide + ' side scores higher (' + higherScore + '%) — marginal lean, not enough urgency to act on yet.');
   } else {
     sentences.push('No single side shows dominant urgency yet — wait for the chain to clarify before sizing up.');
   }
@@ -2804,11 +2811,11 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   } else if (dominantSide === 'PE' && (ceVerdict === 'STRONG' || ceVerdict === 'MODERATE')) {
     maheshText = 'OI structure favors PE, but the technical score actually leans CE (' + ceVerdict + ', ' + ceData.score + '%) — conflict zone, wait for spot to confirm a side before entering.';
   } else {
-    maheshText = 'Neither side has a clean confirmed structure right now — OI: ' + (oiResult.dilipFormulaNote || 'no dominance') + '. Technical: CE ' + ceVerdict + ' / PE ' + peVerdict + '. Best to wait.';
+    maheshText = 'Neither side has a clean confirmed structure right now — OI: ' + (oiResult.dilipFormulaNote || 'no dominance') + '. Technical score: CE ' + ceData.score + '% (' + ceVerdict + ') / PE ' + peData.score + '% (' + peVerdict + '). Best to wait for the chain or the technical score to strengthen on one side.';
   }
 
   var verdictSide = dominantSide;
-  var nareshText = _rsNareshText(null, loudCall, loudPut, verdictSide);
+  var nareshText = _rsNareshText(null, loudCall, loudPut, verdictSide, ceData.score, peData.score);
 
   // Pick suggested strikes: strongest Case 2 (call) or Case 6 (put) strikes near ATM
   var suggestions = [];
