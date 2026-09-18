@@ -2858,7 +2858,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   html += '<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin:9px 13px 10px;display:flex;justify-content:space-between;align-items:center">';
   html += '<div><div style="font-size:22px;font-weight:900;color:' + spotColor + '">' + spot.toLocaleString('en-IN', { maximumFractionDigits: 2 }) + '</div>';
   html += '<div style="font-size:12px;color:' + spotColor + '">' + (spotChangePct >= 0 ? '+' : '') + (spot - spotPrevClose).toFixed(2) + ' (' + (spotChangePct >= 0 ? '+' : '') + spotChangePct.toFixed(2) + '%)</div></div>';
-  html += '<div style="text-align:right;font-size:11px;color:var(--text3)">ATM ' + atmStrike + '<br>' + (oiResult.expiry || '') + '</div>';
+  html += '<div style="text-align:right;font-size:11px;color:var(--text3)">' + (oiResult.expiry || '') + '</div>';
   html += '</div>';
 
   html += '<div style="margin:0 13px 10px;border-left:3px solid var(--red);background:var(--card);border-radius:0 12px 12px 0;padding:12px 14px">';
@@ -2893,7 +2893,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
         var capStr = capital >= 1e5 ? '₹' + (capital / 1e5).toFixed(1) + 'L' : capital >= 1e3 ? '₹' + Math.round(capital / 1e3) + 'K' : '₹' + Math.round(capital);
         html += '<div style="margin:0 13px 10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-        html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + (s.isATM ? ' <span style="font-size:9px;background:rgba(59,130,246,.15);color:var(--blue);padding:2px 6px;border-radius:6px;font-weight:800">ATM</span>' : '') + '</div>';
+        html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + '</div>';
         html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">' + s.reason + '</div></div>';
         html += '<div style="text-align:right"><div style="font-size:16px;font-weight:900;color:var(--text)">₹' + s.ltp.toFixed(2) + '</div>';
         html += '<div style="font-size:10px;font-weight:700;color:' + chgColor + '">' + (chgPct >= 0 ? '+' : '') + chgAmt.toFixed(2) + ' (' + (chgPct >= 0 ? '+' : '') + chgPct.toFixed(1) + '%)</div></div>';
