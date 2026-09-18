@@ -2838,34 +2838,26 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   if (verdictSide === 'PE') {
     var goodPutStrikes = putStrikeCases.filter(function(sc) { return sc.case === 6 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
       .sort(function(a, b) { return Math.abs(putOiChangeMap[a.strike]) - Math.abs(putOiChangeMap[b.strike]); }).reverse().slice(0, 2);
-    if (!goodPutStrikes.length) {
-      goodPutStrikes = putStrikeCases.filter(function(sc) { return Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
-        .sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
-    }
     goodPutStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
       if (chainRow && chainRow.PE_ltp) {
         suggestions.push({
           strike: sc.strike, type: 'PE', ltp: chainRow.PE_ltp, prevClose: chainRow.PE_prevClose,
           isATM: sc.strike === atmStrike,
-          reason: (sc.case === 6 ? 'Case 6' : 'Case ' + sc.case + ' (tentative)') + ' · OI ' + _rsFmtPct(putOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(putLtpChangeMap[sc.strike])
+          reason: 'Case 6 · OI ' + _rsFmtPct(putOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(putLtpChangeMap[sc.strike])
         });
       }
     });
   } else {
     var goodCallStrikes = callStrikeCases.filter(function(sc) { return sc.case === 2 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
       .sort(function(a, b) { return Math.abs(callOiChangeMap[a.strike]) - Math.abs(callOiChangeMap[b.strike]); }).reverse().slice(0, 2);
-    if (!goodCallStrikes.length) {
-      goodCallStrikes = callStrikeCases.filter(function(sc) { return Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
-        .sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
-    }
     goodCallStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
       if (chainRow && chainRow.CE_ltp) {
         suggestions.push({
           strike: sc.strike, type: 'CE', ltp: chainRow.CE_ltp, prevClose: chainRow.CE_prevClose,
           isATM: sc.strike === atmStrike,
-          reason: (sc.case === 2 ? 'Case 2' : 'Case ' + sc.case + ' (tentative)') + ' · OI ' + _rsFmtPct(callOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(callLtpChangeMap[sc.strike])
+          reason: 'Case 2 · OI ' + _rsFmtPct(callOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(callLtpChangeMap[sc.strike])
         });
       }
     });
@@ -2925,7 +2917,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       html += '</div>';
     });
   } else {
-    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">Live premium data unavailable for nearby strikes right now — try again shortly.</div>';
+    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">No genuine Case 2/6 strike within ATM ±2 right now — no strike suggested.</div>';
   }
 
   resultEl.innerHTML = html;
