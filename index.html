@@ -1914,8 +1914,9 @@ function buildTradeCardV4(tr) {
   // Line 1
   html += '<div style="display:flex;align-items:center;justify-content:space-between">';
   html += '<div style="display:flex;align-items:center;gap:6px">';
-  html += '<span style="font-size:15px;font-weight:700;color:var(--text)">'+tr.sym+(tr.manual?' ✍️':' 🤖')+'</span>';
+  html += '<span style="font-size:15px;font-weight:700;color:var(--text)">'+tr.sym+'</span>';
   html += '<span class="v4-strike '+(isPE?'pe':'ce')+'">'+tr.strike+' '+tr.type+'</span>';
+  html += '<span style="font-size:12px">'+(tr.manual?'✍️':'🤖')+'</span>';
   html += '</div>';
   html += '<div style="font-size:18px;font-weight:700;color:'+pnlCol+'" id="tpnl-'+tr.id+'">'+pnlStr+'</div>';
   html += '</div>';
