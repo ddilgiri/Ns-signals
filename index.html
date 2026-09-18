@@ -8,10 +8,10 @@
 <div class="card"><div class="card-body">
 <div style="display:flex;gap:8px;margin-bottom:4px;position:relative">
 <div style="flex:1;position:relative">
-<input class="field-inp" id="researchSym" type="text" placeholder="e.g. TCS, RELIANCE, HDFCBANK" style="width:100%;text-transform:uppercase" autocomplete="off" oninput="showResearchSuggestions(this.value)" onkeydown="if(event.key==='Enter'){hideResearchSuggestions();runResearch();}" onblur="setTimeout(hideResearchSuggestions,150)">
-<div id="researchSuggestBox" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:9px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 20px var(--shadow)"></div>
+<input class="field-inp" id="researchSym" type="text" placeholder="e.g. TCS, RELIANCE, HDFCBANK" style="width:100%;text-transform:uppercase" list="researchSymList" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')runResearch()">
+<datalist id="researchSymList"></datalist>
 </div>
-<button class="btn-primary" style="width:auto;padding:11px 18px" onclick="hideResearchSuggestions();runResearch()" id="researchBtn">🔍 Research</button>
+<button class="btn-primary" style="width:auto;padding:11px 18px" onclick="runResearch()" id="researchBtn">🔍 Research</button>
 </div>
 </div></div>
 <div id="researchResult"></div>
@@ -2652,31 +2652,21 @@ function _rsNareshText(direction, loudFactorsCall, loudFactorsPut, verdict) {
 
 var _RS_CACHE = { symbol: null, spotPrice: null, oiResult: null, ceBreakdown: null, peBreakdown: null };
 
-// Autocomplete dropdown for Research symbol input -- filters the
-// already-loaded NSE_STOCKS list client-side, zero new API calls.
-function showResearchSuggestions(query) {
-  var box = document.getElementById('researchSuggestBox');
-  if (!box) return;
-  var q = (query || '').trim().toUpperCase();
-  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  var list = (typeof NSE_STOCKS !== 'undefined' ? NSE_STOCKS : []);
-  var matches = list.filter(function(s) { return s.sym.indexOf(q) === 0; })
-    .concat(list.filter(function(s) { return s.sym.indexOf(q) > 0; }))
-    .slice(0, 8);
-  if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  box.innerHTML = matches.map(function(s) {
-    return '<div style="padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:1px solid var(--border)" onmousedown="selectResearchSuggestion(\'' + s.sym + '\')">' + s.sym + '</div>';
-  }).join('');
-  box.style.display = 'block';
+// Populate the Research symbol datalist from NSE_STOCKS + IDX_LIST,
+// same source and approach as the working "+ My Trade" modal's
+// symbol dropdown (v42-symlist) -- native <datalist>, proven reliable.
+function populateResearchSymList() {
+  var dl = document.getElementById('researchSymList');
+  if (!dl || dl.children.length) return;
+  var syms = [];
+  if (typeof NSE_STOCKS !== 'undefined') NSE_STOCKS.forEach(function(s) { syms.push(s.sym); });
+  if (typeof IDX_LIST !== 'undefined') IDX_LIST.forEach(function(s) { syms.push(s.sym); });
+  dl.innerHTML = syms.map(function(s) { return '<option value="' + s + '">'; }).join('');
 }
-function hideResearchSuggestions() {
-  var box = document.getElementById('researchSuggestBox');
-  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
-}
-function selectResearchSuggestion(sym) {
-  document.getElementById('researchSym').value = sym;
-  hideResearchSuggestions();
-  runResearch();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() { setTimeout(populateResearchSymList, 1500); });
+} else {
+  setTimeout(populateResearchSymList, 500);
 }
 
 async function runResearch() {
