@@ -2836,10 +2836,11 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   // numbers, just a lower-confidence pick since no strong Case 2/6 exists.
   var suggestions = [];
   if (verdictSide === 'PE') {
-    var goodPutStrikes = putStrikeCases.filter(function(sc) { return sc.case === 6; })
+    var goodPutStrikes = putStrikeCases.filter(function(sc) { return sc.case === 6 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
       .sort(function(a, b) { return Math.abs(putOiChangeMap[a.strike]) - Math.abs(putOiChangeMap[b.strike]); }).reverse().slice(0, 2);
     if (!goodPutStrikes.length) {
-      goodPutStrikes = putStrikeCases.sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
+      goodPutStrikes = putStrikeCases.filter(function(sc) { return Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
+        .sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
     }
     goodPutStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
@@ -2852,10 +2853,11 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       }
     });
   } else {
-    var goodCallStrikes = callStrikeCases.filter(function(sc) { return sc.case === 2; })
+    var goodCallStrikes = callStrikeCases.filter(function(sc) { return sc.case === 2 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
       .sort(function(a, b) { return Math.abs(callOiChangeMap[a.strike]) - Math.abs(callOiChangeMap[b.strike]); }).reverse().slice(0, 2);
     if (!goodCallStrikes.length) {
-      goodCallStrikes = callStrikeCases.sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
+      goodCallStrikes = callStrikeCases.filter(function(sc) { return Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
+        .sort(function(a, b) { return Math.abs(a.strike - atmStrike) - Math.abs(b.strike - atmStrike); }).slice(0, 1);
     }
     goodCallStrikes.forEach(function(sc) {
       var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
