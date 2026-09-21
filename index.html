@@ -2555,7 +2555,7 @@ function _rsFmtGroup(g, oiChangeMap, ltpChangeMap) {
 // and a split chain each produce structurally different prose,
 // not just different numbers in one fixed template.
 function _rsBuildRameshText(groups, oiChangeMap, ltpChangeMap) {
-  if (!groups.length) return 'No call-side data available for the fetched strikes.';
+  if (!groups.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real OI delta is available.';
   var caseCounts = {};
   groups.forEach(function(g) { caseCounts[g.case] = (caseCounts[g.case] || 0) + g.count; });
   var totalStrikes = groups.reduce(function(a, g) { return a + g.count; }, 0);
@@ -2587,7 +2587,7 @@ function _rsBuildRameshText(groups, oiChangeMap, ltpChangeMap) {
 }
 
 function _rsBuildSureshText(groups, oiChangeMap, ltpChangeMap) {
-  if (!groups.length) return 'No put-side data available for the fetched strikes.';
+  if (!groups.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real OI delta is available.';
   var caseCounts = {};
   groups.forEach(function(g) { caseCounts[g.case] = (caseCounts[g.case] || 0) + g.count; });
   var totalStrikes = groups.reduce(function(a, g) { return a + g.count; }, 0);
@@ -2765,10 +2765,10 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var callStrikeCases = [], putStrikeCases = [];
   var callOiChangeMap = {}, callLtpChangeMap = {}, putOiChangeMap = {}, putLtpChangeMap = {};
   nearChain.forEach(function(c) {
-    if (c.CE_oi != null && c.CE_ltp != null && c.CE_prevClose > 0) {
-      var oiChangePct = c.CE_oiChange; // already a raw count change from oi-analysis; treat >0 as rising
+    if (c.CE_oi != null && c.CE_ltp != null && c.CE_prevClose > 0 && c.CE_oiChange != null) {
+      var oiChangePct = c.CE_oiChange; // real per-strike change from server's own snapshot cache (not Angel's unreliable field)
       var ltpChangePct = ((c.CE_ltp - c.CE_prevClose) / c.CE_prevClose) * 100;
-      var oiUpFlag = c.CE_oiChange > 0 ? 1 : -1; // sign only, matches server logic (D.change>0)
+      var oiUpFlag = c.CE_oiChange > 0 ? 1 : -1;
       var cs = _rsCallCase(oiUpFlag, ltpChangePct);
       if (cs) {
         callStrikeCases.push({ strike: c.strike, case: cs });
@@ -2776,7 +2776,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
         callLtpChangeMap[c.strike] = ltpChangePct;
       }
     }
-    if (c.PE_oi != null && c.PE_ltp != null && c.PE_prevClose > 0) {
+    if (c.PE_oi != null && c.PE_ltp != null && c.PE_prevClose > 0 && c.PE_oiChange != null) {
       var poiChangePct = c.PE_oiChange;
       var pltpChangePct = ((c.PE_ltp - c.PE_prevClose) / c.PE_prevClose) * 100;
       var poiUpFlag = c.PE_oiChange > 0 ? 1 : -1;
