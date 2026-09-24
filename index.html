@@ -2490,130 +2490,102 @@ console.log('✅ DILIP F&O V4.2 — Manual Trade + Full Engine Ready');
 // Same 8-case classifier as server.js's callCase()/putCase(),
 // mirrored client-side (pure function, no server change needed)
 // so per-strike classification can run on data already fetched.
-function _rsCallCase(oiChangePct, ltpChangePct) {
+// ============================================================
+// 16-SCENARIO RAMESH/SURESH/MAHESH/NARESH TEMPLATE SYSTEM
+// Replaces the old 8-case system (2026-09-25), per Dilip's uploaded
+// ns-signals-oi-templates.md spec. Pure lookup + string fill, no AI call.
+// ============================================================
+
+// Per-side tag classification, exact thresholds from the spec:
+//   oi_dir  = UP if oi_chg% > +50, DOWN if oi_chg% < -20, FLAT otherwise
+//   ltp_dir = UP if ltp_chg% > 0, DOWN if ltp_chg% < 0
+// Combined into one of 4 tags per side.
+function _rsSideTag(oiChangePct, ltpChangePct) {
   if (oiChangePct == null || ltpChangePct == null) return null;
-  var oiUp = oiChangePct > 0, ltpUp = ltpChangePct > 0;
-  if (oiUp && !ltpUp) return 1;
-  if (oiUp && ltpUp) return 2;
-  if (!oiUp && !ltpUp) return 3;
-  return 4;
+  var oiDir = oiChangePct > 50 ? 'UP' : oiChangePct < -20 ? 'DOWN' : 'FLAT';
+  var ltpDir = ltpChangePct > 0 ? 'UP' : 'DOWN';
+  if (oiDir === 'UP' && ltpDir === 'DOWN') return 'FRESH_WRITE';
+  if (oiDir === 'DOWN' && ltpDir === 'UP') return 'SQUEEZE';
+  if (oiDir === 'DOWN' && ltpDir === 'DOWN') return 'CALM_UNWIND';
+  return 'FLAT'; // oiDir FLAT, or UP+UP which the spec doesn't define separately -- falls to FLAT (no major change read)
 }
-function _rsPutCase(oiChangePct, ltpChangePct) {
-  if (oiChangePct == null || ltpChangePct == null) return null;
-  var oiUp = oiChangePct > 0, ltpUp = ltpChangePct > 0;
-  if (oiUp && !ltpUp) return 5;
-  if (oiUp && ltpUp) return 6;
-  if (!oiUp && !ltpUp) return 7;
-  return 8;
-}
-var _RS_CASE_LABEL = {
-  1: 'Case 1 (sellers winning)', 2: 'Case 2 (buyers winning)',
-  3: 'Case 3 (unwinding, no signal)', 4: 'Case 4 (short covering)',
-  5: 'Case 5 (sellers winning)', 6: 'Case 6 (buyers winning)',
-  7: 'Case 7 (unwinding, no signal)', 8: 'Case 8 (short covering)'
+
+var _RS_TAG_LABEL = {
+  FRESH_WRITE: 'fresh writing', SQUEEZE: 'squeeze (writers closing out)',
+  CALM_UNWIND: 'calm unwinding', FLAT: 'no major change'
 };
 
-// Groups consecutive strikes sharing the same case into ranges,
-// e.g. [{strike:2020,case:1},{strike:2040,case:1},{strike:2060,case:3}]
-// -> [{from:2020,to:2040,case:1,count:2},{from:2060,to:2060,case:3,count:1}]
-function _rsGroupByCase(strikeCaseList) {
-  var groups = [];
-  strikeCaseList.forEach(function(sc) {
-    var last = groups[groups.length - 1];
-    if (last && last.case === sc.case) {
-      last.to = sc.strike;
-      last.count++;
-      last.strikes.push(sc.strike);
-    } else {
-      groups.push({ from: sc.strike, to: sc.strike, case: sc.case, count: 1, strikes: [sc.strike] });
-    }
-  });
-  return groups;
-}
+// 16-scenario lookup: [callTag][putTag] -> { colour, mahesh, naresh, bestStrike(fn) }
+// Ramesh/Suresh text is generated per-scenario below (not pure lookup for those two,
+// since they need real strike numbers substituted -- Mahesh/Naresh/colour/best-strike
+// guidance is stable phrasing per scenario, matching the spec's field-substitution model.
+var _RS_SCENARIOS = {
+  'FRESH_WRITE_FRESH_WRITE': { colour: 'AMBER', mahesh: 'Straddle-style writing at {ATM} — large sellers betting on low movement, not a directional signal.', naresh: 'No clear urgency either side — this is a range-defense setup, not a breakout signal.', best: 'No directional trade here. Favors option SELLING (straddle/strangle) over buying CE or PE — premiums will likely stay depressed unless {ATM} breaks decisively either way.' },
+  'FRESH_WRITE_SQUEEZE': { colour: 'RED', mahesh: 'Short Buildup — price falling, OI rising. Call wall at {CALL} is real and capping upside. Put squeeze confirms pressure, not relief. Bias stays bearish.', naresh: 'Put side urgency — Call sellers pressing hard, pushing price down on their own. No fresh Put buyers needed to confirm this.', best: 'Buy {PUT_OTM} PE on any bounce toward {CALL}. Hold while {CALL} CE OI keeps rising and price stays below {CALL}.' },
+  'FRESH_WRITE_CALM_UNWIND': { colour: 'RED', mahesh: 'Call wall confirmed, but Put side is inactive — bearish bias holds, but conviction is one-sided and slightly weaker than a full squeeze confirmation.', naresh: 'Call side urgency only — Put side shows no counter-activity to strengthen the case further.', best: 'Buy {PUT_OTM} PE cautiously on bounce toward {CALL}. Hold only while {CALL} CE OI keeps building — bearish but thinner, size smaller.' },
+  'FRESH_WRITE_FLAT': { colour: 'RED', mahesh: 'Clean, uncontested Call wall — price falling with fresh Call OI building, nothing on the Put side to complicate the read. Bearish.', naresh: 'Call side urgency, uncontested — the clearest possible bearish wall reading.', best: 'Buy {PUT_OTM} PE on bounce toward {CALL}. Hold while {CALL} CE OI keeps rising.' },
+  'SQUEEZE_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Long Buildup — price rising, OI rising. Put floor at {PUT} is real and supporting downside. Call squeeze confirms pressure, not relief. Bias stays bullish.', naresh: 'Call side urgency — Put sellers pressing hard, pushing price up on their own. No fresh Call buyers needed to confirm this.', best: 'Buy {CALL_OTM} CE on any dip toward {PUT}. Hold while {PUT} PE OI keeps rising and price stays above {PUT}.' },
+  'SQUEEZE_SQUEEZE': { colour: 'AMBER', mahesh: 'Mixed squeeze on both sides — no clean directional wall. This often precedes a sharp move but the direction isn\'t confirmed yet.', naresh: 'No dominant side — both showing urgency, cancels out. Wait for one side to break away before entering.', best: 'No trade yet. Wait one more cycle — whichever side\'s squeeze fades first while the other continues will reveal the real direction.' },
+  'SQUEEZE_CALM_UNWIND': { colour: 'GREEN', mahesh: 'Short Covering regime — a bounce, but without fresh Put buying to back it. Weak/temporary strength, not a strong conviction move.', naresh: 'Mild Call-side urgency only from covering — no real Put-side confirmation. Low conviction.', best: 'Small size only. If taking {CALL_OTM} CE, treat as a scalp — exit fast if momentum doesn\'t follow through.' },
+  'SQUEEZE_FLAT': { colour: 'GREEN', mahesh: 'Covering-only bounce — no fresh buying anywhere to support a real trend change. Treat with caution.', naresh: 'Weak Call-side signal, uncontested but thin. Not a strong urgency reading.', best: 'Avoid fresh entry. If already in a bullish position, this doesn\'t add confirmation — hold current stops, don\'t add size.' },
+  'CALM_UNWIND_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Put floor confirmed, Call side inactive — bullish bias holds, one-sided but real.', naresh: 'Put side urgency only — Call side shows no counter-activity.', best: 'Buy {CALL_OTM} CE cautiously on dip toward {PUT}. Hold only while {PUT} PE OI keeps building — bullish but thinner, size smaller.' },
+  'CALM_UNWIND_SQUEEZE': { colour: 'AMBER', mahesh: 'One-sided squeeze without a matching wall on the other side — directional but low conviction. Could reverse quickly.', naresh: 'Mild Put-side urgency only, no Call-side confirmation. Weak.', best: 'Scalp only if taking a position — {PUT_OTM} PE with tight stop. Exit on first sign of stalling.' },
+  'CALM_UNWIND_CALM_UNWIND': { colour: 'GREY', mahesh: 'Nothing actionable — this is a dead/quiet zone in the chain right now.', naresh: 'No urgency on either side.', best: 'No trade. Wait for fresh OI activity to appear on either side.' },
+  'CALM_UNWIND_FLAT': { colour: 'GREY', mahesh: 'No signal — skip this stock/strike range for now.', naresh: 'None.', best: 'No trade. Move to another stock/index with active OI movement.' },
+  'FLAT_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Clean, uncontested Put floor — price supported by fresh Put OI building, nothing on the Call side to complicate the read. Bullish.', naresh: 'Put side urgency, uncontested — the clearest possible bullish floor reading.', best: 'Buy {CALL_OTM} CE on dip toward {PUT}. Hold while {PUT} PE OI keeps rising.' },
+  'FLAT_SQUEEZE': { colour: 'GREEN', mahesh: 'Covering-only move on the Put side — no fresh Call writing to confirm a real trend. Caution.', naresh: 'Weak Put-side signal, uncontested but thin.', best: 'Avoid fresh entry, or scalp only with tight stop if taking {CALL_OTM} CE.' },
+  'FLAT_CALM_UNWIND': { colour: 'GREY', mahesh: 'No signal — skip for now.', naresh: 'None.', best: 'No trade. Wait for fresh activity.' },
+  'FLAT_FLAT': { colour: 'GREY', mahesh: 'Completely flat — no directional information available right now.', naresh: 'None.', best: 'No trade. Check back next cycle or move to a more active stock.' }
+};
+var _RS_COLOUR_VAR = { RED: 'var(--red)', GREEN: 'var(--green)', AMBER: 'var(--amber)', GREY: 'var(--text3)' };
 
 function _rsFmtPct(p) {
   if (p == null) return 'n/a';
   return (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
 }
 
-function _rsFmtGroup(g, oiChangeMap, ltpChangeMap) {
-  var oiRange = g.strikes.map(function(s){return oiChangeMap[s];}).filter(function(v){return v!=null;});
-  var ltpRange = g.strikes.map(function(s){return ltpChangeMap[s];}).filter(function(v){return v!=null;});
-  var oiMin = oiRange.length ? Math.min.apply(null, oiRange) : null;
-  var oiMax = oiRange.length ? Math.max.apply(null, oiRange) : null;
-  var ltpMin = ltpRange.length ? Math.min.apply(null, ltpRange) : null;
-  var ltpMax = ltpRange.length ? Math.max.apply(null, ltpRange) : null;
-  var strikeLabel = g.count > 1 ? ('<b>' + g.from + '</b> to <b>' + g.to + '</b>') : ('<b>' + g.from + '</b>');
-  var oiStr = (oiMin != null) ? (oiMin === oiMax ? _rsFmtPct(oiMin) : (_rsFmtPct(oiMin) + ' to ' + _rsFmtPct(oiMax))) : 'n/a';
-  var ltpStr = (ltpMin != null) ? (ltpMin === ltpMax ? _rsFmtPct(ltpMin) : (_rsFmtPct(ltpMin) + ' to ' + _rsFmtPct(ltpMax))) : 'n/a';
-  return { strikeLabel: strikeLabel, oiStr: oiStr, ltpStr: ltpStr };
+// Finds the single loudest strike per side (largest |oiChangePct| among
+// strikes tagged FRESH_WRITE or SQUEEZE -- the two tags the spec actually
+// names a strike for), for substituting into {CALL_STRIKE}/{PUT_STRIKE}.
+function _rsFindKeyStrike(strikeTags, oiChangeMap) {
+  var notable = strikeTags.filter(function(s) { return s.tag === 'FRESH_WRITE' || s.tag === 'SQUEEZE'; });
+  if (!notable.length) return null;
+  notable.sort(function(a, b) { return Math.abs(oiChangeMap[b.strike] || 0) - Math.abs(oiChangeMap[a.strike] || 0); });
+  return notable[0];
 }
+
+
 
 // Builds Ramesh (call side) narration from grouped case data.
 // Sentence structure genuinely branches on data shape -- a fully
 // one-sided chain, a mostly-one-sided chain with one exception,
 // and a split chain each produce structurally different prose,
 // not just different numbers in one fixed template.
-function _rsBuildRameshText(groups, oiChangeMap, ltpChangeMap) {
-  if (!groups.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real OI delta is available.';
-  var caseCounts = {};
-  groups.forEach(function(g) { caseCounts[g.case] = (caseCounts[g.case] || 0) + g.count; });
-  var totalStrikes = groups.reduce(function(a, g) { return a + g.count; }, 0);
-  var dominantCase = Object.keys(caseCounts).reduce(function(a, b) { return caseCounts[a] > caseCounts[b] ? a : b; });
-  var dominantPct = caseCounts[dominantCase] / totalStrikes;
-
-  if (dominantPct === 1) {
-    // fully one-sided
-    var g = groups[0];
-    var f = _rsFmtGroup(g, oiChangeMap, ltpChangeMap);
-    return 'Every strike from ' + f.strikeLabel + ' shows OI up (' + f.oiStr + ') while LTP is down (' + f.ltpStr + ') — ' + _RS_CASE_LABEL[g.case] + ' across the whole chain, no exceptions.';
-  } else if (dominantPct >= 0.7) {
-    // mostly one case, with a break
-    var mainGroups = groups.filter(function(g){return String(g.case)===dominantCase;});
-    var breakGroups = groups.filter(function(g){return String(g.case)!==dominantCase;});
-    var mg = mainGroups[0];
-    var mf = _rsFmtGroup(mg, oiChangeMap, ltpChangeMap);
-    var bg = breakGroups[0];
-    var bf = _rsFmtGroup(bg, oiChangeMap, ltpChangeMap);
-    return mf.strikeLabel + ' shows ' + _RS_CASE_LABEL[dominantCase] + ' (OI ' + mf.oiStr + ', LTP ' + mf.ltpStr + '), but ' + bf.strikeLabel + ' breaks the pattern with ' + _RS_CASE_LABEL[bg.case] + ' — worth watching, not the dominant read.';
-  } else {
-    // genuinely split
-    var parts = groups.slice(0, 3).map(function(g) {
-      var f = _rsFmtGroup(g, oiChangeMap, ltpChangeMap);
-      return f.strikeLabel + ' shows ' + _RS_CASE_LABEL[g.case];
-    });
-    return 'Call side is split: ' + parts.join('; ') + '. No single dominant structure yet — wait for the chain to align before trusting the call side alone.';
-  }
+// Builds full per-strike breakdown text (Dilip's stated preference: every
+// strike with its OI%/LTP% and tag, not a condensed summary sentence).
+function _rsBuildSideText(strikeTags, oiChangeMap, ltpChangeMap, sideLabel) {
+  if (!strikeTags.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real cycle delta is available.';
+  var lines = strikeTags.map(function(s) {
+    var oi = _rsFmtPct(oiChangeMap[s.strike]);
+    var ltp = _rsFmtPct(ltpChangeMap[s.strike]);
+    return '<b>' + s.strike + '</b> ' + sideLabel + ': OI ' + oi + ', LTP ' + ltp + ' — ' + _RS_TAG_LABEL[s.tag];
+  });
+  return lines.join('<br>');
 }
 
-function _rsBuildSureshText(groups, oiChangeMap, ltpChangeMap) {
-  if (!groups.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real OI delta is available.';
-  var caseCounts = {};
-  groups.forEach(function(g) { caseCounts[g.case] = (caseCounts[g.case] || 0) + g.count; });
-  var totalStrikes = groups.reduce(function(a, g) { return a + g.count; }, 0);
-  var dominantCase = Object.keys(caseCounts).reduce(function(a, b) { return caseCounts[a] > caseCounts[b] ? a : b; });
-  var dominantPct = caseCounts[dominantCase] / totalStrikes;
-
-  if (dominantPct === 1) {
-    var g = groups[0];
-    var f = _rsFmtGroup(g, oiChangeMap, ltpChangeMap);
-    return 'Every strike from ' + f.strikeLabel + ' shows OI ' + f.oiStr + ' and LTP ' + f.ltpStr + ' — ' + _RS_CASE_LABEL[g.case] + ' throughout, unanimous read.';
-  } else if (dominantPct >= 0.6) {
-    var mainGroups = groups.filter(function(g){return String(g.case)===dominantCase;});
-    var breakGroups = groups.filter(function(g){return String(g.case)!==dominantCase;});
-    var mg = mainGroups[0];
-    var mf = _rsFmtGroup(mg, oiChangeMap, ltpChangeMap);
-    var bg = breakGroups[0];
-    var bf = _rsFmtGroup(bg, oiChangeMap, ltpChangeMap);
-    return mf.strikeLabel + ' show real ' + _RS_CASE_LABEL[dominantCase] + ' (OI ' + mf.oiStr + ', LTP ' + mf.ltpStr + '). But ' + bf.strikeLabel + ' break the pattern with ' + _RS_CASE_LABEL[bg.case] + ' — that is squeeze noise further out, not disagreement at the strikes that matter.';
-  } else {
-    var parts = groups.slice(0, 3).map(function(g) {
-      var f = _rsFmtGroup(g, oiChangeMap, ltpChangeMap);
-      return f.strikeLabel + ' shows ' + _RS_CASE_LABEL[g.case];
-    });
-    return 'Put side is split: ' + parts.join('; ') + '. No clean floor yet.';
-  }
+// Resolves the OVERALL tag for a side (used for the 16-scenario lookup):
+// the tag of the loudest strike (by |oiChangePct|) if one is FRESH_WRITE or
+// SQUEEZE, since those are the tags the spec builds a directional read from;
+// otherwise the most common tag among the strikes.
+function _rsOverallSideTag(strikeTags, oiChangeMap) {
+  if (!strikeTags.length) return null;
+  var key = _rsFindKeyStrike(strikeTags, oiChangeMap);
+  if (key) return key.tag;
+  var counts = {};
+  strikeTags.forEach(function(s) { counts[s.tag] = (counts[s.tag] || 0) + 1; });
+  return Object.keys(counts).reduce(function(a, b) { return counts[a] > counts[b] ? a : b; });
 }
+
 
 // Pulls the 2-3 loudest technical factors from a full breakdown
 // (23 factors, all genuinely checked -- only the strongest few
@@ -2697,30 +2669,6 @@ function _rsLoudFactors(breakdown, direction) {
   });
   loud.sort(function(a, b) { return Math.abs(b.pct - 0.5) - Math.abs(a.pct - 0.5); });
   return loud.slice(0, 3);
-}
-
-function _rsNareshText(direction, loudFactorsCall, loudFactorsPut, verdict, ceScore, peScore) {
-  var sentences = [];
-  if (verdict === 'CE' || verdict === 'PE') {
-    var relevantLoud = verdict === 'CE' ? loudFactorsCall : loudFactorsPut;
-    if (relevantLoud.length) {
-      var f = relevantLoud[0];
-      sentences.push('Urgency on the ' + (verdict === 'CE' ? 'call' : 'put') + ' side is reinforced by ' + f.note.toLowerCase() + ' — real momentum, not just an OI print.');
-    } else {
-      sentences.push('OI and LTP magnitude moving together on the ' + (verdict === 'CE' ? 'call' : 'put') + ' side signals real conviction, not a thin-volume spike.');
-    }
-  } else if (loudFactorsCall.length || loudFactorsPut.length) {
-    var leadSide = loudFactorsCall.length >= loudFactorsPut.length ? 'call' : 'put';
-    var leadFactor = leadSide === 'call' ? loudFactorsCall[0] : loudFactorsPut[0];
-    sentences.push('No confirmed OI structure yet, but ' + leadSide + ' side technicals lean loudest — ' + leadFactor.note.toLowerCase() + '. Not enough alone to size up, worth watching if OI catches up.');
-  } else if (typeof ceScore === 'number' && typeof peScore === 'number' && ceScore !== peScore) {
-    var higherSide = ceScore > peScore ? 'call' : 'put';
-    var higherScore = Math.max(ceScore, peScore);
-    sentences.push('Neither side confirmed, but ' + higherSide + ' side scores higher (' + higherScore + '%) — marginal lean, not enough urgency to act on yet.');
-  } else {
-    sentences.push('No single side shows dominant urgency yet — wait for the chain to clarify before sizing up.');
-  }
-  return sentences.join(' ');
 }
 
 var _RS_CACHE = { symbol: null, spotPrice: null, oiResult: null, ceBreakdown: null, peBreakdown: null };
@@ -2822,150 +2770,117 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var atmStrike = oiResult.atmStrike;
   var chain = oiResult.chain || [];
 
-  // ATM ± 4 strikes only, per user's explicit choice
+  // ATM ± 5 strikes for analysis breadth (fuel/momentum picture), per user's
+  // earlier request -- suggestions themselves stay ATM ± 2 (see below).
   var strikeGap = chain.length > 1 ? Math.abs(chain[1].strike - chain[0].strike) : 20;
   var nearChain = chain.filter(function(c) {
     return Math.abs(c.strike - atmStrike) <= 5 * strikeGap;
   }).sort(function(a, b) { return a.strike - b.strike; });
 
-  // Build strike->case maps for call and put sides
-  var callStrikeCases = [], putStrikeCases = [];
+  // Per-strike tag classification (16-scenario system) using REAL cycle-over-
+  // cycle % from server's STRIKE_OI_CACHE (oiChangePct/ltpChangePct), not the
+  // old vs-prevClose proxy -- matches the uploaded template spec exactly.
+  var callStrikeTags = [], putStrikeTags = [];
   var callOiChangeMap = {}, callLtpChangeMap = {}, putOiChangeMap = {}, putLtpChangeMap = {};
   nearChain.forEach(function(c) {
-    if (c.CE_oi != null && c.CE_ltp != null && c.CE_prevClose > 0 && c.CE_oiChange != null) {
-      var oiChangePct = c.CE_oiChange; // real per-strike change from server's own snapshot cache (not Angel's unreliable field)
-      var ltpChangePct = ((c.CE_ltp - c.CE_prevClose) / c.CE_prevClose) * 100;
-      var oiUpFlag = c.CE_oiChange > 0 ? 1 : -1;
-      var cs = _rsCallCase(oiUpFlag, ltpChangePct);
-      if (cs) {
-        callStrikeCases.push({ strike: c.strike, case: cs });
-        callOiChangeMap[c.strike] = oiChangePct > 0 ? (oiChangePct / (c.CE_oi || 1) * 100) : (oiChangePct < 0 ? -(Math.abs(oiChangePct) / (c.CE_oi || 1) * 100) : 0);
-        callLtpChangeMap[c.strike] = ltpChangePct;
+    if (c.CE_oiChangePct != null && c.CE_ltpChangePct != null) {
+      var ctag = _rsSideTag(c.CE_oiChangePct, c.CE_ltpChangePct);
+      if (ctag) {
+        callStrikeTags.push({ strike: c.strike, tag: ctag });
+        callOiChangeMap[c.strike] = c.CE_oiChangePct;
+        callLtpChangeMap[c.strike] = c.CE_ltpChangePct;
       }
     }
-    if (c.PE_oi != null && c.PE_ltp != null && c.PE_prevClose > 0 && c.PE_oiChange != null) {
-      var poiChangePct = c.PE_oiChange;
-      var pltpChangePct = ((c.PE_ltp - c.PE_prevClose) / c.PE_prevClose) * 100;
-      var poiUpFlag = c.PE_oiChange > 0 ? 1 : -1;
-      var ps = _rsPutCase(poiUpFlag, pltpChangePct);
-      if (ps) {
-        putStrikeCases.push({ strike: c.strike, case: ps });
-        putOiChangeMap[c.strike] = poiChangePct > 0 ? (poiChangePct / (c.PE_oi || 1) * 100) : (poiChangePct < 0 ? -(Math.abs(poiChangePct) / (c.PE_oi || 1) * 100) : 0);
-        putLtpChangeMap[c.strike] = pltpChangePct;
+    if (c.PE_oiChangePct != null && c.PE_ltpChangePct != null) {
+      var ptag = _rsSideTag(c.PE_oiChangePct, c.PE_ltpChangePct);
+      if (ptag) {
+        putStrikeTags.push({ strike: c.strike, tag: ptag });
+        putOiChangeMap[c.strike] = c.PE_oiChangePct;
+        putLtpChangeMap[c.strike] = c.PE_ltpChangePct;
       }
     }
   });
 
-  var callGroups = _rsGroupByCase(callStrikeCases);
-  var putGroups = _rsGroupByCase(putStrikeCases);
-  var rameshText = _rsBuildRameshText(callGroups, callOiChangeMap, callLtpChangeMap);
-  var sureshText = _rsBuildSureshText(putGroups, putOiChangeMap, putLtpChangeMap);
+  var rameshText = _rsBuildSideText(callStrikeTags, callOiChangeMap, callLtpChangeMap, 'CE');
+  var sureshText = _rsBuildSideText(putStrikeTags, putOiChangeMap, putLtpChangeMap, 'PE');
 
   var loudCall = _rsLoudFactors(ceData.breakdown, 'CE');
   var loudPut = _rsLoudFactors(peData.breakdown, 'PE');
 
-  // Step 3: regime tag from price direction + total OI direction (already have both)
+  var spotChangePctEarly = spotPrevClose > 0 ? ((spot - spotPrevClose) / spotPrevClose * 100) : 0;
+
+  // Resolve overall Call tag + Put tag -> one of 16 scenarios
+  var callTag = _rsOverallSideTag(callStrikeTags, callOiChangeMap);
+  var putTag = _rsOverallSideTag(putStrikeTags, putOiChangeMap);
+  var haveScenario = callTag && putTag;
+  var scenarioKey = haveScenario ? (callTag + '_' + putTag) : null;
+  var scenario = scenarioKey ? _RS_SCENARIOS[scenarioKey] : null;
+
+  var callKeyStrike = _rsFindKeyStrike(callStrikeTags, callOiChangeMap);
+  var putKeyStrike = _rsFindKeyStrike(putStrikeTags, putOiChangeMap);
+  var callStrikeNum = callKeyStrike ? callKeyStrike.strike : null;
+  var putStrikeNum = putKeyStrike ? putKeyStrike.strike : null;
+  // OTM strike = nearest strike on the opposite side of the wall, toward spot
+  var callOtmStrike = putStrikeNum || nearChain.filter(function(c) { return c.strike < atmStrike; }).sort(function(a, b) { return b.strike - a.strike; })[0]?.strike || atmStrike;
+  var putOtmStrike = callStrikeNum || nearChain.filter(function(c) { return c.strike > atmStrike; }).sort(function(a, b) { return a.strike - b.strike; })[0]?.strike || atmStrike;
+
+  function fillTemplate(str) {
+    return (str || '')
+      .replace(/\{ATM\}/g, String(atmStrike))
+      .replace(/\{CALL_OTM\}/g, String(callOtmStrike))
+      .replace(/\{PUT_OTM\}/g, String(putOtmStrike))
+      .replace(/\{CALL\}/g, String(callStrikeNum || atmStrike))
+      .replace(/\{PUT\}/g, String(putStrikeNum || atmStrike));
+  }
+
+  var maheshText = scenario ? fillTemplate(scenario.mahesh) : 'Not enough cycle-over-cycle data yet to classify this chain into a scenario — research this symbol again shortly once a second OI/LTP snapshot is available.';
+  var nareshText = scenario ? fillTemplate(scenario.naresh) : 'No urgency read available yet — needs a second data cycle.';
+  var bestStrikeText = scenario ? fillTemplate(scenario.best) : 'No trade guidance yet — check back once cycle data is available.';
+  var colourKey = scenario ? scenario.colour : 'GREY';
+  var verdictColor = _RS_COLOUR_VAR[colourKey];
+
+  // Index tie-breaker (Step 0): only meaningful for the two confirmed
+  // directional colours (RED/GREEN) when the technical score is merely
+  // MODERATE -- nudges confidence language, doesn't change the scenario itself.
+  var indexTieBreakerUsed = false;
+  var verdictSide = colourKey === 'RED' ? 'PE' : colourKey === 'GREEN' ? 'CE' : null;
+  if (verdictSide) {
+    var sideScore = verdictSide === 'CE' ? ceData.score : peData.score;
+    var sideVerdict = sideScore >= 75 ? 'STRONG' : sideScore >= 60 ? 'MODERATE' : sideScore >= 42 ? 'WEAK' : 'AVOID';
+    if (sideVerdict === 'MODERATE' && indexCtx && indexCtx.strength !== 'WEAK') {
+      var indexAgrees = (verdictSide === 'CE' && indexCtx.dir === 'UP') || (verdictSide === 'PE' && indexCtx.dir === 'DOWN');
+      if (indexAgrees) {
+        indexTieBreakerUsed = true;
+        maheshText += ' Nifty is also ' + indexCtx.strength.toLowerCase() + ' ' + indexCtx.dir + ' (' + indexCtx.pctChange.toFixed(2) + '%), reinforcing this at only MODERATE technical confidence (' + sideScore + '%).';
+      } else {
+        maheshText += ' Caution: Nifty is ' + indexCtx.strength.toLowerCase() + ' ' + indexCtx.dir + ' (' + indexCtx.pctChange.toFixed(2) + '%), opposing this MODERATE-confidence (' + sideScore + '%) read — index disagrees.';
+      }
+    }
+  }
+
+  // Step 3: regime tag, appended to Mahesh
   var totalCeOiChange = Object.values(callOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
   var totalPeOiChange = Object.values(putOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
-  var spotChangePctEarly = spotPrevClose > 0 ? ((spot - spotPrevClose) / spotPrevClose * 100) : 0;
   var regime = _rsRegimeTag(spotChangePctEarly, totalCeOiChange, totalPeOiChange);
-
-  // Mahesh: cross-check OI structure vs overall technical verdicts
-  var ceVerdict = ceData.score >= 75 ? 'STRONG' : ceData.score >= 60 ? 'MODERATE' : ceData.score >= 42 ? 'WEAK' : 'AVOID';
-  var peVerdict = peData.score >= 75 ? 'STRONG' : peData.score >= 60 ? 'MODERATE' : peData.score >= 42 ? 'WEAK' : 'AVOID';
-  var dominantSide = oiResult.dilipFormula === 'CE' ? 'CE' : oiResult.dilipFormula === 'PE' ? 'PE' : null;
-  var maheshText;
-  var verdictConfidence; // 'confirmed' | 'conflict' | 'lean'
-  var indexTieBreakerUsed = false;
-  if (dominantSide === 'CE' && ceVerdict === 'STRONG') {
-    maheshText = 'OI structure favors CE, and the technical score agrees (' + ceVerdict + ', ' + ceData.score + '%) — confirmed bullish, no conflict.';
-    verdictConfidence = 'confirmed';
-  } else if (dominantSide === 'PE' && peVerdict === 'STRONG') {
-    maheshText = 'OI structure favors PE, and the technical score agrees (' + peVerdict + ', ' + peData.score + '%) — confirmed bearish, no conflict.';
-    verdictConfidence = 'confirmed';
-  } else if (dominantSide === 'CE' && ceVerdict === 'MODERATE') {
-    // MODERATE confidence -- Step 0 index tie-breaker applies here
-    if (indexCtx && indexCtx.dir === 'UP' && indexCtx.strength !== 'WEAK') {
-      maheshText = 'OI favors CE with a MODERATE technical score (' + ceData.score + '%) — Nifty is also ' + indexCtx.strength.toLowerCase() + ' UP (' + indexCtx.pctChange.toFixed(2) + '%), breaking the tie in favor of CE.';
-      verdictConfidence = 'confirmed';
-      indexTieBreakerUsed = true;
-    } else if (indexCtx && indexCtx.dir === 'DOWN' && indexCtx.strength !== 'WEAK') {
-      maheshText = 'OI favors CE (MODERATE, ' + ceData.score + '%), but Nifty is ' + indexCtx.strength.toLowerCase() + ' DOWN (' + indexCtx.pctChange.toFixed(2) + '%) — index disagrees, treat as lower confidence.';
-      verdictConfidence = 'conflict';
-    } else {
-      maheshText = 'OI structure favors CE (MODERATE, ' + ceData.score + '%) — index is flat/weak, no tie-break available, treat as a lean.';
-      verdictConfidence = 'lean';
-    }
-  } else if (dominantSide === 'PE' && peVerdict === 'MODERATE') {
-    if (indexCtx && indexCtx.dir === 'DOWN' && indexCtx.strength !== 'WEAK') {
-      maheshText = 'OI favors PE with a MODERATE technical score (' + peData.score + '%) — Nifty is also ' + indexCtx.strength.toLowerCase() + ' DOWN (' + indexCtx.pctChange.toFixed(2) + '%), breaking the tie in favor of PE.';
-      verdictConfidence = 'confirmed';
-      indexTieBreakerUsed = true;
-    } else if (indexCtx && indexCtx.dir === 'UP' && indexCtx.strength !== 'WEAK') {
-      maheshText = 'OI favors PE (MODERATE, ' + peData.score + '%), but Nifty is ' + indexCtx.strength.toLowerCase() + ' UP (' + indexCtx.pctChange.toFixed(2) + '%) — index disagrees, treat as lower confidence.';
-      verdictConfidence = 'conflict';
-    } else {
-      maheshText = 'OI structure favors PE (MODERATE, ' + peData.score + '%) — index is flat/weak, no tie-break available, treat as a lean.';
-      verdictConfidence = 'lean';
-    }
-  } else if (dominantSide === 'CE' && (peVerdict === 'STRONG' || peVerdict === 'MODERATE')) {
-    maheshText = 'OI structure favors CE, but the technical score actually leans PE (' + peVerdict + ', ' + peData.score + '%) — conflict zone, treat as lower confidence.';
-    verdictConfidence = 'conflict';
-  } else if (dominantSide === 'PE' && (ceVerdict === 'STRONG' || ceVerdict === 'MODERATE')) {
-    maheshText = 'OI structure favors PE, but the technical score actually leans CE (' + ceVerdict + ', ' + ceData.score + '%) — conflict zone, treat as lower confidence.';
-    verdictConfidence = 'conflict';
-  } else if (dominantSide) {
-    maheshText = 'OI structure favors ' + dominantSide + ', though the technical score is still weak on both sides (CE ' + ceData.score + '%, PE ' + peData.score + '%) — OI-led lean, not a full confirmation.';
-    verdictConfidence = 'lean';
-  } else {
-    var leaderSide = ceData.score >= peData.score ? 'CE' : 'PE';
-    maheshText = 'No clear OI dominance (' + (oiResult.dilipFormulaNote || 'no dominance') + '), but technical score leans ' + leaderSide + ' (CE ' + ceData.score + '% vs PE ' + peData.score + '%) — treat as a tentative lean, size small.';
-    verdictConfidence = 'lean';
-  }
   maheshText += ' Regime: ' + regime.tag.replace(/_/g, ' ') + ' (' + regime.note + ').';
 
-  // Always resolve a real side using live data -- OI dominance when available,
-  // else whichever side scores higher technically. Never null, per explicit
-  // user request: live data should always produce a suggestion, no dead-end.
-  var verdictSide = dominantSide || (ceData.score >= peData.score ? 'CE' : 'PE');
-  var nareshText = _rsNareshText(null, loudCall, loudPut, dominantSide, ceData.score, peData.score);
-
-  // Pick suggested strikes: strongest Case 2 (call) or Case 6 (put) strikes near ATM.
-  // When OI itself didn't confirm this side, fall back to the strike closest to
-  // spot with the tightest CE/PE_ltp change data available -- still real, live
-  // numbers, just a lower-confidence pick since no strong Case 2/6 exists.
+  // Suggested strikes: only for RED/GREEN scenarios with a real key strike,
+  // matching the spec's {STRIKE_OTM} guidance -- ATM ± 2 for affordable premium.
   var suggestions = [];
-  if (verdictSide === 'PE') {
-    var goodPutStrikes = putStrikeCases.filter(function(sc) { return sc.case === 6 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
-      .sort(function(a, b) { return Math.abs(putOiChangeMap[a.strike]) - Math.abs(putOiChangeMap[b.strike]); }).reverse().slice(0, 2);
-    goodPutStrikes.forEach(function(sc) {
-      var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
-      if (chainRow && chainRow.PE_ltp) {
-        suggestions.push({
-          strike: sc.strike, type: 'PE', ltp: chainRow.PE_ltp, prevClose: chainRow.PE_prevClose,
-          isATM: sc.strike === atmStrike,
-          reason: 'Case 6 · OI ' + _rsFmtPct(putOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(putLtpChangeMap[sc.strike])
-        });
-      }
-    });
-  } else {
-    var goodCallStrikes = callStrikeCases.filter(function(sc) { return sc.case === 2 && Math.abs(sc.strike - atmStrike) <= 2 * strikeGap; })
-      .sort(function(a, b) { return Math.abs(callOiChangeMap[a.strike]) - Math.abs(callOiChangeMap[b.strike]); }).reverse().slice(0, 2);
-    goodCallStrikes.forEach(function(sc) {
-      var chainRow = nearChain.find(function(c) { return c.strike === sc.strike; });
-      if (chainRow && chainRow.CE_ltp) {
-        suggestions.push({
-          strike: sc.strike, type: 'CE', ltp: chainRow.CE_ltp, prevClose: chainRow.CE_prevClose,
-          isATM: sc.strike === atmStrike,
-          reason: 'Case 2 · OI ' + _rsFmtPct(callOiChangeMap[sc.strike]) + ', LTP ' + _rsFmtPct(callLtpChangeMap[sc.strike])
-        });
-      }
-    });
+  if (verdictSide === 'PE' && putOtmStrike) {
+    var chainRow = nearChain.find(function(c) { return c.strike === putOtmStrike; });
+    if (chainRow && chainRow.PE_ltp && Math.abs(putOtmStrike - atmStrike) <= 2 * strikeGap) {
+      suggestions.push({ strike: putOtmStrike, type: 'PE', ltp: chainRow.PE_ltp, prevClose: chainRow.PE_prevClose, reason: scenario ? _RS_TAG_LABEL[callTag] + ' (Call) confirms — OTM Put pick' : '' });
+    }
+  } else if (verdictSide === 'CE' && callOtmStrike) {
+    var chainRow2 = nearChain.find(function(c) { return c.strike === callOtmStrike; });
+    if (chainRow2 && chainRow2.CE_ltp && Math.abs(callOtmStrike - atmStrike) <= 2 * strikeGap) {
+      suggestions.push({ strike: callOtmStrike, type: 'CE', ltp: chainRow2.CE_ltp, prevClose: chainRow2.CE_prevClose, reason: scenario ? _RS_TAG_LABEL[putTag] + ' (Put) confirms — OTM Call pick' : '' });
+    }
   }
 
   var spotChangePct = spotChangePctEarly;
   var spotColor = spotChangePct >= 0 ? 'var(--green)' : 'var(--red)';
-  var verdictColor = verdictSide === 'PE' ? 'var(--red)' : verdictSide === 'CE' ? 'var(--green)' : 'var(--text3)';
 
   var html = '';
   html += '<div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin:9px 13px 10px;display:flex;justify-content:space-between;align-items:center">';
@@ -2990,16 +2905,14 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   html += '<div style="font-size:11px;font-weight:800;color:var(--amber);margin-bottom:6px;letter-spacing:.5px">NARESH — URGENCY</div>';
   html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + nareshText + '</div></div>';
 
-  var confLabel = verdictConfidence === 'confirmed' ? 'CONFIRMED' : verdictConfidence === 'conflict' ? 'CONFLICT — LOW CONFIDENCE' : 'TENTATIVE LEAN';
-  var confColor = verdictConfidence === 'confirmed' ? verdictColor : 'var(--amber)';
-  html += '<div style="margin:0 13px 12px;background:' + (verdictSide === 'PE' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)') + ';border-radius:12px;padding:14px 16px">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:11px;font-weight:800;color:' + verdictColor + ';letter-spacing:.5px">VERDICT</div><div style="font-size:9px;font-weight:800;color:' + confColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + (verdictSide === 'PE' ? sureshText : rameshText) + ' ' + maheshText + '</div>';
+  var confLabel = colourKey === 'RED' || colourKey === 'GREEN' ? (indexTieBreakerUsed ? 'CONFIRMED (index tie-break)' : 'DIRECTIONAL') : colourKey === 'AMBER' ? 'CAUTION / SCALP ONLY' : 'NO TRADE';
+  html += '<div style="margin:0 13px 12px;background:' + verdictColor + '22;border-radius:12px;padding:14px 16px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:11px;font-weight:800;color:' + verdictColor + ';letter-spacing:.5px">VERDICT — ' + (scenario ? colourKey : 'PENDING') + '</div><div style="font-size:9px;font-weight:800;color:' + verdictColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
+  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + bestStrikeText + '</div>';
   html += '</div>';
 
   // Step 7: caution flags
   var cautionFlags = _rsBuildCautionFlags(callOiChangeMap, putOiChangeMap, regime.tag);
-  if (indexTieBreakerUsed) cautionFlags.unshift('Index tie-breaker was used to confirm this side — a MODERATE OI signal alone was not enough.');
   if (cautionFlags.length) {
     html += '<div style="margin:0 13px 12px;background:rgba(245,158,11,.1);border-radius:12px;padding:12px 14px">';
     html += '<div style="font-size:10px;font-weight:800;color:var(--amber);margin-bottom:6px;letter-spacing:.5px">⚠️ CAUTION</div>';
@@ -3008,18 +2921,15 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   }
 
   if (suggestions.length) {
-    html += '<div style="margin:0 13px 8px;font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.5px">SUGGESTED STRIKES</div>';
+    html += '<div style="margin:0 13px 8px;font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.5px">SUGGESTED STRIKE</div>';
     suggestions.forEach(function(s, idx) {
       var chgPct = s.prevClose > 0 ? ((s.ltp - s.prevClose) / s.prevClose * 100) : 0;
       var chgAmt = s.ltp - s.prevClose;
       var chgColor = chgPct >= 0 ? 'var(--green)' : 'var(--red)';
       var capital = s.ltp * (stockMeta.lot || 1) * 1.2;
       var capStr = capital >= 1e5 ? '₹' + (capital / 1e5).toFixed(1) + 'L' : capital >= 1e3 ? '₹' + Math.round(capital / 1e3) + 'K' : '₹' + Math.round(capital);
-      // Decay/expense flag (Suresh's "already moved" check) -- based on the
-      // prevClose-vs-LTP change already shown, since real intraday day-high/low
-      // per strike isn't in the chain data. Honest proxy, not fabricated.
-      var moveFlag = chgPct < -80 ? { flag: 'decayed', note: 'down ' + Math.abs(chgPct).toFixed(0) + '% today — cheap but check if the move is already over' }
-        : chgPct > 1000 ? { flag: 'expensive', note: 'up over 1000% today — squeeze/panic likely priced in' } : null;
+      var moveFlag = chgPct < -80 ? { note: 'down ' + Math.abs(chgPct).toFixed(0) + '% today — cheap but check if the move is already over' }
+        : chgPct > 1000 ? { note: 'up over 1000% today — squeeze/panic likely priced in' } : null;
       html += '<div style="margin:0 13px 10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center">';
       html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + '</div>';
@@ -3034,8 +2944,10 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       html += '<div class="paper-btn" style="margin-top:10px" onclick="openResearchConfirm(this,\'' + sym + '\',' + s.strike + ',\'' + s.type + '\',' + s.ltp + ',' + (stockMeta.lot || 1) + ')">➕ Add this strike</div>';
       html += '</div>';
     });
+  } else if (colourKey === 'RED' || colourKey === 'GREEN') {
+    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">Directional scenario confirmed, but no strike within ATM ±2 has live premium data right now.</div>';
   } else {
-    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">No genuine Case 2/6 strike within ATM ±2 right now — no strike suggested.</div>';
+    html += '<div style="margin:0 13px 12px;background:var(--card2);border-radius:12px;padding:14px 16px;text-align:center;color:var(--text3);font-size:13px">' + (colourKey === 'AMBER' ? 'Amber scenario — scalp-only or wait, no swing strike suggested.' : 'Grey scenario — no trade, no strike suggested.') + '</div>';
   }
 
   resultEl.innerHTML = html;
