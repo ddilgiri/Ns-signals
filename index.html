@@ -2618,6 +2618,72 @@ function _rsBuildSureshText(groups, oiChangeMap, ltpChangeMap) {
 // Pulls the 2-3 loudest technical factors from a full breakdown
 // (23 factors, all genuinely checked -- only the strongest few
 // surface in prose, per user's explicit choice).
+// ---------- STEP 0: Index context (tie-breaker) ----------
+// Reuses the same INDEX_TOKENS/quote pattern loadIndices() already uses,
+// cached briefly so repeated researches in the same window don't refetch.
+var _RS_INDEX_CACHE = { data: null, ts: 0 };
+async function _rsGetIndexContext() {
+  var now = Date.now();
+  if (_RS_INDEX_CACHE.data && (now - _RS_INDEX_CACHE.ts) < 25000) return _RS_INDEX_CACHE.data;
+  try {
+    var tokens = (typeof INDEX_TOKENS !== 'undefined' ? INDEX_TOKENS : []).map(function(t) { return t.token; });
+    if (!tokens.length) return null;
+    var resp = await fetch(getServer() + '/quote', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'FULL', exchangeTokens: { NSE: tokens } })
+    });
+    var data = await resp.json();
+    if (!data.status || !data.data || !data.data.fetched) return null;
+    var niftyRow = data.data.fetched.find(function(r) {
+      var meta = INDEX_TOKENS.find(function(t) { return String(t.token) === String(r.symbolToken); });
+      return meta && meta.sym === 'NIFTY';
+    });
+    if (!niftyRow) return null;
+    var ltp = parseFloat(niftyRow.ltp || 0);
+    var prevClose = parseFloat(niftyRow.close || niftyRow.previousClose || 0);
+    var pctChange = prevClose > 0 ? ((ltp - prevClose) / prevClose * 100) : 0;
+    var dir = pctChange > 0.05 ? 'UP' : pctChange < -0.05 ? 'DOWN' : 'FLAT';
+    var strength = Math.abs(pctChange) > 1.0 ? 'STRONG' : Math.abs(pctChange) > 0.3 ? 'MODERATE' : 'WEAK';
+    var result = { dir: dir, strength: strength, pctChange: pctChange, ltp: ltp };
+    _RS_INDEX_CACHE = { data: result, ts: now };
+    return result;
+  } catch (e) { return null; }
+}
+
+// ---------- STEP 2: Suresh's "already moved" decay/expense flags ----------
+// Implemented inline in renderResearchResult's suggestion-card loop, using
+// LTP-vs-prevClose (the real data available in the chain) as an honest proxy
+// for true day-high/day-low, which the chain data doesn't carry.
+
+// ---------- STEP 3: Regime tag (price direction + total OI direction) ----------
+function _rsRegimeTag(spotChangePct, totalCeOiChange, totalPeOiChange) {
+  var priceUp = spotChangePct > 0.1;
+  var priceDown = spotChangePct < -0.1;
+  var oiNet = (totalCeOiChange || 0) + (totalPeOiChange || 0);
+  var oiUp = oiNet > 0;
+  if (priceUp && oiUp) return { tag: 'LONG_BUILDUP', note: 'price up + OI up — strong bull regime' };
+  if (priceDown && oiUp) return { tag: 'SHORT_BUILDUP', note: 'price down + OI up — strong bear regime' };
+  if (priceUp && !oiUp) return { tag: 'SHORT_COVERING', note: 'price up + OI down — weak bounce, fade-able' };
+  if (priceDown && !oiUp) return { tag: 'LONG_UNWINDING', note: 'price down + OI down — weak break, check for squeeze underneath' };
+  return { tag: 'FLAT', note: 'no clear price/OI regime yet' };
+}
+
+// ---------- STEP 7: Caution flags ----------
+// Built inline in renderResearchResult using real per-strike % magnitude
+// data already computed there (oiChangeMap) -- see _rsBuildCautionFlags below.
+function _rsBuildCautionFlags(callOiChangeMap, putOiChangeMap, regimeTag) {
+  var flags = [];
+  var allOiPcts = Object.values(callOiChangeMap).concat(Object.values(putOiChangeMap));
+  var extreme = allOiPcts.some(function(v) { return Math.abs(v) > 500; });
+  if (extreme) flags.push('Panic/extreme OI move detected (>500%) on at least one strike — premium likely expensive both sides, reduce size.');
+  if (regimeTag === 'LONG_UNWINDING') flags.push('Long-unwinding regime can hide a squeeze underneath — exit on OI sign-flip or a candle close beyond the level, not on OI simply decelerating.');
+  return flags;
+}
+
+
+// Pulls the 2-3 loudest technical factors from a full breakdown
+// (23 factors, all genuinely checked -- only the strongest few
+// surface in prose, per user's explicit choice).
 function _rsLoudFactors(breakdown, direction) {
   if (!breakdown) return [];
   var loud = [];
@@ -2736,10 +2802,11 @@ async function runResearch() {
     ]);
     var ceData = await ceResp.json();
     var peData = await peResp.json();
+    var indexCtx = await _rsGetIndexContext();
 
     _RS_CACHE = { symbol: sym, spotPrice: spot, oiResult: oiResult, ceBreakdown: ceData.breakdown, peBreakdown: peData.breakdown, stockMeta: stockMeta };
 
-    renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData, stockMeta);
+    renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData, stockMeta, indexCtx);
     addLog('🔍 Research: ' + sym + ' — ATM ' + oiResult.atmStrike, 'ok');
   } catch (err) {
     toast('⚠️ Research failed: ' + err.message);
@@ -2750,7 +2817,7 @@ async function runResearch() {
   }
 }
 
-function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData, stockMeta) {
+function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData, stockMeta, indexCtx) {
   var resultEl = document.getElementById('researchResult');
   var atmStrike = oiResult.atmStrike;
   var chain = oiResult.chain || [];
@@ -2797,18 +2864,50 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var loudCall = _rsLoudFactors(ceData.breakdown, 'CE');
   var loudPut = _rsLoudFactors(peData.breakdown, 'PE');
 
+  // Step 3: regime tag from price direction + total OI direction (already have both)
+  var totalCeOiChange = Object.values(callOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
+  var totalPeOiChange = Object.values(putOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
+  var spotChangePctEarly = spotPrevClose > 0 ? ((spot - spotPrevClose) / spotPrevClose * 100) : 0;
+  var regime = _rsRegimeTag(spotChangePctEarly, totalCeOiChange, totalPeOiChange);
+
   // Mahesh: cross-check OI structure vs overall technical verdicts
   var ceVerdict = ceData.score >= 75 ? 'STRONG' : ceData.score >= 60 ? 'MODERATE' : ceData.score >= 42 ? 'WEAK' : 'AVOID';
   var peVerdict = peData.score >= 75 ? 'STRONG' : peData.score >= 60 ? 'MODERATE' : peData.score >= 42 ? 'WEAK' : 'AVOID';
   var dominantSide = oiResult.dilipFormula === 'CE' ? 'CE' : oiResult.dilipFormula === 'PE' ? 'PE' : null;
   var maheshText;
   var verdictConfidence; // 'confirmed' | 'conflict' | 'lean'
-  if (dominantSide === 'CE' && (ceVerdict === 'STRONG' || ceVerdict === 'MODERATE')) {
+  var indexTieBreakerUsed = false;
+  if (dominantSide === 'CE' && ceVerdict === 'STRONG') {
     maheshText = 'OI structure favors CE, and the technical score agrees (' + ceVerdict + ', ' + ceData.score + '%) — confirmed bullish, no conflict.';
     verdictConfidence = 'confirmed';
-  } else if (dominantSide === 'PE' && (peVerdict === 'STRONG' || peVerdict === 'MODERATE')) {
+  } else if (dominantSide === 'PE' && peVerdict === 'STRONG') {
     maheshText = 'OI structure favors PE, and the technical score agrees (' + peVerdict + ', ' + peData.score + '%) — confirmed bearish, no conflict.';
     verdictConfidence = 'confirmed';
+  } else if (dominantSide === 'CE' && ceVerdict === 'MODERATE') {
+    // MODERATE confidence -- Step 0 index tie-breaker applies here
+    if (indexCtx && indexCtx.dir === 'UP' && indexCtx.strength !== 'WEAK') {
+      maheshText = 'OI favors CE with a MODERATE technical score (' + ceData.score + '%) — Nifty is also ' + indexCtx.strength.toLowerCase() + ' UP (' + indexCtx.pctChange.toFixed(2) + '%), breaking the tie in favor of CE.';
+      verdictConfidence = 'confirmed';
+      indexTieBreakerUsed = true;
+    } else if (indexCtx && indexCtx.dir === 'DOWN' && indexCtx.strength !== 'WEAK') {
+      maheshText = 'OI favors CE (MODERATE, ' + ceData.score + '%), but Nifty is ' + indexCtx.strength.toLowerCase() + ' DOWN (' + indexCtx.pctChange.toFixed(2) + '%) — index disagrees, treat as lower confidence.';
+      verdictConfidence = 'conflict';
+    } else {
+      maheshText = 'OI structure favors CE (MODERATE, ' + ceData.score + '%) — index is flat/weak, no tie-break available, treat as a lean.';
+      verdictConfidence = 'lean';
+    }
+  } else if (dominantSide === 'PE' && peVerdict === 'MODERATE') {
+    if (indexCtx && indexCtx.dir === 'DOWN' && indexCtx.strength !== 'WEAK') {
+      maheshText = 'OI favors PE with a MODERATE technical score (' + peData.score + '%) — Nifty is also ' + indexCtx.strength.toLowerCase() + ' DOWN (' + indexCtx.pctChange.toFixed(2) + '%), breaking the tie in favor of PE.';
+      verdictConfidence = 'confirmed';
+      indexTieBreakerUsed = true;
+    } else if (indexCtx && indexCtx.dir === 'UP' && indexCtx.strength !== 'WEAK') {
+      maheshText = 'OI favors PE (MODERATE, ' + peData.score + '%), but Nifty is ' + indexCtx.strength.toLowerCase() + ' UP (' + indexCtx.pctChange.toFixed(2) + '%) — index disagrees, treat as lower confidence.';
+      verdictConfidence = 'conflict';
+    } else {
+      maheshText = 'OI structure favors PE (MODERATE, ' + peData.score + '%) — index is flat/weak, no tie-break available, treat as a lean.';
+      verdictConfidence = 'lean';
+    }
   } else if (dominantSide === 'CE' && (peVerdict === 'STRONG' || peVerdict === 'MODERATE')) {
     maheshText = 'OI structure favors CE, but the technical score actually leans PE (' + peVerdict + ', ' + peData.score + '%) — conflict zone, treat as lower confidence.';
     verdictConfidence = 'conflict';
@@ -2823,6 +2922,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
     maheshText = 'No clear OI dominance (' + (oiResult.dilipFormulaNote || 'no dominance') + '), but technical score leans ' + leaderSide + ' (CE ' + ceData.score + '% vs PE ' + peData.score + '%) — treat as a tentative lean, size small.';
     verdictConfidence = 'lean';
   }
+  maheshText += ' Regime: ' + regime.tag.replace(/_/g, ' ') + ' (' + regime.note + ').';
 
   // Always resolve a real side using live data -- OI dominance when available,
   // else whichever side scores higher technically. Never null, per explicit
@@ -2863,7 +2963,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
     });
   }
 
-  var spotChangePct = spotPrevClose > 0 ? ((spot - spotPrevClose) / spotPrevClose * 100) : 0;
+  var spotChangePct = spotChangePctEarly;
   var spotColor = spotChangePct >= 0 ? 'var(--green)' : 'var(--red)';
   var verdictColor = verdictSide === 'PE' ? 'var(--red)' : verdictSide === 'CE' ? 'var(--green)' : 'var(--text3)';
 
@@ -2897,6 +2997,16 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + (verdictSide === 'PE' ? sureshText : rameshText) + ' ' + maheshText + '</div>';
   html += '</div>';
 
+  // Step 7: caution flags
+  var cautionFlags = _rsBuildCautionFlags(callOiChangeMap, putOiChangeMap, regime.tag);
+  if (indexTieBreakerUsed) cautionFlags.unshift('Index tie-breaker was used to confirm this side — a MODERATE OI signal alone was not enough.');
+  if (cautionFlags.length) {
+    html += '<div style="margin:0 13px 12px;background:rgba(245,158,11,.1);border-radius:12px;padding:12px 14px">';
+    html += '<div style="font-size:10px;font-weight:800;color:var(--amber);margin-bottom:6px;letter-spacing:.5px">⚠️ CAUTION</div>';
+    cautionFlags.forEach(function(f) { html += '<div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:4px">• ' + f + '</div>'; });
+    html += '</div>';
+  }
+
   if (suggestions.length) {
     html += '<div style="margin:0 13px 8px;font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.5px">SUGGESTED STRIKES</div>';
     suggestions.forEach(function(s, idx) {
@@ -2905,6 +3015,11 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       var chgColor = chgPct >= 0 ? 'var(--green)' : 'var(--red)';
       var capital = s.ltp * (stockMeta.lot || 1) * 1.2;
       var capStr = capital >= 1e5 ? '₹' + (capital / 1e5).toFixed(1) + 'L' : capital >= 1e3 ? '₹' + Math.round(capital / 1e3) + 'K' : '₹' + Math.round(capital);
+      // Decay/expense flag (Suresh's "already moved" check) -- based on the
+      // prevClose-vs-LTP change already shown, since real intraday day-high/low
+      // per strike isn't in the chain data. Honest proxy, not fabricated.
+      var moveFlag = chgPct < -80 ? { flag: 'decayed', note: 'down ' + Math.abs(chgPct).toFixed(0) + '% today — cheap but check if the move is already over' }
+        : chgPct > 1000 ? { flag: 'expensive', note: 'up over 1000% today — squeeze/panic likely priced in' } : null;
       html += '<div style="margin:0 13px 10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center">';
       html += '<div><div style="font-size:14px;font-weight:800;color:var(--text)">' + sym + ' ' + s.strike + ' ' + s.type + '</div>';
@@ -2912,6 +3027,9 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       html += '<div style="text-align:right"><div style="font-size:16px;font-weight:900;color:var(--text)">₹' + s.ltp.toFixed(2) + '</div>';
       html += '<div style="font-size:10px;font-weight:700;color:' + chgColor + '">' + (chgPct >= 0 ? '+' : '') + chgAmt.toFixed(2) + ' (' + (chgPct >= 0 ? '+' : '') + chgPct.toFixed(1) + '%)</div></div>';
       html += '</div>';
+      if (moveFlag) {
+        html += '<div style="margin-top:6px;font-size:10px;font-weight:700;color:var(--amber);background:rgba(245,158,11,.1);padding:4px 8px;border-radius:6px">⚠️ ' + moveFlag.note + '</div>';
+      }
       html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"><span>Capital (1 lot)</span><span style="font-weight:700;color:var(--text)">' + capStr + '</span></div>';
       html += '<div class="paper-btn" style="margin-top:10px" onclick="openResearchConfirm(this,\'' + sym + '\',' + s.strike + ',\'' + s.type + '\',' + s.ltp + ',' + (stockMeta.lot || 1) + ')">➕ Add this strike</div>';
       html += '</div>';
