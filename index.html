@@ -2561,16 +2561,70 @@ function _rsFindKeyStrike(strikeTags, oiChangeMap) {
 // one-sided chain, a mostly-one-sided chain with one exception,
 // and a split chain each produce structurally different prose,
 // not just different numbers in one fixed template.
-// Builds full per-strike breakdown text (Dilip's stated preference: every
-// strike with its OI%/LTP% and tag, not a condensed summary sentence).
+// Groups consecutive strikes sharing the same tag into ranges, e.g.
+// [{strike:2020,tag:FLAT},{strike:2040,tag:FLAT},{strike:2060,tag:SQUEEZE}]
+// -> [{from:2020,to:2040,tag:FLAT,count:2,strikes:[...]},{from:2060,to:2060,tag:SQUEEZE,count:1,strikes:[...]}]
+function _rsGroupByTag(strikeTagList) {
+  var groups = [];
+  strikeTagList.forEach(function(s) {
+    var last = groups[groups.length - 1];
+    if (last && last.tag === s.tag) {
+      last.to = s.strike;
+      last.count++;
+      last.strikes.push(s.strike);
+    } else {
+      groups.push({ from: s.strike, to: s.strike, tag: s.tag, count: 1, strikes: [s.strike] });
+    }
+  });
+  return groups;
+}
+
+function _rsFmtGroupRange(g, oiChangeMap, ltpChangeMap) {
+  var oiVals = g.strikes.map(function(s) { return oiChangeMap[s]; }).filter(function(v) { return v != null; });
+  var ltpVals = g.strikes.map(function(s) { return ltpChangeMap[s]; }).filter(function(v) { return v != null; });
+  var oiMin = oiVals.length ? Math.min.apply(null, oiVals) : null;
+  var oiMax = oiVals.length ? Math.max.apply(null, oiVals) : null;
+  var ltpMin = ltpVals.length ? Math.min.apply(null, ltpVals) : null;
+  var ltpMax = ltpVals.length ? Math.max.apply(null, ltpVals) : null;
+  var strikeLabel = g.count > 1 ? ('<b>' + g.from + '</b> to <b>' + g.to + '</b>') : ('<b>' + g.from + '</b>');
+  var oiStr = oiMin != null ? (oiMin === oiMax ? _rsFmtPct(oiMin) : _rsFmtPct(oiMin) + ' to ' + _rsFmtPct(oiMax)) : 'n/a';
+  var ltpStr = ltpMin != null ? (ltpMin === ltpMax ? _rsFmtPct(ltpMin) : _rsFmtPct(ltpMin) + ' to ' + _rsFmtPct(ltpMax)) : 'n/a';
+  return { strikeLabel: strikeLabel, oiStr: oiStr, ltpStr: ltpStr };
+}
+
+// Builds flowing narration per the uploaded template's actual style
+// ("Every strike from X to Y shows... — TAG across the whole chain"),
+// not a per-strike data dump. Sentence shape genuinely branches on
+// data shape: fully one-sided / mostly-one-sided-with-exception / split.
 function _rsBuildSideText(strikeTags, oiChangeMap, ltpChangeMap, sideLabel) {
   if (!strikeTags.length) return 'No OI-change history yet for this chain — first look at these strikes. Research it again in a few minutes once a real cycle delta is available.';
-  var lines = strikeTags.map(function(s) {
-    var oi = _rsFmtPct(oiChangeMap[s.strike]);
-    var ltp = _rsFmtPct(ltpChangeMap[s.strike]);
-    return '<b>' + s.strike + '</b> ' + sideLabel + ': OI ' + oi + ', LTP ' + ltp + ' — ' + _RS_TAG_LABEL[s.tag];
-  });
-  return lines.join('<br>');
+  var groups = _rsGroupByTag(strikeTags);
+  var tagCounts = {};
+  groups.forEach(function(g) { tagCounts[g.tag] = (tagCounts[g.tag] || 0) + g.count; });
+  var totalStrikes = groups.reduce(function(a, g) { return a + g.count; }, 0);
+  var dominantTag = Object.keys(tagCounts).reduce(function(a, b) { return tagCounts[a] > tagCounts[b] ? a : b; });
+  var dominantPct = tagCounts[dominantTag] / totalStrikes;
+  var tagLabel = _RS_TAG_LABEL[dominantTag];
+
+  if (dominantPct === 1) {
+    var g = groups[0];
+    var f = _rsFmtGroupRange(g, oiChangeMap, ltpChangeMap);
+    return 'Every ' + sideLabel + ' strike from ' + f.strikeLabel + ' shows OI ' + f.oiStr + ' and LTP ' + f.ltpStr + ' — ' + tagLabel + ' across the whole chain, no exceptions.';
+  } else if (dominantPct >= 0.6) {
+    var mainGroups = groups.filter(function(g) { return g.tag === dominantTag; });
+    var breakGroups = groups.filter(function(g) { return g.tag !== dominantTag; });
+    var mg = mainGroups[0];
+    var mf = _rsFmtGroupRange(mg, oiChangeMap, ltpChangeMap);
+    var bg = breakGroups[0];
+    var bf = _rsFmtGroupRange(bg, oiChangeMap, ltpChangeMap);
+    return mf.strikeLabel + ' ' + sideLabel + ' show ' + tagLabel + ' (OI ' + mf.oiStr + ', LTP ' + mf.ltpStr + '). But ' + bf.strikeLabel + ' break the pattern with ' + _RS_TAG_LABEL[bg.tag] + ' — worth watching, not the dominant read.';
+  } else {
+    var parts = groups.slice(0, 3).map(function(g) {
+      var f = _rsFmtGroupRange(g, oiChangeMap, ltpChangeMap);
+      return f.strikeLabel + ' shows ' + _RS_TAG_LABEL[g.tag];
+    });
+    return sideLabel + ' side is mixed: ' + parts.join('; ') + '. No single dominant structure yet.';
+  }
 }
 
 // Resolves the OVERALL tag for a side (used for the 16-scenario lookup):
