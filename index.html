@@ -2858,11 +2858,17 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
     }
   }
 
-  // Step 3: regime tag, appended to Mahesh
+  // Step 3: regime tag -- a SEPARATE whole-chain signal (price direction + total
+  // OI direction across all strikes), distinct from the per-strike scenario tags
+  // above. Phrased as its own sentence so a GREY/flat per-strike read next to an
+  // active regime doesn't look self-contradictory -- they're answering different
+  // questions (individual strike activity vs overall chain lean).
   var totalCeOiChange = Object.values(callOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
   var totalPeOiChange = Object.values(putOiChangeMap).reduce(function(a, v) { return a + v; }, 0);
   var regime = _rsRegimeTag(spotChangePctEarly, totalCeOiChange, totalPeOiChange);
-  maheshText += ' Regime: ' + regime.tag.replace(/_/g, ' ') + ' (' + regime.note + ').';
+  if (regime.tag !== 'FLAT') {
+    maheshText += ' Separately, the whole-chain regime is ' + regime.tag.replace(/_/g, ' ') + ' (' + regime.note + ') — worth watching even though no single strike has crossed the fresh-write/squeeze threshold yet.';
+  }
 
   // Suggested strikes: only for RED/GREEN scenarios with a real key strike,
   // matching the spec's {STRIKE_OTM} guidance -- ATM ± 2 for affordable premium.
