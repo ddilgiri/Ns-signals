@@ -2521,10 +2521,10 @@ var _RS_TAG_LABEL = {
 // guidance is stable phrasing per scenario, matching the spec's field-substitution model.
 var _RS_SCENARIOS = {
   'FRESH_WRITE_FRESH_WRITE': { colour: 'AMBER', mahesh: 'Straddle-style writing at {ATM} — large sellers betting on low movement, not a directional signal.', naresh: 'No clear urgency either side — this is a range-defense setup, not a breakout signal.', best: 'No directional trade here. Favors option SELLING (straddle/strangle) over buying CE or PE — premiums will likely stay depressed unless {ATM} breaks decisively either way.' },
-  'FRESH_WRITE_SQUEEZE': { colour: 'RED', mahesh: 'Short Buildup — price falling, OI rising. Call wall at {CALL} is real and capping upside. Put squeeze confirms pressure, not relief. Bias stays bearish.', naresh: 'Put side urgency — Call sellers pressing hard, pushing price down on their own. No fresh Put buyers needed to confirm this.', best: 'Buy {PUT_OTM} PE on any bounce toward {CALL}. Hold while {CALL} CE OI keeps rising and price stays below {CALL}.' },
+  'FRESH_WRITE_SQUEEZE': { colour: 'RED', mahesh: 'Short Buildup — price falling, OI rising. Call wall at {CALL} is real and capping upside. Put squeeze confirms pressure, not relief. Bias stays bearish.', naresh: 'Put side urgency — Call sellers pressing hard, pushing price down on their own. No fresh Put buyers needed to confirm this.', best: 'Buy {PUT_OTM} PE on any bounce toward {CALL}. Hold while {CALL} CE OI keeps rising and price stays below {CALL}. Target {TARGET1}, then {TARGET2}.' },
   'FRESH_WRITE_CALM_UNWIND': { colour: 'RED', mahesh: 'Call wall confirmed, but Put side is inactive — bearish bias holds, but conviction is one-sided and slightly weaker than a full squeeze confirmation.', naresh: 'Call side urgency only — Put side shows no counter-activity to strengthen the case further.', best: 'Buy {PUT_OTM} PE cautiously on bounce toward {CALL}. Hold only while {CALL} CE OI keeps building — bearish but thinner, size smaller.' },
-  'FRESH_WRITE_FLAT': { colour: 'RED', mahesh: 'Clean, uncontested Call wall — price falling with fresh Call OI building, nothing on the Put side to complicate the read. Bearish.', naresh: 'Call side urgency, uncontested — the clearest possible bearish wall reading.', best: 'Buy {PUT_OTM} PE on bounce toward {CALL}. Hold while {CALL} CE OI keeps rising.' },
-  'SQUEEZE_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Long Buildup — price rising, OI rising. Put floor at {PUT} is real and supporting downside. Call squeeze confirms pressure, not relief. Bias stays bullish.', naresh: 'Call side urgency — Put sellers pressing hard, pushing price up on their own. No fresh Call buyers needed to confirm this.', best: 'Buy {CALL_OTM} CE on any dip toward {PUT}. Hold while {PUT} PE OI keeps rising and price stays above {PUT}.' },
+  'FRESH_WRITE_FLAT': { colour: 'RED', mahesh: 'Clean, uncontested Call wall — price falling with fresh Call OI building, nothing on the Put side to complicate the read. Bearish.', naresh: 'Call side urgency, uncontested — the clearest possible bearish wall reading.', best: 'Buy {PUT_OTM} PE on bounce toward {CALL}. Hold while {CALL} CE OI keeps rising. Target {TARGET1}, then {TARGET2}.' },
+  'SQUEEZE_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Long Buildup — price rising, OI rising. Put floor at {PUT} is real and supporting downside. Call squeeze confirms pressure, not relief. Bias stays bullish.', naresh: 'Call side urgency — Put sellers pressing hard, pushing price up on their own. No fresh Call buyers needed to confirm this.', best: 'Buy {CALL_OTM} CE on any dip toward {PUT}. Hold while {PUT} PE OI keeps rising and price stays above {PUT}. Target {TARGET1}, then {TARGET2}.' },
   'SQUEEZE_SQUEEZE': { colour: 'AMBER', mahesh: 'Mixed squeeze on both sides — no clean directional wall. This often precedes a sharp move but the direction isn\'t confirmed yet.', naresh: 'No dominant side — both showing urgency, cancels out. Wait for one side to break away before entering.', best: 'No trade yet. Wait one more cycle — whichever side\'s squeeze fades first while the other continues will reveal the real direction.' },
   'SQUEEZE_CALM_UNWIND': { colour: 'GREEN', mahesh: 'Short Covering regime — a bounce, but without fresh Put buying to back it. Weak/temporary strength, not a strong conviction move.', naresh: 'Mild Call-side urgency only from covering — no real Put-side confirmation. Low conviction.', best: 'Small size only. If taking {CALL_OTM} CE, treat as a scalp — exit fast if momentum doesn\'t follow through.' },
   'SQUEEZE_FLAT': { colour: 'GREEN', mahesh: 'Covering-only bounce — no fresh buying anywhere to support a real trend change. Treat with caution.', naresh: 'Weak Call-side signal, uncontested but thin. Not a strong urgency reading.', best: 'Avoid fresh entry. If already in a bullish position, this doesn\'t add confirmation — hold current stops, don\'t add size.' },
@@ -2532,7 +2532,7 @@ var _RS_SCENARIOS = {
   'CALM_UNWIND_SQUEEZE': { colour: 'AMBER', mahesh: 'One-sided squeeze without a matching wall on the other side — directional but low conviction. Could reverse quickly.', naresh: 'Mild Put-side urgency only, no Call-side confirmation. Weak.', best: 'Scalp only if taking a position — {PUT_OTM} PE with tight stop. Exit on first sign of stalling.' },
   'CALM_UNWIND_CALM_UNWIND': { colour: 'GREY', mahesh: 'Nothing actionable — this is a dead/quiet zone in the chain right now.', naresh: 'No urgency on either side.', best: 'No trade. Wait for fresh OI activity to appear on either side.' },
   'CALM_UNWIND_FLAT': { colour: 'GREY', mahesh: 'No signal — skip this stock/strike range for now.', naresh: 'None.', best: 'No trade. Move to another stock/index with active OI movement.' },
-  'FLAT_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Clean, uncontested Put floor — price supported by fresh Put OI building, nothing on the Call side to complicate the read. Bullish.', naresh: 'Put side urgency, uncontested — the clearest possible bullish floor reading.', best: 'Buy {CALL_OTM} CE on dip toward {PUT}. Hold while {PUT} PE OI keeps rising.' },
+  'FLAT_FRESH_WRITE': { colour: 'GREEN', mahesh: 'Clean, uncontested Put floor — price supported by fresh Put OI building, nothing on the Call side to complicate the read. Bullish.', naresh: 'Put side urgency, uncontested — the clearest possible bullish floor reading.', best: 'Buy {CALL_OTM} CE on dip toward {PUT}. Hold while {PUT} PE OI keeps rising. Target {TARGET1}, then {TARGET2}.' },
   'FLAT_SQUEEZE': { colour: 'GREEN', mahesh: 'Covering-only move on the Put side — no fresh Call writing to confirm a real trend. Caution.', naresh: 'Weak Put-side signal, uncontested but thin.', best: 'Avoid fresh entry, or scalp only with tight stop if taking {CALL_OTM} CE.' },
   'FLAT_CALM_UNWIND': { colour: 'GREY', mahesh: 'No signal — skip for now.', naresh: 'None.', best: 'No trade. Wait for fresh activity.' },
   'FLAT_FLAT': { colour: 'GREY', mahesh: 'Completely flat — no directional information available right now.', naresh: 'None.', best: 'No trade. Check back next cycle or move to a more active stock.' }
@@ -2878,18 +2878,31 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var callOtmStrike = putStrikeNum || nearChain.filter(function(c) { return c.strike < atmStrike; }).sort(function(a, b) { return b.strike - a.strike; })[0]?.strike || atmStrike;
   var putOtmStrike = callStrikeNum || nearChain.filter(function(c) { return c.strike > atmStrike; }).sort(function(a, b) { return a.strike - b.strike; })[0]?.strike || atmStrike;
 
-  function fillTemplate(str) {
+  // Target1/Target2: next 2 strikes beyond the entry strike, in the trade's
+  // direction (for a PE buy, targets are BELOW the entry; for CE, ABOVE).
+  // Per spec: "next 2 strikes in trade direction with thinning/fresh OI" --
+  // we take the next 2 strikes by distance since per-strike OI-thinning
+  // classification for strikes beyond the already-tagged chain isn't available.
+  var peTargets = nearChain.filter(function(c) { return c.strike < putOtmStrike; }).sort(function(a, b) { return b.strike - a.strike; }).slice(0, 2).map(function(c) { return c.strike; });
+  var ceTargets = nearChain.filter(function(c) { return c.strike > callOtmStrike; }).sort(function(a, b) { return a.strike - b.strike; }).slice(0, 2).map(function(c) { return c.strike; });
+
+  function fillTemplate(str, targets) {
+    var t1 = targets && targets[0] != null ? String(targets[0]) : 'next support/resistance';
+    var t2 = targets && targets[1] != null ? String(targets[1]) : 'next zone beyond that';
     return (str || '')
       .replace(/\{ATM\}/g, String(atmStrike))
       .replace(/\{CALL_OTM\}/g, String(callOtmStrike))
       .replace(/\{PUT_OTM\}/g, String(putOtmStrike))
       .replace(/\{CALL\}/g, String(callStrikeNum || atmStrike))
-      .replace(/\{PUT\}/g, String(putStrikeNum || atmStrike));
+      .replace(/\{PUT\}/g, String(putStrikeNum || atmStrike))
+      .replace(/\{TARGET1\}/g, t1)
+      .replace(/\{TARGET2\}/g, t2);
   }
 
-  var maheshText = scenario ? fillTemplate(scenario.mahesh) : 'Not enough cycle-over-cycle data yet to classify this chain into a scenario — research this symbol again shortly once a second OI/LTP snapshot is available.';
-  var nareshText = scenario ? fillTemplate(scenario.naresh) : 'No urgency read available yet — needs a second data cycle.';
-  var bestStrikeText = scenario ? fillTemplate(scenario.best) : 'No trade guidance yet — check back once cycle data is available.';
+  var activeTargets = colourKey === 'RED' ? peTargets : colourKey === 'GREEN' ? ceTargets : null;
+  var maheshText = scenario ? fillTemplate(scenario.mahesh, activeTargets) : 'Not enough cycle-over-cycle data yet to classify this chain into a scenario — research this symbol again shortly once a second OI/LTP snapshot is available.';
+  var nareshText = scenario ? fillTemplate(scenario.naresh, activeTargets) : 'No urgency read available yet — needs a second data cycle.';
+  var bestStrikeText = scenario ? fillTemplate(scenario.best, activeTargets) : 'No trade guidance yet — check back once cycle data is available.';
   var colourKey = scenario ? scenario.colour : 'GREY';
   var verdictColor = _RS_COLOUR_VAR[colourKey];
 
@@ -2949,26 +2962,26 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   html += '<div style="text-align:right;font-size:11px;color:var(--text3)">' + (oiResult.expiry || '') + '</div>';
   html += '</div>';
 
-  html += '<div style="margin:0 13px 10px;border-left:3px solid var(--red);background:var(--card);border-radius:0 12px 12px 0;padding:12px 14px">';
-  html += '<div style="font-size:11px;font-weight:800;color:var(--red);margin-bottom:6px;letter-spacing:.5px">RAMESH — CALL SIDE</div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + rameshText + '</div></div>';
+  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--red);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
+  html += '<div style="font-size:10px;font-weight:800;color:var(--red);margin-bottom:4px;letter-spacing:.3px">RAMESH · OI</div>';
+  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + rameshText + '</div></div>';
 
-  html += '<div style="margin:0 13px 10px;border-left:3px solid var(--green);background:var(--card);border-radius:0 12px 12px 0;padding:12px 14px">';
-  html += '<div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;letter-spacing:.5px">SURESH — PUT SIDE</div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + sureshText + '</div></div>';
+  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--green);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
+  html += '<div style="font-size:10px;font-weight:800;color:var(--green);margin-bottom:4px;letter-spacing:.3px">SURESH · LTP</div>';
+  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + sureshText + '</div></div>';
 
-  html += '<div style="margin:0 13px 10px;border-left:3px solid var(--purple);background:var(--card);border-radius:0 12px 12px 0;padding:12px 14px">';
-  html += '<div style="font-size:11px;font-weight:800;color:var(--purple);margin-bottom:6px;letter-spacing:.5px">MAHESH — CONFIRMATION</div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + maheshText + '</div></div>';
+  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--purple);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
+  html += '<div style="font-size:10px;font-weight:800;color:var(--purple);margin-bottom:4px;letter-spacing:.3px">MAHESH · REGIME</div>';
+  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + maheshText + '</div></div>';
 
-  html += '<div style="margin:0 13px 12px;border-left:3px solid var(--amber);background:var(--card);border-radius:0 12px 12px 0;padding:12px 14px">';
-  html += '<div style="font-size:11px;font-weight:800;color:var(--amber);margin-bottom:6px;letter-spacing:.5px">NARESH — URGENCY</div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + nareshText + '</div></div>';
+  html += '<div style="margin:0 13px 10px;border-left:3px solid var(--amber);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
+  html += '<div style="font-size:10px;font-weight:800;color:var(--amber);margin-bottom:4px;letter-spacing:.3px">NARESH · URGENCY</div>';
+  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + nareshText + '</div></div>';
 
   var confLabel = colourKey === 'RED' || colourKey === 'GREEN' ? (indexTieBreakerUsed ? 'CONFIRMED (index tie-break)' : 'DIRECTIONAL') : colourKey === 'AMBER' ? 'CAUTION / SCALP ONLY' : 'NO TRADE';
-  html += '<div style="margin:0 13px 12px;background:' + verdictColor + '22;border-radius:12px;padding:14px 16px">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:11px;font-weight:800;color:' + verdictColor + ';letter-spacing:.5px">VERDICT — ' + (scenario ? colourKey : 'PENDING') + '</div><div style="font-size:9px;font-weight:800;color:' + verdictColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
-  html += '<div style="font-size:13px;line-height:1.6;color:var(--text)">' + bestStrikeText + '</div>';
+  html += '<div style="margin:0 13px 12px;background:' + verdictColor + '22;border-radius:12px;padding:12px 14px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:10px;font-weight:800;color:' + verdictColor + ';letter-spacing:.3px">BEST STRIKE</div><div style="font-size:9px;font-weight:800;color:' + verdictColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
+  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + bestStrikeText + '</div>';
   html += '</div>';
 
   // Step 7: caution flags
