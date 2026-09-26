@@ -139,20 +139,20 @@ _Alert only — no order placed. Confirm with Mahesh cross-check before entry._`
 // signal card: direction, verdict, OI formula read, wall/floor, stop/target. No case/
 // fuel/freshness gating — this uses whatever signal-analysis + oi-analysis already
 // computed, all fields the UI card itself shows, nothing invented for Telegram alone. ──
-function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward }) {
+function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution }) {
   const sideLabel = side === 'CE' ? 'CE' : 'PE';
-  const verdictEmoji = verdict === 'STRONG' ? '🔥' : verdict === 'MODERATE' ? '✓' : '·';
+  const verdictWord = verdict === 'STRONG' ? 'Strong' : verdict === 'MODERATE' ? 'Moderate' : 'Weak';
+  const buyLine = premium != null ? `Buy ₹${premium}` : '';
 
   const lines = [
-    `🚨 *${symbol} ${strike} ${sideLabel}*  ${verdictEmoji} ${score}%`,
-    premium != null ? `Premium ₹${premium}  ·  Spot ₹${spot}` : `Spot ₹${spot}`,
+    `🚨 ${symbol} ${strike} ${sideLabel} — ${score}% ${verdictWord}${buyLine ? ` — ${buyLine}` : ''}`,
+    ``,
+    `Stock price now: ₹${spot}`,
   ];
 
-  if (dilipFormulaNote) lines.push(`📊 ${dilipFormulaNote}`);
-  if (wallOrFloor) lines.push(wallOrFloor);
-  if (suggestedStop != null && suggestedTarget != null) {
-    lines.push(`🎯 ${suggestedTarget}  🛑 ${suggestedStop}${riskReward != null ? `  R:R ${riskReward}` : ''}`);
-  }
+  if (suggestedTarget != null) lines.push(`Target: ₹${suggestedTarget} (profit)`);
+  if (suggestedStop != null) lines.push(`Stop-loss: ₹${suggestedStop} (exit if hit)`);
+  if (holdCaution) lines.push(``, holdCaution);
 
   return lines.join('\n');
 }
@@ -197,11 +197,11 @@ async function evaluateAndAlert({
 // that already cleared the app's own score/verdict filter (whatever the caller passes
 // in), so Telegram tracks the UI 1:1. Only gate kept: the same cooldown as above, so
 // the same strike+side doesn't re-ping every 25s while its score stays high. ──
-async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward }) {
+async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution }) {
   const alertKey = `${symbol}_${strike}_${side}`;
   if (!canAlert(alertKey)) return null; // cooldown active, skip
 
-  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward });
+  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution });
 
   try {
     await sendTelegramAlert(text);

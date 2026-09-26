@@ -1606,20 +1606,37 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
   const strikeRow = (oi.chain || []).find(c => c.strike === strike);
   const premium = strikeRow ? (typ === "CE" ? strikeRow.CE_ltp : strikeRow.PE_ltp) : null;
 
-  const wallOrFloor = typ === "CE" ? (oi.ceWalls || [])[0] : (oi.peFloors || [])[0];
-  const wallOrFloorNote = wallOrFloor
-    ? (typ === "CE" ? `🧱 Ramesh wall: ${wallOrFloor.strike} · strength ${wallOrFloor.strength}` : `🏠 Suresh floor: ${wallOrFloor.strike} · strength ${wallOrFloor.strength}`)
-    : null;
+  // Hold/caution zones — ported from computeLevels() in index.html so Telegram carries
+  // the same "hold while spot is here, get cautious if it breaks this level" guidance
+  // the UI card shows. Same ATR-based buffer, same wall/floor source (oi already fetched
+  // above), just phrased for a non-technical reader instead of "Ramesh wall"/"Suresh floor".
+  let holdCaution = null;
+  if (spot) {
+    const atr = sigResult.atr && sigResult.atr > 0 && sigResult.atr < 0.05 * spot ? sigResult.atr : 0.005 * spot;
+    const isPE = typ === "PE";
+    let wallStrike = (oi.ceWalls || [])[0] ? parseFloat(oi.ceWalls[0].strike) : Math.round(spot + 2 * atr);
+    let floorStrike = (oi.peFloors || [])[0] ? parseFloat(oi.peFloors[0].strike) : Math.round(spot - 2 * atr);
+    if (wallStrike < spot) wallStrike = Math.round(spot + 2 * atr);
+    if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atr);
+
+    if (isPE) {
+      const holdZone = `${Math.round(spot - atr)}–${Math.round(spot)}`;
+      const cautionLevel = Math.round(wallStrike);
+      holdCaution = `Hold while spot stays ${holdZone}. Get cautious if spot bounces back up to ${cautionLevel}.`;
+    } else {
+      const holdZone = `${Math.round(spot)}–${Math.round(spot + atr)}`;
+      const cautionLevel = Math.round(floorStrike);
+      holdCaution = `Hold while spot stays ${holdZone}. Get cautious if spot drops back to ${cautionLevel}.`;
+    }
+  }
 
   await alertEngine.evaluateAndAlertAny({
     symbol: stk.sym, strike, side: typ,
     score: sigResult.score, verdict: sigResult.verdict,
     premium, spot,
-    dilipFormulaNote: sigResult.dilipFormulaNote || oi.dilipFormulaNote || null,
-    wallOrFloor: wallOrFloorNote,
     suggestedStop: sigResult.suggestedStop ?? null,
     suggestedTarget: sigResult.suggestedTarget ?? null,
-    riskReward: sigResult.riskReward ?? null
+    holdCaution
   });
 }
 
