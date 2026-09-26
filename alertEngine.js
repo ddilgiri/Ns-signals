@@ -152,7 +152,7 @@ function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot
 
   if (suggestedTarget != null) lines.push(`Target: ₹${suggestedTarget} (book profit here)`);
   if (holdZone) lines.push(`Hold: while price stays ${holdZone}`);
-  if (exitLevel != null) lines.push(`Exit: ₹${exitLevel} (get out if this breaks)`);
+  if (exitLevel != null) lines.push(`Exit: ₹${exitLevel} (close position if this breaks)`);
   if (whyBuy) lines.push(``, `Why buy: ${whyBuy}`);
 
   return lines.join('\n');
