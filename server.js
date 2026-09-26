@@ -412,6 +412,13 @@ function getIVRange(symbol, strike, side) {
   return { ivRecentHigh: Math.max(...snaps), ivRecentLow: Math.min(...snaps) };
 }
 
+function getLastIV(symbol, strike, side) {
+  const key = `${symbol}_${strike}_${side}`;
+  const snaps = IV_HISTORY[key];
+  if (!snaps || !snaps.length) return null;
+  return snaps[snaps.length - 1];
+}
+
 // ═══════════════════════════════════════════════════════
 // UPGRADE 4: SIGNAL LOG
 // ═══════════════════════════════════════════════════════
@@ -977,7 +984,7 @@ app.get("/alert-scan/test", async (req, res) => {
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12,ivFuel:6},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -1235,6 +1242,27 @@ const i=Object.values(s).reduce((e,t,idx,arr)=>{
 },0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
 {const t=SIGNAL_WEIGHTS.nanaConfirm||12;let n=0,o="";const ns=e.nanaSetup;if(!ns){n=.5*t,o="NanaLogic not available — neutral"}else if(!ns.valid){n=.4*t,o="NanaLogic: "+(ns.reason||"no weekly zone/trigger confirmation")}else if(a&&"CE"===ns.direction||!a&&"PE"===ns.direction){n=t,o="NanaLogic: weekly zone + daily trigger + OI Case confirmed "+ns.direction+" — SL "+ns.spotSL}else{n=0,o="NanaLogic confirms opposite side ("+ns.direction+") — against "+(a?"CE":"PE")}s.nanaConfirm={earned:n,max:t,pass:n>=.5*t,note:o}}
+// IV-room ("fuel") factor (2026-09-26): reuses IV_HISTORY that the Telegram alert path
+// (tryAlertScan) already populates via /option-greeks -- zero extra API calls here.
+// Only contributes when a prior alert-path fetch has already put IV data for this exact
+// symbol+strike+side into IV_HISTORY; otherwise scores neutral (half credit), same
+// "missing data = neutral, never a penalty" pattern as nanaConfirm above. This means IV
+// only sharpens the score for strikes that already went through Case 2/6 alert evaluation
+// at least once this session -- it does not trigger new option-greeks calls for every signal.
+{const t=SIGNAL_WEIGHTS.ivFuel||6;let n=.5*t,o="IV data not yet available — neutral (fills in after this strike's first alert-scan pass)";
+  const _wallStrike=a?e.oiResistStrike:e.oiSupportStrike; // CE cares about the ceiling wall, PE about the floor
+  if(e.sym&&_wallStrike){
+    const _last=getLastIV(e.sym,_wallStrike,a?"CE":"PE");
+    const {ivRecentHigh:_h,ivRecentLow:_l}=getIVRange(e.sym,_wallStrike,a?"CE":"PE");
+    if(_last!=null&&_h!=null&&_l!=null){
+      const _range=_h-_l;
+      const _pct=_range>0?((_last-_l)/_range*100):50;
+      if(_pct<70){n=t;o=`IV at ${_pct.toFixed(0)}% of recent range — room to expand ✓`}
+      else{n=0;o=`IV already at ${_pct.toFixed(0)}% of recent range — limited room`}
+    }
+  }
+  s.ivFuel={earned:n,max:t,pass:n>=.5*t,note:o};
+}
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
