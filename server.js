@@ -389,37 +389,6 @@ function getOITrend(symbol){
 }
 
 // ═══════════════════════════════════════════════════════
-// IV HISTORY — feeds alertEngine's fuel-check "IV has room to expand" gate.
-// Mirrors OI_HISTORY: in-memory, capped, session-lifetime only (no disk persistence —
-// intraday IV range resets every day anyway, so nothing worth persisting across restarts).
-// Keyed by `${symbol}_${strike}_${side}` so each strike/side tracks its own IV range.
-// ═══════════════════════════════════════════════════════
-const IV_HISTORY = {};
-const IV_HISTORY_MAX = 40; // ~ a session's worth at one sample per scan cycle (25s * 40 ≈ 17min window per push, capped list keeps last 40 pushes regardless of cadence)
-
-function recordIV(symbol, strike, side, iv) {
-  if (iv == null || !isFinite(iv) || iv <= 0) return;
-  const key = `${symbol}_${strike}_${side}`;
-  if (!IV_HISTORY[key]) IV_HISTORY[key] = [];
-  IV_HISTORY[key].push(iv);
-  if (IV_HISTORY[key].length > IV_HISTORY_MAX) IV_HISTORY[key].shift();
-}
-
-function getIVRange(symbol, strike, side) {
-  const key = `${symbol}_${strike}_${side}`;
-  const snaps = IV_HISTORY[key];
-  if (!snaps || snaps.length < 2) return { ivRecentHigh: null, ivRecentLow: null };
-  return { ivRecentHigh: Math.max(...snaps), ivRecentLow: Math.min(...snaps) };
-}
-
-function getLastIV(symbol, strike, side) {
-  const key = `${symbol}_${strike}_${side}`;
-  const snaps = IV_HISTORY[key];
-  if (!snaps || !snaps.length) return null;
-  return snaps[snaps.length - 1];
-}
-
-// ═══════════════════════════════════════════════════════
 // UPGRADE 4: SIGNAL LOG
 // ═══════════════════════════════════════════════════════
 const SIGNAL_LOG=[];
@@ -984,7 +953,7 @@ app.get("/alert-scan/test", async (req, res) => {
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12,ivFuel:6},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -1242,27 +1211,6 @@ const i=Object.values(s).reduce((e,t,idx,arr)=>{
 },0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
 {const t=SIGNAL_WEIGHTS.nanaConfirm||12;let n=0,o="";const ns=e.nanaSetup;if(!ns){n=.5*t,o="NanaLogic not available — neutral"}else if(!ns.valid){n=.4*t,o="NanaLogic: "+(ns.reason||"no weekly zone/trigger confirmation")}else if(a&&"CE"===ns.direction||!a&&"PE"===ns.direction){n=t,o="NanaLogic: weekly zone + daily trigger + OI Case confirmed "+ns.direction+" — SL "+ns.spotSL}else{n=0,o="NanaLogic confirms opposite side ("+ns.direction+") — against "+(a?"CE":"PE")}s.nanaConfirm={earned:n,max:t,pass:n>=.5*t,note:o}}
-// IV-room ("fuel") factor (2026-09-26): reuses IV_HISTORY that the Telegram alert path
-// (tryAlertScan) already populates via /option-greeks -- zero extra API calls here.
-// Only contributes when a prior alert-path fetch has already put IV data for this exact
-// symbol+strike+side into IV_HISTORY; otherwise scores neutral (half credit), same
-// "missing data = neutral, never a penalty" pattern as nanaConfirm above. This means IV
-// only sharpens the score for strikes that already went through Case 2/6 alert evaluation
-// at least once this session -- it does not trigger new option-greeks calls for every signal.
-{const t=SIGNAL_WEIGHTS.ivFuel||6;let n=.5*t,o="IV data not yet available — neutral (fills in after this strike's first alert-scan pass)";
-  const _wallStrike=a?e.oiResistStrike:e.oiSupportStrike; // CE cares about the ceiling wall, PE about the floor
-  if(e.sym&&_wallStrike){
-    const _last=getLastIV(e.sym,_wallStrike,a?"CE":"PE");
-    const {ivRecentHigh:_h,ivRecentLow:_l}=getIVRange(e.sym,_wallStrike,a?"CE":"PE");
-    if(_last!=null&&_h!=null&&_l!=null){
-      const _range=_h-_l;
-      const _pct=_range>0?((_last-_l)/_range*100):50;
-      if(_pct<70){n=t;o=`IV at ${_pct.toFixed(0)}% of recent range — room to expand ✓`}
-      else{n=0;o=`IV already at ${_pct.toFixed(0)}% of recent range — limited room`}
-    }
-  }
-  s.ivFuel={earned:n,max:t,pass:n>=.5*t,note:o};
-}
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
@@ -1607,10 +1555,10 @@ async function runServerScan() {
           const g = sig.data;
           if (g && g.status && g.score >= 60 && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
-            // Telegram alert path — Case 2 (CE) / Case 6 (PE) only, gated inside alertEngine
-            // itself (cooldown, fuel-check, freshness). Runs only for signals that already
-            // cleared the score/verdict filter above, so this never adds scan load for
-            // symbols nobody would act on anyway.
+            // Telegram alert path — mirrors the UI 1:1: any signal that clears this same
+            // score>=60/verdict filter (the one the app's own results list uses) also
+            // pings Telegram, gated only by a 15-min per-strike cooldown inside alertEngine
+            // (evaluateAndAlertAny). No Case 2/6 restriction, no fuel/freshness check.
             try { await tryAlertScan(stk, typ, spot, g); }
             catch(alertErr) { log(`[ALERT] ${stk.sym} ${typ} alert-path error: ${alertErr.message}`, "WARN"); }
           }
@@ -1634,64 +1582,28 @@ async function runServerScan() {
 async function tryAlertScan(stk, typ, spot, sigResult) {
   if (!alertEngine.isConfigured()) return; // no Telegram creds set — skip silently, cheap check
 
-  // Re-fetch oi-analysis fresh: signal-analysis's cached copy doesn't carry callOiCase/
-  // putOiCase or per-strike OI%/LTP% through to its response, only oi-analysis has them.
+  // Resolve the ATM strike + its OI note (one call, needed anyway to pick a strike to
+  // report — no case/fuel/candle/IV fetching here, this path just mirrors the UI signal).
   const oiResp = await axios.post(`http://localhost:${PORT}/oi-analysis`, {symbol: stk.sym, spotPrice: spot, expiry: getExpiryType(stk.sym)}, {headers:{"Content-Type":"application/json"}});
   const oi = oiResp.data;
   if (!oi || !oi.status) return;
 
-  const caseNum = typ === "CE" ? oi.callOiCase : oi.putOiCase;
-  if (caseNum == null) return; // alertEngine only fires on Case 2 (CE) / Case 6 (PE) anyway
+  const strike = oi.atmStrike;
+  if (!strike) return;
+  const strikeRow = (oi.chain || []).find(c => c.strike === strike);
+  const premium = strikeRow ? (typ === "CE" ? strikeRow.CE_ltp : strikeRow.PE_ltp) : null;
 
   const wallOrFloor = typ === "CE" ? (oi.ceWalls || [])[0] : (oi.peFloors || [])[0];
-  if (!wallOrFloor) return;
-  const strike = wallOrFloor.strike;
-  const strikeRow = (oi.chain || []).find(c => c.strike === strike);
-  if (!strikeRow) return;
+  const wallOrFloorNote = wallOrFloor
+    ? (typ === "CE" ? `🧱 Ramesh wall: ${wallOrFloor.strike} · strength ${wallOrFloor.strength}` : `🏠 Suresh floor: ${wallOrFloor.strike} · strength ${wallOrFloor.strength}`)
+    : null;
 
-  const oiPct = typ === "CE" ? strikeRow.CE_oiChangePct : strikeRow.PE_oiChangePct;
-  const ltpPct = typ === "CE" ? strikeRow.CE_ltpChangePct : strikeRow.PE_ltpChangePct;
-  if (oiPct == null || ltpPct == null) return;
-
-  const moneyness = strike === oi.atmStrike ? "ATM"
-    : (typ === "CE" ? strike < oi.atmStrike : strike > oi.atmStrike) ? "ITM"
-    : Math.abs(strike - oi.atmStrike) <= 2 * ((oi.chain?.[1]?.strike - oi.chain?.[0]?.strike) || 50) ? "OTM_near"
-    : "OTM_far";
-
-  // IV — best-effort. Angel's option-greeks API is documented elsewhere in this file as
-  // sometimes stale/missing; alertEngine.passesFuelCheck already treats missing IV as
-  // "skip the IV check, structural pass is enough" rather than blocking on it.
-  let currentIV = null;
-  try {
-    const expiryStr = getExpiryType(stk.sym) === "MONTHLY" ? oi.expiry : oi.expiry;
-    const greeksResp = await axios.post(`http://localhost:${PORT}/option-greeks`, {name: stk.sym, expirydate: expiryStr}, {headers:{"Content-Type":"application/json"}});
-    const rows = greeksResp.data?.data || [];
-    const match = rows.find(r => Math.round(parseFloat(r.strikePrice)) === Math.round(strike) && (r.optionType || "").toUpperCase() === typ);
-    if (match) currentIV = parseFloat(match.impliedVolatility) || null;
-  } catch(e) { /* IV fetch is best-effort — proceed without it */ }
-  recordIV(stk.sym, strike, typ, currentIV);
-  const { ivRecentHigh, ivRecentLow } = getIVRange(stk.sym, strike, typ);
-
-  // Candles for entry-timing freshness (isEntryFresh needs the option's own recent bars,
-  // not the underlying's — reuses the same token resolution as /option-ltp).
-  let candles = null;
-  try {
-    const tokenResp = await axios.post(`http://localhost:${PORT}/option-ltp`, {symbol: stk.sym, strike, type: typ, expiry: getExpiryType(stk.sym)}, {headers:{"Content-Type":"application/json"}});
-    const optToken = tokenResp.data?.symbolToken;
-    if (optToken) {
-      const now = new Date();
-      const from = new Date(now.getTime() - 90*60*1000); // last 90min of 5-min bars — plenty for the 3-candle freshness check
-      const fmt = d => d.toISOString().slice(0,16).replace("T"," ");
-      const candleResp = await axios.post(`http://localhost:${PORT}/candles`, {exchange:"NFO", symboltoken: String(optToken), interval:"FIVE_MINUTE", fromdate: fmt(from), todate: fmt(now)}, {headers:{"Content-Type":"application/json"}});
-      const rows = candleResp.data?.data || [];
-      candles = rows.map(r => ({open:parseFloat(r[1]), high:parseFloat(r[2]), low:parseFloat(r[3]), close:parseFloat(r[4]), volume:parseFloat(r[5])}));
-    }
-  } catch(e) { /* candle fetch failure — alertEngine.isEntryFresh handles null/short candles by returning fresh:false, alert just won't fire this cycle */ }
-
-  await alertEngine.evaluateAndAlert({
-    symbol: stk.sym, strike, side: typ, caseNum, oiPct, ltpPct, spot,
-    candles, daysToExpiry: oi.daysToExpiry, moneyness,
-    currentIV, ivRecentHigh, ivRecentLow
+  await alertEngine.evaluateAndAlertAny({
+    symbol: stk.sym, strike, side: typ,
+    score: sigResult.score, verdict: sigResult.verdict,
+    premium, spot,
+    oiNote: oi.dilipFormulaNote || null,
+    wallOrFloor: wallOrFloorNote
   });
 }
 

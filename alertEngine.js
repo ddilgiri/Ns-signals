@@ -135,6 +135,23 @@ function buildAlertText({ symbol, strike, side, caseNum, oiPct, ltpPct, spot, fu
 _Alert only — no order placed. Confirm with Mahesh cross-check before entry._`;
 }
 
+// ── Build the alert text for the "every UI signal" path — no case/fuel/freshness
+// gating, so this uses whatever signal-analysis + oi-analysis already computed rather
+// than the narrower Case 2/6-specific fields above. ──
+function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor }) {
+  const sideLabel = side === 'CE' ? 'CALL (CE)' : 'PUT (PE)';
+  const verdictEmoji = verdict === 'STRONG' ? '🟢' : verdict === 'MODERATE' ? '🟡' : '⚪';
+
+  return `🚨 *NS Signal: ${symbol}*
+
+*Strike:* ${strike} ${sideLabel}
+*Score:* ${score}%  ${verdictEmoji} *${verdict}*
+${premium != null ? `*Premium:* ₹${premium}\n` : ''}*Spot:* ${spot}
+${oiNote ? `\n📊 ${oiNote}` : ''}${wallOrFloor ? `\n${wallOrFloor}` : ''}
+
+_Alert only — no order placed. Confirm before entry._`;
+}
+
 // ── Main evaluation function — call this per strike per scan cycle ──
 // Returns null if no alert fires, otherwise sends via Telegram and returns the alert object.
 async function evaluateAndAlert({
@@ -171,8 +188,28 @@ async function evaluateAndAlert({
   }
 }
 
+// ── "Every UI signal" evaluation — no case/fuel/freshness gating. Sends any signal
+// that already cleared the app's own score/verdict filter (whatever the caller passes
+// in), so Telegram tracks the UI 1:1. Only gate kept: the same cooldown as above, so
+// the same strike+side doesn't re-ping every 25s while its score stays high. ──
+async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor }) {
+  const alertKey = `${symbol}_${strike}_${side}`;
+  if (!canAlert(alertKey)) return null; // cooldown active, skip
+
+  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor });
+
+  try {
+    await sendTelegramAlert(text);
+    return { symbol, strike, side, score, verdict, sentAt: new Date().toISOString() };
+  } catch (err) {
+    console.error('[alertEngine] Telegram send failed:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   evaluateAndAlert,
+  evaluateAndAlertAny,
   sendTelegramAlert, // exported for a one-off test ping
   isEntryFresh,
   passesFuelCheck,
