@@ -1644,8 +1644,7 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
     wallOrFloor: wallOrFloorNote,
     suggestedStop: sigResult.suggestedStop ?? null,
     suggestedTarget: sigResult.suggestedTarget ?? null,
-    riskReward: sigResult.riskReward ?? null,
-    actionNote: sigResult.actionNote || null
+    riskReward: sigResult.riskReward ?? null
   });
 }
 
