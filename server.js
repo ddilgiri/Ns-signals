@@ -1,5 +1,6 @@
 const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
 const nanaLogic=require("./nanaLogic.js");
+const alertEngine=require("./alertEngine.js");
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -910,6 +911,36 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   saveOISnapshot(i, oiResult);
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
+
+// ═══════════════════════════════════════════════════════
+// ALERT ENGINE — Telegram push for Case 2 (CE) / Case 6 (PE) only.
+// Standalone, additive: does NOT touch scan/scoring logic above.
+// Caller (frontend, per its existing 25s scan cycle) passes one strike's
+// already-fetched data — no new Angel API calls happen here.
+// Body: { symbol, strike, side, caseNum, oiPct, ltpPct, spot, candles,
+//         daysToExpiry, moneyness, currentIV, ivRecentHigh, ivRecentLow }
+// ═══════════════════════════════════════════════════════
+app.post("/alert-scan", async (req, res) => {
+  try {
+    const result = await alertEngine.evaluateAndAlert(req.body || {});
+    res.json({ status: true, alerted: !!result, alert: result || null, configured: alertEngine.isConfigured() });
+  } catch (err) {
+    log(`Alert-scan error: ${err.message}`, "WARN");
+    res.status(500).json({ status: false, message: err.message });
+  }
+});
+app.get("/alert-scan/test", async (req, res) => {
+  // One-off ping to verify Telegram env vars are wired correctly on Render.
+  if (!alertEngine.isConfigured()) {
+    return res.status(400).json({ status: false, message: "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set in environment" });
+  }
+  try {
+    await alertEngine.sendTelegramAlert("✅ NS-Signals alert engine test ping — Telegram wiring OK.");
+    res.json({ status: true, message: "Test alert sent" });
+  } catch (err) {
+    res.status(500).json({ status: false, message: err.message });
+  }
+});
 
 // Real feature (2026-09-05): added imi:8 -- per user's own research confirming IMI is
 // genuinely recommended specifically for intraday options trading (unlike RSI which is
