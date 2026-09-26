@@ -135,21 +135,31 @@ function buildAlertText({ symbol, strike, side, caseNum, oiPct, ltpPct, spot, fu
 _Alert only — no order placed. Confirm with Mahesh cross-check before entry._`;
 }
 
-// ── Build the alert text for the "every UI signal" path — no case/fuel/freshness
-// gating, so this uses whatever signal-analysis + oi-analysis already computed rather
-// than the narrower Case 2/6-specific fields above. ──
-function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor }) {
+// ── Build the alert text for the "every UI signal" path — mirrors the app's own
+// signal card: direction, verdict, OI formula read, wall/floor, stop/target. No case/
+// fuel/freshness gating — this uses whatever signal-analysis + oi-analysis already
+// computed, all fields the UI card itself shows, nothing invented for Telegram alone. ──
+function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward, actionNote }) {
   const sideLabel = side === 'CE' ? 'CALL (CE)' : 'PUT (PE)';
-  const verdictEmoji = verdict === 'STRONG' ? '🟢' : verdict === 'MODERATE' ? '🟡' : '⚪';
+  const dirLabel = side === 'CE' ? '🟢 BULLISH' : '🔴 BEARISH';
+  const verdictEmoji = verdict === 'STRONG' ? '🔥' : verdict === 'MODERATE' ? '✓' : '·';
 
-  return `🚨 *NS Signal: ${symbol}*
+  const lines = [
+    `🚨 *${symbol}* — ${dirLabel}`,
+    ``,
+    `*${strike} ${sideLabel}*  ·  ${verdictEmoji} *${verdict}* (${score}%)`,
+    premium != null ? `Premium: ₹${premium}   Spot: ₹${spot}` : `Spot: ₹${spot}`,
+  ];
 
-*Strike:* ${strike} ${sideLabel}
-*Score:* ${score}%  ${verdictEmoji} *${verdict}*
-${premium != null ? `*Premium:* ₹${premium}\n` : ''}*Spot:* ${spot}
-${oiNote ? `\n📊 ${oiNote}` : ''}${wallOrFloor ? `\n${wallOrFloor}` : ''}
+  if (dilipFormulaNote) lines.push(``, `📊 ${dilipFormulaNote}`);
+  if (wallOrFloor) lines.push(wallOrFloor);
+  if (suggestedStop != null && suggestedTarget != null) {
+    lines.push(``, `🎯 Target: ₹${suggestedTarget}   🛑 Stop: ₹${suggestedStop}${riskReward != null ? `   R:R ${riskReward}` : ''}`);
+  }
+  if (actionNote) lines.push(``, `_${actionNote}_`);
+  lines.push(``, `_Alert only — no order placed. Confirm before entry._`);
 
-_Alert only — no order placed. Confirm before entry._`;
+  return lines.join('\n');
 }
 
 // ── Main evaluation function — call this per strike per scan cycle ──
@@ -192,11 +202,11 @@ async function evaluateAndAlert({
 // that already cleared the app's own score/verdict filter (whatever the caller passes
 // in), so Telegram tracks the UI 1:1. Only gate kept: the same cooldown as above, so
 // the same strike+side doesn't re-ping every 25s while its score stays high. ──
-async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor }) {
+async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward, actionNote }) {
   const alertKey = `${symbol}_${strike}_${side}`;
   if (!canAlert(alertKey)) return null; // cooldown active, skip
 
-  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, oiNote, wallOrFloor });
+  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, dilipFormulaNote, wallOrFloor, suggestedStop, suggestedTarget, riskReward, actionNote });
 
   try {
     await sendTelegramAlert(text);

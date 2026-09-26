@@ -953,7 +953,7 @@ app.get("/alert-scan/test", async (req, res) => {
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12,ivFuel:6},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -1211,6 +1211,21 @@ const i=Object.values(s).reduce((e,t,idx,arr)=>{
 },0);
 // ── OI GATE: Dilip OI Formula is the anchor ──────────────────
 {const t=SIGNAL_WEIGHTS.nanaConfirm||12;let n=0,o="";const ns=e.nanaSetup;if(!ns){n=.5*t,o="NanaLogic not available — neutral"}else if(!ns.valid){n=.4*t,o="NanaLogic: "+(ns.reason||"no weekly zone/trigger confirmation")}else if(a&&"CE"===ns.direction||!a&&"PE"===ns.direction){n=t,o="NanaLogic: weekly zone + daily trigger + OI Case confirmed "+ns.direction+" — SL "+ns.spotSL}else{n=0,o="NanaLogic confirms opposite side ("+ns.direction+") — against "+(a?"CE":"PE")}s.nanaConfirm={earned:n,max:t,pass:n>=.5*t,note:o}}
+// IV-room ("fuel") factor (2026-09-26, v2): reads e.currentIV/ivRecentHigh/ivRecentLow,
+// passed in fresh by the caller (signal-analysis does a second, IV-aware scoring pass
+// only for signals that already cleared cfgMinConf on a first pass without IV -- see
+// signal-analysis for that two-pass logic). Missing IV = neutral, same "never penalize
+// missing data" pattern as nanaConfirm above -- this only sharpens an already-qualifying
+// score, never blocks one.
+{const t=SIGNAL_WEIGHTS.ivFuel||6;let n=.5*t,o="IV data not fetched for this pass — neutral";
+  if(e.currentIV!=null&&e.ivRecentHigh!=null&&e.ivRecentLow!=null){
+    const _range=e.ivRecentHigh-e.ivRecentLow;
+    const _pct=_range>0?((e.currentIV-e.ivRecentLow)/_range*100):50;
+    if(_pct<70){n=t;o=`IV at ${_pct.toFixed(0)}% of recent range — room to expand ✓`}
+    else{n=0;o=`IV already at ${_pct.toFixed(0)}% of recent range — limited room`}
+  }
+  s.ivFuel={earned:n,max:t,pass:n>=.5*t,note:o};
+}
 const oiEarned=s.dilipOIFormula?.earned||0;
 const oiMax=s.dilipOIFormula?.max||25;
 const oiFormula=e.dilipFormula||"NEUTRAL";
@@ -1290,7 +1305,30 @@ app.post("/signal-analysis",async(e,t)=>{
     const _nanaResp=await axios.post(`http://localhost:${PORT}/nana-setup`,{symbolToken:a,exchange:n,spotPrice:r,oiCase:_oiCaseForSide,atr14:p.atr||null},{headers:{"Content-Type":"application/json"}});
     if(_nanaResp.data?.status)S.nanaSetup=_nanaResp.data;
   }catch(nanaErr){ /* non-fatal -- NanaLogic is additive, never blocks scoring on failure */ }
-  const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
+  let{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
+  // IV-aware second pass (2026-09-26): only fetch IV — a real extra Angel One API call —
+  // for signals that already cleared the min-confidence bar (60%, matching the UI's
+  // cfgMinConf default) on the first pass without it. This keeps IV out of the cost for
+  // the many signals that would never qualify anyway, while still scoring it properly
+  // (not permanently neutral) for every signal that's actually in contention.
+  if(E>=60&&h?.atmStrike){
+    try{
+      const _greeksResp=await axios.post(`http://localhost:${PORT}/option-greeks`,{name:s,expirydate:h.expiry},{headers:{"Content-Type":"application/json"}});
+      const _rows=_greeksResp.data?.data||[];
+      const _match=_rows.find(rw=>Math.round(parseFloat(rw.strikePrice))===Math.round(h.atmStrike)&&(rw.optionType||"").toUpperCase()===i);
+      const _currentIV=_match?parseFloat(_match.impliedVolatility)||null:null;
+      // No session-lifetime IV history to compute a "recent range" from in this pass —
+      // use the day's high/low IV across all strikes for this expiry as the range proxy
+      // instead (still a real, live signal, just cross-strike rather than cross-time).
+      const _allIVs=_rows.filter(rw=>(rw.optionType||"").toUpperCase()===i).map(rw=>parseFloat(rw.impliedVolatility)).filter(v=>isFinite(v)&&v>0);
+      if(_currentIV!=null&&_allIVs.length>=2){
+        S.currentIV=_currentIV;
+        S.ivRecentHigh=Math.max(..._allIVs);
+        S.ivRecentLow=Math.min(..._allIVs);
+        ({score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i));
+      }
+    }catch(ivErr){ /* non-fatal -- IV is additive, never blocks scoring on failure */ }
+  }
   // Real fix (2026-09-05, #11): OI category minimum gate, per explicit user request --
   // "main category minimum pass marks... else all dummy signals". Confirmed live and
   // mathematically today: with the expanded factor set, a stock can score MODERATE/
@@ -1602,8 +1640,12 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
     symbol: stk.sym, strike, side: typ,
     score: sigResult.score, verdict: sigResult.verdict,
     premium, spot,
-    oiNote: oi.dilipFormulaNote || null,
-    wallOrFloor: wallOrFloorNote
+    dilipFormulaNote: sigResult.dilipFormulaNote || oi.dilipFormulaNote || null,
+    wallOrFloor: wallOrFloorNote,
+    suggestedStop: sigResult.suggestedStop ?? null,
+    suggestedTarget: sigResult.suggestedTarget ?? null,
+    riskReward: sigResult.riskReward ?? null,
+    actionNote: sigResult.actionNote || null
   });
 }
 
