@@ -1606,11 +1606,12 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
   const strikeRow = (oi.chain || []).find(c => c.strike === strike);
   const premium = strikeRow ? (typ === "CE" ? strikeRow.CE_ltp : strikeRow.PE_ltp) : null;
 
-  // Hold/caution zones — ported from computeLevels() in index.html so Telegram carries
-  // the same "hold while spot is here, get cautious if it breaks this level" guidance
-  // the UI card shows. Same ATR-based buffer, same wall/floor source (oi already fetched
-  // above), just phrased for a non-technical reader instead of "Ramesh wall"/"Suresh floor".
-  let holdCaution = null;
+  // Hold zone + exit level — ported from computeLevels() in index.html so Telegram
+  // carries the same "stay in while price is here, get out if it breaks this level"
+  // guidance the UI card shows. Same ATR-based buffer, same wall/floor source (oi
+  // already fetched above). Exit is ONE level, ONE meaning — the point at which the
+  // setup has failed — not restated separately as a "stop-loss" and a "caution" level.
+  let holdZone = null, exitLevel = null;
   if (spot) {
     const atr = sigResult.atr && sigResult.atr > 0 && sigResult.atr < 0.05 * spot ? sigResult.atr : 0.005 * spot;
     const isPE = typ === "PE";
@@ -1620,23 +1621,35 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
     if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atr);
 
     if (isPE) {
-      const holdZone = `${Math.round(spot - atr)}–${Math.round(spot)}`;
-      const cautionLevel = Math.round(wallStrike);
-      holdCaution = `Hold while spot stays ${holdZone}. Get cautious if spot bounces back up to ${cautionLevel}.`;
+      holdZone = `${Math.round(spot - atr)}–${Math.round(spot)}`;
+      exitLevel = Math.round(wallStrike);
     } else {
-      const holdZone = `${Math.round(spot)}–${Math.round(spot + atr)}`;
-      const cautionLevel = Math.round(floorStrike);
-      holdCaution = `Hold while spot stays ${holdZone}. Get cautious if spot drops back to ${cautionLevel}.`;
+      holdZone = `${Math.round(spot)}–${Math.round(spot + atr)}`;
+      exitLevel = Math.round(floorStrike);
     }
+  }
+
+  // Plain-language reason — avoids jargon like "Ramesh wall"/"Suresh floor"/raw OI
+  // formula text. Built from the same direction + OI-support signal the UI card uses,
+  // just said the way a non-technical reader would want it.
+  let whyBuy = null;
+  const hasSupport = typ === "CE" ? !!(oi.peFloors || [])[0] : !!(oi.ceWalls || [])[0];
+  if (typ === "CE") {
+    whyBuy = hasSupport
+      ? "Buyers are defending the level below — downside looks protected, room to move up."
+      : "Price and momentum both point up — buyers in control right now.";
+  } else {
+    whyBuy = hasSupport
+      ? "Sellers are defending the level above — upside looks capped, room to move down."
+      : "Price and momentum both point down — sellers in control right now.";
   }
 
   await alertEngine.evaluateAndAlertAny({
     symbol: stk.sym, strike, side: typ,
     score: sigResult.score, verdict: sigResult.verdict,
     premium, spot,
-    suggestedStop: sigResult.suggestedStop ?? null,
     suggestedTarget: sigResult.suggestedTarget ?? null,
-    holdCaution
+    exitLevel, holdZone, whyBuy
   });
 }
 

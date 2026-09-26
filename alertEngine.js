@@ -139,7 +139,7 @@ _Alert only — no order placed. Confirm with Mahesh cross-check before entry._`
 // signal card: direction, verdict, OI formula read, wall/floor, stop/target. No case/
 // fuel/freshness gating — this uses whatever signal-analysis + oi-analysis already
 // computed, all fields the UI card itself shows, nothing invented for Telegram alone. ──
-function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution }) {
+function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedTarget, exitLevel, holdZone, whyBuy }) {
   const sideLabel = side === 'CE' ? 'CE' : 'PE';
   const verdictWord = verdict === 'STRONG' ? 'Strong' : verdict === 'MODERATE' ? 'Moderate' : 'Weak';
   const buyLine = premium != null ? `Buy ₹${premium}` : '';
@@ -150,9 +150,10 @@ function buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot
     `Stock price now: ₹${spot}`,
   ];
 
-  if (suggestedTarget != null) lines.push(`Target: ₹${suggestedTarget} (profit)`);
-  if (suggestedStop != null) lines.push(`Stop-loss: ₹${suggestedStop} (exit if hit)`);
-  if (holdCaution) lines.push(``, holdCaution);
+  if (suggestedTarget != null) lines.push(`Target: ₹${suggestedTarget} (book profit here)`);
+  if (holdZone) lines.push(`Hold: while price stays ${holdZone}`);
+  if (exitLevel != null) lines.push(`Exit: ₹${exitLevel} (get out if this breaks)`);
+  if (whyBuy) lines.push(``, `Why buy: ${whyBuy}`);
 
   return lines.join('\n');
 }
@@ -197,11 +198,11 @@ async function evaluateAndAlert({
 // that already cleared the app's own score/verdict filter (whatever the caller passes
 // in), so Telegram tracks the UI 1:1. Only gate kept: the same cooldown as above, so
 // the same strike+side doesn't re-ping every 25s while its score stays high. ──
-async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution }) {
+async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premium, spot, suggestedTarget, exitLevel, holdZone, whyBuy }) {
   const alertKey = `${symbol}_${strike}_${side}`;
   if (!canAlert(alertKey)) return null; // cooldown active, skip
 
-  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedStop, suggestedTarget, holdCaution });
+  const text = buildAnyAlertText({ symbol, strike, side, score, verdict, premium, spot, suggestedTarget, exitLevel, holdZone, whyBuy });
 
   try {
     await sendTelegramAlert(text);
