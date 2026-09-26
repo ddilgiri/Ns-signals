@@ -389,6 +389,30 @@ function getOITrend(symbol){
 }
 
 // ═══════════════════════════════════════════════════════
+// IV HISTORY — feeds alertEngine's fuel-check "IV has room to expand" gate.
+// Mirrors OI_HISTORY: in-memory, capped, session-lifetime only (no disk persistence —
+// intraday IV range resets every day anyway, so nothing worth persisting across restarts).
+// Keyed by `${symbol}_${strike}_${side}` so each strike/side tracks its own IV range.
+// ═══════════════════════════════════════════════════════
+const IV_HISTORY = {};
+const IV_HISTORY_MAX = 40; // ~ a session's worth at one sample per scan cycle (25s * 40 ≈ 17min window per push, capped list keeps last 40 pushes regardless of cadence)
+
+function recordIV(symbol, strike, side, iv) {
+  if (iv == null || !isFinite(iv) || iv <= 0) return;
+  const key = `${symbol}_${strike}_${side}`;
+  if (!IV_HISTORY[key]) IV_HISTORY[key] = [];
+  IV_HISTORY[key].push(iv);
+  if (IV_HISTORY[key].length > IV_HISTORY_MAX) IV_HISTORY[key].shift();
+}
+
+function getIVRange(symbol, strike, side) {
+  const key = `${symbol}_${strike}_${side}`;
+  const snaps = IV_HISTORY[key];
+  if (!snaps || snaps.length < 2) return { ivRecentHigh: null, ivRecentLow: null };
+  return { ivRecentHigh: Math.max(...snaps), ivRecentLow: Math.min(...snaps) };
+}
+
+// ═══════════════════════════════════════════════════════
 // UPGRADE 4: SIGNAL LOG
 // ═══════════════════════════════════════════════════════
 const SIGNAL_LOG=[];
@@ -1555,6 +1579,12 @@ async function runServerScan() {
           const g = sig.data;
           if (g && g.status && g.score >= 60 && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
+            // Telegram alert path — Case 2 (CE) / Case 6 (PE) only, gated inside alertEngine
+            // itself (cooldown, fuel-check, freshness). Runs only for signals that already
+            // cleared the score/verdict filter above, so this never adds scan load for
+            // symbols nobody would act on anyway.
+            try { await tryAlertScan(stk, typ, spot, g); }
+            catch(alertErr) { log(`[ALERT] ${stk.sym} ${typ} alert-path error: ${alertErr.message}`, "WARN"); }
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
@@ -1568,6 +1598,73 @@ async function runServerScan() {
   } finally {
     serverScanRunning = false;
   }
+}
+
+// ── Telegram alert bridge: turns a passed signal-analysis result into the specific
+// inputs alertEngine.evaluateAndAlert needs (case number, OI%/LTP% at the wall/floor,
+// days to expiry, moneyness, IV + IV range, recent candles for entry-freshness). ──
+async function tryAlertScan(stk, typ, spot, sigResult) {
+  if (!alertEngine.isConfigured()) return; // no Telegram creds set — skip silently, cheap check
+
+  // Re-fetch oi-analysis fresh: signal-analysis's cached copy doesn't carry callOiCase/
+  // putOiCase or per-strike OI%/LTP% through to its response, only oi-analysis has them.
+  const oiResp = await axios.post(`http://localhost:${PORT}/oi-analysis`, {symbol: stk.sym, spotPrice: spot, expiry: getExpiryType(stk.sym)}, {headers:{"Content-Type":"application/json"}});
+  const oi = oiResp.data;
+  if (!oi || !oi.status) return;
+
+  const caseNum = typ === "CE" ? oi.callOiCase : oi.putOiCase;
+  if (caseNum == null) return; // alertEngine only fires on Case 2 (CE) / Case 6 (PE) anyway
+
+  const wallOrFloor = typ === "CE" ? (oi.ceWalls || [])[0] : (oi.peFloors || [])[0];
+  if (!wallOrFloor) return;
+  const strike = wallOrFloor.strike;
+  const strikeRow = (oi.chain || []).find(c => c.strike === strike);
+  if (!strikeRow) return;
+
+  const oiPct = typ === "CE" ? strikeRow.CE_oiChangePct : strikeRow.PE_oiChangePct;
+  const ltpPct = typ === "CE" ? strikeRow.CE_ltpChangePct : strikeRow.PE_ltpChangePct;
+  if (oiPct == null || ltpPct == null) return;
+
+  const moneyness = strike === oi.atmStrike ? "ATM"
+    : (typ === "CE" ? strike < oi.atmStrike : strike > oi.atmStrike) ? "ITM"
+    : Math.abs(strike - oi.atmStrike) <= 2 * ((oi.chain?.[1]?.strike - oi.chain?.[0]?.strike) || 50) ? "OTM_near"
+    : "OTM_far";
+
+  // IV — best-effort. Angel's option-greeks API is documented elsewhere in this file as
+  // sometimes stale/missing; alertEngine.passesFuelCheck already treats missing IV as
+  // "skip the IV check, structural pass is enough" rather than blocking on it.
+  let currentIV = null;
+  try {
+    const expiryStr = getExpiryType(stk.sym) === "MONTHLY" ? oi.expiry : oi.expiry;
+    const greeksResp = await axios.post(`http://localhost:${PORT}/option-greeks`, {name: stk.sym, expirydate: expiryStr}, {headers:{"Content-Type":"application/json"}});
+    const rows = greeksResp.data?.data || [];
+    const match = rows.find(r => Math.round(parseFloat(r.strikePrice)) === Math.round(strike) && (r.optionType || "").toUpperCase() === typ);
+    if (match) currentIV = parseFloat(match.impliedVolatility) || null;
+  } catch(e) { /* IV fetch is best-effort — proceed without it */ }
+  recordIV(stk.sym, strike, typ, currentIV);
+  const { ivRecentHigh, ivRecentLow } = getIVRange(stk.sym, strike, typ);
+
+  // Candles for entry-timing freshness (isEntryFresh needs the option's own recent bars,
+  // not the underlying's — reuses the same token resolution as /option-ltp).
+  let candles = null;
+  try {
+    const tokenResp = await axios.post(`http://localhost:${PORT}/option-ltp`, {symbol: stk.sym, strike, type: typ, expiry: getExpiryType(stk.sym)}, {headers:{"Content-Type":"application/json"}});
+    const optToken = tokenResp.data?.symbolToken;
+    if (optToken) {
+      const now = new Date();
+      const from = new Date(now.getTime() - 90*60*1000); // last 90min of 5-min bars — plenty for the 3-candle freshness check
+      const fmt = d => d.toISOString().slice(0,16).replace("T"," ");
+      const candleResp = await axios.post(`http://localhost:${PORT}/candles`, {exchange:"NFO", symboltoken: String(optToken), interval:"FIVE_MINUTE", fromdate: fmt(from), todate: fmt(now)}, {headers:{"Content-Type":"application/json"}});
+      const rows = candleResp.data?.data || [];
+      candles = rows.map(r => ({open:parseFloat(r[1]), high:parseFloat(r[2]), low:parseFloat(r[3]), close:parseFloat(r[4]), volume:parseFloat(r[5])}));
+    }
+  } catch(e) { /* candle fetch failure — alertEngine.isEntryFresh handles null/short candles by returning fresh:false, alert just won't fire this cycle */ }
+
+  await alertEngine.evaluateAndAlert({
+    symbol: stk.sym, strike, side: typ, caseNum, oiPct, ltpPct, spot,
+    candles, daysToExpiry: oi.daysToExpiry, moneyness,
+    currentIV, ivRecentHigh, ivRecentLow
+  });
 }
 
 setInterval(runServerScan, 25000);

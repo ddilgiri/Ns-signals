@@ -95,19 +95,24 @@ function isEntryFresh(candles, side /* 'CE' or 'PE' */) {
 function passesFuelCheck({ daysToExpiry, moneyness /* 'ITM'|'ATM'|'OTM_near'|'OTM_far' */, currentIV, ivRecentHigh, ivRecentLow }) {
   const structuralPass = daysToExpiry >= 3 && (moneyness === 'ITM' || moneyness === 'ATM' || moneyness === 'OTM_near');
 
+  if (!structuralPass) {
+    return { pass: false, reason: 'structural filter failed (near expiry or far OTM)' };
+  }
+
+  // IV-room check is best-effort, not a hard gate — Angel One's option-greeks API is
+  // documented (server.js) as sometimes returning stale/missing data. When IV history
+  // isn't available yet (e.g. right after startup, before enough scan cycles have run),
+  // don't silently block every alert forever — pass on structural grounds alone and say so.
   if (currentIV == null || ivRecentHigh == null || ivRecentLow == null) {
-    return { pass: false, reason: 'insufficient IV data — treat as skip-or-reduce' };
+    return { pass: true, reason: 'structural OK — IV data unavailable, skipping IV-room check' };
   }
 
   const ivRange = ivRecentHigh - ivRecentLow;
   const ivPositionPct = ivRange > 0 ? ((currentIV - ivRecentLow) / ivRange) * 100 : 50;
   const ivHasRoom = ivPositionPct < 70; // IV not already near its recent highs
 
-  if (structuralPass && ivHasRoom) {
+  if (ivHasRoom) {
     return { pass: true, reason: `structural OK, IV at ${ivPositionPct.toFixed(0)}% of recent range — room to expand` };
-  }
-  if (!structuralPass) {
-    return { pass: false, reason: 'structural filter failed (near expiry or far OTM)' };
   }
   return { pass: false, reason: `IV already at ${ivPositionPct.toFixed(0)}% of recent range — limited room, skip or reduce size` };
 }
