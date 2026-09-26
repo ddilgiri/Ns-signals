@@ -3109,3 +3109,37 @@ function confirmResearchAdd(sym, strike, type, lot) {
   addLog('✍️ Research trade added: ' + sym + ' ' + strike + ' ' + type + ' @ ₹' + entry.toFixed(2), 'ok');
 }
 </script>
+<script>
+// Sync the app's Min Confidence % setting to the server, so the server-side scan loop
+// (runServerScan) and the Telegram alert path use the same threshold shown in Setup ->
+// Scan Settings, instead of a number hardcoded on the server. Sends on load (so the
+// server has the real value even before the user touches the field) and again on every
+// change, debounced so rapid clicks on the number spinner don't spam the endpoint.
+(function() {
+  function pushMinConfidence() {
+    var el = document.getElementById('cfgMinConf');
+    if (!el) return;
+    var v = parseInt(el.value || '60');
+    if (!isFinite(v)) return;
+    fetch(getServer() + '/set-min-confidence', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: v})
+    }).catch(function() { /* best-effort -- server falls back to its own default if unreachable */ });
+  }
+
+  var debounceTimer = null;
+  function debouncedPush() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(pushMinConfidence, 500);
+  }
+
+  window.addEventListener('DOMContentLoaded', function() {
+    var el = document.getElementById('cfgMinConf');
+    if (!el) return;
+    pushMinConfidence(); // send current/default value once on load
+    el.addEventListener('input', debouncedPush);
+    el.addEventListener('change', pushMinConfidence);
+  });
+})();
+</script>

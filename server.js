@@ -516,6 +516,19 @@ app.post("/signal-outcome",(req,res)=>{
 
 // ─── EXISTING ROUTES (unchanged) ───────────────────────────
 
+// Min-confidence threshold for the server-side scan loop (runServerScan) and the
+// Telegram alert path, kept in sync with the app's own "Min Confidence %" setting
+// (cfgMinConf in index.html) so both use whatever the user has actually set there,
+// not a hardcoded number. Defaults to 60 to match cfgMinConf's own default until the
+// app sends its real value (right after load, and on every change).
+let MIN_CONFIDENCE = 60;
+app.post("/set-min-confidence", (req, res) => {
+  const v = parseInt(req.body?.value);
+  if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({status:false, message:"value must be 0-100"});
+  MIN_CONFIDENCE = v;
+  log(`Min confidence set to ${v}% (from app settings)`, "INFO");
+  res.json({status:true, minConfidence: MIN_CONFIDENCE});
+});
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
 app.post("/login",async(e,t)=>{try{const{clientCode:a,password:s,apiKey:n,totpSecret:o}=e.body;if(!a||!s||!n)return log("Login: Missing required fields","WARN"),t.status(400).json({status:!1,message:"clientCode, password, and apiKey are required"});SESSION.clientCode=a,SESSION.apiKey=n;let r="";o&&o.trim()&&(r=generateTOTP(o),r?log(`TOTP generated: ${r}`):log("TOTP secret invalid — proceeding without 2FA","WARN")),log(`Authenticating ${a}...`);const i=(await axios.post(`${ANGEL_API}/rest/auth/angelbroking/user/v1/loginByPassword`,{clientcode:a,password:s,totp:r},{headers:getHeaders(!1),timeout:25e3})).data;if(!0===i.status&&i.data)return SESSION.jwtToken=i.data.jwtToken,SESSION.refreshToken=i.data.refreshToken,SESSION.feedToken=i.data.feedToken,SESSION.expiresAt=Date.now()+288e5,log(`✅ Login successful — ${a}`,"OK"),t.json({status:!0,message:"Login successful",client:a,tokenExpiry:new Date(SESSION.expiresAt).toLocaleTimeString("en-IN")});const l=i.message||i.errorcode||"Unknown error";return log(`❌ Login failed: ${l}`,"ERR"),t.status(401).json({status:!1,message:l})}catch(e){const a=e.response?.data?.message||e.response?.data?.errorcode||e.message;log(`❌ Login error: ${a}`,"ERR"),t.status(500).json({status:!1,message:a||"Connection error — check if Angel One API is reachable"})}})
@@ -1553,7 +1566,7 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          if (g && g.status && g.score >= 60 && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
+          if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
             // Telegram alert path — mirrors the UI 1:1: any signal that clears this same
             // score>=60/verdict filter (the one the app's own results list uses) also
