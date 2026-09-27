@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v140'; // bumped 2026-09-13 -- v4.8, fixed manual trade (+My Trade modal) and
-// 4 other call sites bypassing renderTradesV4, causing P&L bar to disappear after manual add.
+const CACHE = 'fno-v141'; // bumped 2026-09-28 -- merged Dilip OI/Candle Confluence sub-tabs into
+// one filterable signal list (single filter row: ALL/BEAR/BULL/STRONG/MOD/Dilip OI/Candle Confluence).
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
