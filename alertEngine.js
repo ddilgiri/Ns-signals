@@ -213,9 +213,80 @@ async function evaluateAndAlertAny({ symbol, strike, side, score, verdict, premi
   }
 }
 
+// ── Build the alert text for the DUAL-GENERATOR path (2026-09-28) ──
+// Two independent triggers, evaluated separately below in evaluateDualGeneratorAlert:
+//   1. Dilip OI trigger  -- fires purely off oiScore clearing the app's own Min
+//      Confidence setting (Settings tab), same direction match (dilipFormula CE/PE),
+//      direction (CE/PE), ignoring candle/technical score entirely.
+//   2. Candle Confluence trigger -- fires purely off candleConfluence.score >= 75,
+//      same qualify bar as the app's own Candle Confluence sub-tab.
+// If only one fires, the message is tagged with that one generator. If both fire on
+// the same stock/side in the same scan, ONE combined message is sent instead of two.
+function buildDualAlertText({ symbol, strike, side, spot, premium, dilipFired, dilipVerdict, dilipDirection, candleFired, candleScore, candleDirection }) {
+  const sideLabel = side === 'CE' ? 'CE' : 'PE';
+  const buyLine = premium != null ? ` — Buy ₹${premium}` : '';
+  const tags = [];
+  if (dilipFired) tags.push(`📊 Dilip OI (${dilipVerdict})`);
+  if (candleFired) tags.push(`🕯️ Candle Confluence (${candleScore}%)`);
+  const bothAgree = dilipFired && candleFired && dilipDirection === candleDirection;
+
+  const lines = [
+    `🚨 ${symbol} ${strike} ${sideLabel}${buyLine}`,
+    tags.join('  +  '),
+  ];
+  if (bothAgree) lines.push(`✅ Both generators agree — ${dilipDirection}`);
+  lines.push(``, `Stock price now: ₹${spot}`);
+  if (dilipFired) lines.push(`Dilip OI verdict: ${dilipVerdict} (${dilipDirection})`);
+  if (candleFired) lines.push(`Candle confluence: ${candleScore}% (${candleDirection})`);
+  lines.push(``, `_Alert only — no order placed._`);
+
+  return lines.join('\n');
+}
+
+// ── Dual-generator evaluation — call once per strike/side per scan cycle. Each
+// trigger is independent: either can fire alone, or both together produce one
+// combined message. Own cooldown key (separate from evaluateAndAlertAny's) so this
+// path doesn't interfere with or get skipped by the existing combined-score alert. ──
+async function evaluateDualGeneratorAlert({
+  symbol, strike, side, spot, premium,
+  oiVerdict, dilipFormula, dilipMinScore, dilipScore,  // Dilip OI: dilipMinScore is the
+  // app's own Min Confidence setting (Settings tab, cfgMinConf/MIN_CONFIDENCE) -- reused
+  // as-is per explicit user choice, not a separate hardcoded number
+  candleConfluenceScore, candleDirection  // Candle: independent 75% bar (see below)
+}) {
+  const dilipDirection = dilipFormula === 'CE' ? 'BULLISH' : dilipFormula === 'PE' ? 'BEARISH' : null;
+  const sideMatchesDilip = (side === 'CE' && dilipFormula === 'CE') || (side === 'PE' && dilipFormula === 'PE');
+  const dilipFired = sideMatchesDilip && dilipScore != null && dilipMinScore != null && dilipScore >= dilipMinScore;
+
+  const sideDirection = side === 'CE' ? 'BULLISH' : 'BEARISH';
+  // 75% -- stricter than the Candle Confluence sub-tab's 60% display/browse bar,
+  // deliberately: this is an alert threshold, per explicit user choice.
+  const candleFired = candleConfluenceScore != null && candleConfluenceScore >= 75 && candleDirection === sideDirection;
+
+  if (!dilipFired && !candleFired) return null;
+
+  const alertKey = `dual_${symbol}_${strike}_${side}`;
+  if (!canAlert(alertKey)) return null; // 15-min cooldown, shared logic with the other path
+
+  const text = buildDualAlertText({
+    symbol, strike, side, spot, premium,
+    dilipFired, dilipVerdict: oiVerdict, dilipDirection,
+    candleFired, candleScore: candleConfluenceScore, candleDirection
+  });
+
+  try {
+    await sendTelegramAlert(text);
+    return { symbol, strike, side, dilipFired, candleFired, sentAt: new Date().toISOString() };
+  } catch (err) {
+    console.error('[alertEngine] Dual-generator Telegram send failed:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   evaluateAndAlert,
   evaluateAndAlertAny,
+  evaluateDualGeneratorAlert,
   sendTelegramAlert, // exported for a one-off test ping
   isEntryFresh,
   passesFuelCheck,

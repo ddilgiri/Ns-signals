@@ -1601,14 +1601,25 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
-            results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
-            // Telegram alert path — mirrors the UI 1:1: any signal that clears this same
-            // score>=60/verdict filter (the one the app's own results list uses) also
-            // pings Telegram, gated only by a 15-min per-strike cooldown inside alertEngine
-            // (evaluateAndAlertAny). No Case 2/6 restriction, no fuel/freshness check.
+          // tryAlertScan carries both the existing combined-score Telegram path AND the
+          // new dual-generator path (Dilip OI / Candle Confluence, independent of the
+          // combined score). It makes its own /oi-analysis call, so it's only worth
+          // calling when SOMETHING might actually fire -- this cheap pre-filter uses
+          // fields already on `g` (no extra API call) to skip stocks where neither the
+          // combined score, Dilip OI, nor Candle Confluence look promising at all.
+          // Thresholds here are deliberately generous (<= the real trigger bars) so
+          // this never filters out something that would have alerted.
+          const worthChecking = g && g.status && (
+            g.score >= MIN_CONFIDENCE ||
+            g.oiVerdict === "STRONG" || g.oiVerdict === "MODERATE" ||
+            (g.candleConfluence?.score != null && g.candleConfluence.score >= 75)
+          );
+          if (worthChecking) {
             try { await tryAlertScan(stk, typ, spot, g); }
             catch(alertErr) { log(`[ALERT] ${stk.sym} ${typ} alert-path error: ${alertErr.message}`, "WARN"); }
+          }
+          if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
+            results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
@@ -1627,6 +1638,7 @@ async function runServerScan() {
 // ── Telegram alert bridge: turns a passed signal-analysis result into the specific
 // inputs alertEngine.evaluateAndAlert needs (case number, OI%/LTP% at the wall/floor,
 // days to expiry, moneyness, IV + IV range, recent candles for entry-freshness). ──
+
 async function tryAlertScan(stk, typ, spot, sigResult) {
   if (!alertEngine.isConfigured()) return; // no Telegram creds set — skip silently, cheap check
 
@@ -1679,12 +1691,30 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
       : "Price and momentum both point down — sellers in control right now.";
   }
 
-  await alertEngine.evaluateAndAlertAny({
-    symbol: stk.sym, strike, side: typ,
-    score: sigResult.score, verdict: sigResult.verdict,
-    premium, spot,
-    suggestedTarget: sigResult.suggestedTarget ?? null,
-    exitLevel, holdZone, whyBuy
+  // Restore the combined-score gate here (previously enforced by the caller, before
+  // tryAlertScan was moved outside that gate so the dual-generator path below could
+  // run independently of it). evaluateAndAlertAny has no internal score check.
+  if (sigResult.score >= MIN_CONFIDENCE && sigResult.verdict !== "AVOID" && sigResult.verdict !== "TRAP") {
+    await alertEngine.evaluateAndAlertAny({
+      symbol: stk.sym, strike, side: typ,
+      score: sigResult.score, verdict: sigResult.verdict,
+      premium, spot,
+      suggestedTarget: sigResult.suggestedTarget ?? null,
+      exitLevel, holdZone, whyBuy
+    });
+  }
+
+  // Dual-generator alert path (2026-09-28): Dilip OI and Candle Confluence checked
+  // independently of the combined score/verdict above -- reuses the SAME oi/strike/
+  // premium already fetched for evaluateAndAlertAny, zero extra API calls added.
+  // Own cooldown key inside evaluateDualGeneratorAlert, so it never depends on whether
+  // evaluateAndAlertAny above also fired.
+  await alertEngine.evaluateDualGeneratorAlert({
+    symbol: stk.sym, strike, side: typ, spot, premium,
+    oiVerdict: sigResult.oiVerdict, dilipFormula: sigResult.dilipFormula,
+    dilipMinScore: MIN_CONFIDENCE, dilipScore: sigResult.oiScore,
+    candleConfluenceScore: sigResult.candleConfluence?.score ?? null,
+    candleDirection: sigResult.candleConfluence?.direction ?? null
   });
 }
 
