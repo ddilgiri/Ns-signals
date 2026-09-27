@@ -1296,7 +1296,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const{symbolToken:a,sym:s,exchange:n="NSE",isIndex:o=!1,spotPrice:r,type:i,bidAskImbalance:imb=null}=e.body;
   try{const[e,o,l,c,u]=await Promise.allSettled([axios.post(`http://localhost:${PORT}/market-bias`,{symbolToken:a,exchange:n},{headers:{"Content-Type":"application/json"}}),Promise.resolve({data:FII_DII_CACHE.data||{instBias:"NEUTRAL",fiiNet:0,diiNet:0,fiiBuy:0,fiiSell:0,diiBuy:0,diiSell:0}}),
     Promise.resolve({data:VIX_CACHE.data||{vix:null,regime:"UNKNOWN",premiumBuyable:true,guidance:""}}),
-    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,kama:p.kama??null,kamaSlope:p.kamaSlope||"UNKNOWN",priceZ:p.priceZ??0,absorptionDetected:p.absorptionDetected||false,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,candleConfluence:p.candleConfluence||{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[]};
+    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,kama:p.kama??null,kamaSlope:p.kamaSlope||"UNKNOWN",priceZ:p.priceZ??0,absorptionDetected:p.absorptionDetected||false,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,candleConfluence:p.candleConfluence||{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],atmStrike:h?.atmStrike||null,oiChain:h?.chain||[]};
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
@@ -1602,13 +1602,12 @@ async function runServerScan() {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
           // tryAlertScan carries both the existing combined-score Telegram path AND the
-          // new dual-generator path (Dilip OI / Candle Confluence, independent of the
-          // combined score). It makes its own /oi-analysis call, so it's only worth
-          // calling when SOMETHING might actually fire -- this cheap pre-filter uses
-          // fields already on `g` (no extra API call) to skip stocks where neither the
-          // combined score, Dilip OI, nor Candle Confluence look promising at all.
-          // Thresholds here are deliberately generous (<= the real trigger bars) so
-          // this never filters out something that would have alerted.
+          // dual-generator path (Dilip OI / Candle Confluence, independent of the
+          // combined score). As of 2026-09-28 it makes ZERO extra API calls (reuses
+          // sigResult fields already returned by /signal-analysis above -- see
+          // tryAlertScan's own comment for the fix history). This pre-filter is now
+          // just a cheap early-exit, not an API-cost saver; kept anyway since it's free
+          // and avoids pointless cooldown-map churn for stocks with no shot at firing.
           const worthChecking = g && g.status && (
             g.score >= MIN_CONFIDENCE ||
             g.oiVerdict === "STRONG" || g.oiVerdict === "MODERATE" ||
@@ -1642,28 +1641,30 @@ async function runServerScan() {
 async function tryAlertScan(stk, typ, spot, sigResult) {
   if (!alertEngine.isConfigured()) return; // no Telegram creds set — skip silently, cheap check
 
-  // Resolve the ATM strike + its OI note (one call, needed anyway to pick a strike to
-  // report — no case/fuel/candle/IV fetching here, this path just mirrors the UI signal).
-  const oiResp = await axios.post(`http://localhost:${PORT}/oi-analysis`, {symbol: stk.sym, spotPrice: spot, expiry: getExpiryType(stk.sym)}, {headers:{"Content-Type":"application/json"}});
-  const oi = oiResp.data;
-  if (!oi || !oi.status) return;
-
-  const strike = oi.atmStrike;
+  // FIXED (2026-09-28): this used to make its OWN /oi-analysis call here, duplicating
+  // the /oi-analysis call /signal-analysis already made to build sigResult (user caught
+  // this — real double-call, not the "reused" claim made when this file was first
+  // written today). sigResult already carries atmStrike/oiChain/ceWalls/peFloors from
+  // that same first call (server.js's S={...} assembly, ~line 1350) -- using those
+  // directly means zero additional API calls for the whole dual-generator + existing
+  // Telegram path, not just a reduction.
+  const strike = sigResult.atmStrike;
   if (!strike) return;
-  const strikeRow = (oi.chain || []).find(c => c.strike === strike);
+  const strikeRow = (sigResult.oiChain || []).find(c => c.strike === strike);
   const premium = strikeRow ? (typ === "CE" ? strikeRow.CE_ltp : strikeRow.PE_ltp) : null;
 
   // Hold zone + exit level — ported from computeLevels() in index.html so Telegram
   // carries the same "stay in while price is here, get out if it breaks this level"
-  // guidance the UI card shows. Same ATR-based buffer, same wall/floor source (oi
-  // already fetched above). Exit is ONE level, ONE meaning — the point at which the
-  // setup has failed — not restated separately as a "stop-loss" and a "caution" level.
+  // guidance the UI card shows. Same ATR-based buffer, same wall/floor source
+  // (sigResult.ceWalls/peFloors, from the same original /oi-analysis call). Exit is ONE
+  // level, ONE meaning — the point at which the setup has failed — not restated
+  // separately as a "stop-loss" and a "caution" level.
   let holdZone = null, exitLevel = null;
   if (spot) {
     const atr = sigResult.atr && sigResult.atr > 0 && sigResult.atr < 0.05 * spot ? sigResult.atr : 0.005 * spot;
     const isPE = typ === "PE";
-    let wallStrike = (oi.ceWalls || [])[0] ? parseFloat(oi.ceWalls[0].strike) : Math.round(spot + 2 * atr);
-    let floorStrike = (oi.peFloors || [])[0] ? parseFloat(oi.peFloors[0].strike) : Math.round(spot - 2 * atr);
+    let wallStrike = (sigResult.ceWalls || [])[0] ? parseFloat(sigResult.ceWalls[0].strike) : Math.round(spot + 2 * atr);
+    let floorStrike = (sigResult.peFloors || [])[0] ? parseFloat(sigResult.peFloors[0].strike) : Math.round(spot - 2 * atr);
     if (wallStrike < spot) wallStrike = Math.round(spot + 2 * atr);
     if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atr);
 
@@ -1680,7 +1681,7 @@ async function tryAlertScan(stk, typ, spot, sigResult) {
   // formula text. Built from the same direction + OI-support signal the UI card uses,
   // just said the way a non-technical reader would want it.
   let whyBuy = null;
-  const hasSupport = typ === "CE" ? !!(oi.peFloors || [])[0] : !!(oi.ceWalls || [])[0];
+  const hasSupport = typ === "CE" ? !!(sigResult.peFloors || [])[0] : !!(sigResult.ceWalls || [])[0];
   if (typ === "CE") {
     whyBuy = hasSupport
       ? "Buyers are defending the level below — downside looks protected, room to move up."
