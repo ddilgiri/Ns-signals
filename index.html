@@ -799,6 +799,12 @@ function renderCandleSignals(){
   var list=(S.signals||[]).filter(function(e){
     return e.candleConfluence && e.candleConfluence.score!=null && e.candleConfluence.score>=60;
   });
+  // Apply the same top filter row (Bear/Bull/Stocks) that the Dilip OI tab uses,
+  // so both sub-tabs stay in sync with the filter buttons. Strong/Moderate are
+  // verdict-based (Dilip OI specific) so they don't apply here.
+  if("bear"===S.filterMode)list=list.filter(function(e){return"PE"===e.type;});
+  if("bull"===S.filterMode)list=list.filter(function(e){return"CE"===e.type;});
+  if("stocks"===S.filterMode)list=list.filter(function(e){return!e.isCommodity;});
   list.sort(function(a,b){return (b.candleConfluence.score||0)-(a.candleConfluence.score||0);});
   var badge=document.getElementById("candleSigBadge");
   if(badge){badge.textContent=list.length;badge.classList.toggle("show",list.length>0);}
