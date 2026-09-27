@@ -164,7 +164,7 @@ function showPage(e,t){
   document.querySelectorAll("#signals-sub-tabs .sub-tab").forEach(function(t){t.classList.remove("active");});
   if(el)el.classList.add("active");
 }
-function switchSubTab(e,t,o){document.getElementById(e).classList.remove("hidden"),document.getElementById(t).classList.add("hidden"),document.querySelectorAll(".sub-tab").forEach(e=>e.classList.remove("active")),o.classList.add("active");var _op=document.getElementById("open-pnl-pill"),_cl=document.getElementById("closed-pnl-pill");var _mfr=document.getElementById("mood-filter-row");if(e==="open-trades"){if(_cl)_cl.style.display="none";if(_op&&S.paperTrades.length)_op.style.display="inline-block";if(_mfr)_mfr.style.display=S.paperTrades.length?"flex":"none"}else if(e==="closed-trades"){if(_op)_op.style.display="none";if(_cl&&S.closedPaperTrades.length)_cl.style.display="inline-block";if(_mfr)_mfr.style.display="none"}}
+function switchSubTab(e,t,o){document.getElementById(e).classList.remove("hidden"),document.getElementById(t).classList.add("hidden"),document.querySelectorAll("#pg-trades .sub-tab").forEach(e=>e.classList.remove("active")),o.classList.add("active");var _op=document.getElementById("open-pnl-pill"),_cl=document.getElementById("closed-pnl-pill");var _mfr=document.getElementById("mood-filter-row");if(e==="open-trades"){if(_cl)_cl.style.display="none";if(_op&&S.paperTrades.length)_op.style.display="inline-block";if(_mfr)_mfr.style.display=S.paperTrades.length?"flex":"none"}else if(e==="closed-trades"){if(_op)_op.style.display="none";if(_cl&&S.closedPaperTrades.length)_cl.style.display="inline-block";if(_mfr)_mfr.style.display="none"}}
 function filterTradesByMood(mood,el){
   document.querySelectorAll('#mood-filter-row .fpill').forEach(function(p){p.classList.remove('active');});
   el.classList.add('active');
@@ -2276,7 +2276,7 @@ console.log('✅ DILIP FXO V4 Auto-Trade Engine loaded');
 // ── 2. INJECT ADD BUTTON INTO TRADE TAB ─────────────
 (function injectAddBtn(){
   setTimeout(function(){
-    var subTabs = document.querySelector('.sub-tabs');
+    var subTabs = document.querySelector('#pg-trades .sub-tabs');
     if(!subTabs || document.getElementById('v42-add-btn')) return;
     var btn = document.createElement('button');
     btn.id = 'v42-add-btn';
