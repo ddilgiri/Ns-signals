@@ -39,6 +39,23 @@ function fxoBeep(type){try{var ctx=new(window.AudioContext||window.webkitAudioCo
 function fxoVibrate(type){try{if(!navigator.vibrate)return;if(type==="new")navigator.vibrate([150,80,150]);else if(type==="hold")navigator.vibrate([200]);else if(type==="exit")navigator.vibrate([300,100,300,100,300]);}catch(e){}}
 function fxoNotify(title,body,type){fxoBeep(type);fxoVibrate(type);try{if(_notifGranted&&"Notification"in window){var n=new Notification(title,{body:body,icon:"/icon-192.png",badge:"/icon-192.png",tag:type+"-"+Date.now(),requireInteraction:type==="exit"});setTimeout(function(){try{n.close();}catch(e){}},type==="exit"?8000:4000);}}catch(e){}}
 function notifyNewSignal(sig){if(isNotifMuted())return;fxoNotify("📡 "+sig.sym+" "+sig.strike+" "+sig.type,sig.verdict+" · Score "+sig.score+"% · Spot ₹"+(sig.spotPrice||0).toLocaleString("en-IN"),"new");try{fetch(getServer()+"/push-signal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sym:sig.sym,strike:sig.strike,type:sig.type,verdict:sig.verdict,score:sig.score,spotPrice:sig.spotPrice})}).catch(function(){});}catch(e){}}
+// Telegram trigger (2026-09-28): called right after a signal is added to S.signals --
+// i.e. the exact moment it becomes a card in the Signals tab. Dilip OI tab's bar is
+// already satisfied by this point (scanSymbol only reaches S.signals.unshift after
+// g.score>=cfgMinConf). Candle Confluence tab's own bar (score>=60) is checked here
+// too, on the same signal object -- so this only ever fires Telegram for a signal
+// that's genuinely visible in one of the two Signals sub-tabs right now. No separate
+// scan loop, no re-fetch: sig already carries everything the server endpoint needs.
+function sendTelegramForSignal(sig){
+  // Every signal reaching this point already cleared cfgMinConf (scanSymbol's own
+  // gate before S.signals.unshift), so it's always visible in the Dilip OI tab --
+  // Telegram fires unconditionally for that reason. The Candle Confluence check below
+  // is extra: if that ALSO clears its own tab's bar, the server-side dual-generator
+  // check can additionally credit Candle Confluence in the same message.
+  try{
+    fetch(getServer()+"/telegram-alert",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sig)}).catch(function(){});
+  }catch(e){}
+}
 function isNotifMuted(){return localStorage.getItem("fxo-notif-muted")==="1";}
 function toggleNotifMute(){
   var muted=isNotifMuted();
@@ -724,6 +741,7 @@ if(hasRoadblock){
 }else{
   S.signals.unshift(x);S.signals.length>50&&S.signals.pop();
   notifyNewSignal(x);
+  sendTelegramForSignal(x);
   addLog("✅ "+v+" "+e+" "+x.strike+" — "+g.verdict+" ("+g.score+"%)","ok");
 }}catch(e){}}}catch(t){addLog("Scan "+e+" err: "+t.message,"warn")}}
 function buildOITrendHTML(sig){

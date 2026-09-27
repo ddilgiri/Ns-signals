@@ -1601,22 +1601,15 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          // tryAlertScan carries both the existing combined-score Telegram path AND the
-          // dual-generator path (Dilip OI / Candle Confluence, independent of the
-          // combined score). As of 2026-09-28 it makes ZERO extra API calls (reuses
-          // sigResult fields already returned by /signal-analysis above -- see
-          // tryAlertScan's own comment for the fix history). This pre-filter is now
-          // just a cheap early-exit, not an API-cost saver; kept anyway since it's free
-          // and avoids pointless cooldown-map churn for stocks with no shot at firing.
-          const worthChecking = g && g.status && (
-            g.score >= MIN_CONFIDENCE ||
-            g.oiVerdict === "STRONG" || g.oiVerdict === "MODERATE" ||
-            (g.candleConfluence?.score != null && g.candleConfluence.score >= 75)
-          );
-          if (worthChecking) {
-            try { await tryAlertScan(stk, typ, spot, g); }
-            catch(alertErr) { log(`[ALERT] ${stk.sym} ${typ} alert-path error: ${alertErr.message}`, "WARN"); }
-          }
+          // REMOVED (2026-09-28): the server-side alert check that used to run here
+          // (tryAlertScan + dual-generator worthChecking pre-filter) is gone. It was a
+          // SEPARATE 15-stock/25s scan loop from the frontend's own scan, so it lagged
+          // the UI by up to ~6 minutes to rotate through all ~212 stocks -- meaning
+          // Telegram could fire well after (or even for stocks not currently shown in)
+          // the Signals tab. Per explicit user decision, Telegram alerts now fire
+          // directly from the frontend the moment a signal is added to S.signals (see
+          // scanSymbol() in index.html, and the new /telegram-alert endpoint below) --
+          // an exact mirror of what's on screen, no separate loop, no lag.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
           }
@@ -1634,90 +1627,67 @@ async function runServerScan() {
   }
 }
 
-// ── Telegram alert bridge: turns a passed signal-analysis result into the specific
-// inputs alertEngine.evaluateAndAlert needs (case number, OI%/LTP% at the wall/floor,
-// days to expiry, moneyness, IV + IV range, recent candles for entry-freshness). ──
+// ── Telegram alert endpoint (2026-09-28): called DIRECTLY by the frontend the moment
+// a signal is added to S.signals (scanSymbol() in index.html, right after
+// S.signals.unshift(x)) -- an exact mirror of what's on screen, no separate scan loop,
+// no lag. Zero fetching here: every field it needs (strike, premium, ceWalls, peFloors,
+// candleConfluence, oiVerdict, dilipFormula) is already on the signal object the
+// frontend built. This replaces the old runServerScan-driven tryAlertScan path, which
+// ran on its own 15-stock/25s loop and could fire well after (or for stocks not
+// currently shown in) the Signals tab -- removed per explicit user decision. ──
+app.post("/telegram-alert", async (req, res) => {
+  if (!alertEngine.isConfigured()) return res.json({status: true, skipped: "not configured"});
+  try {
+    const x = req.body; // the exact signal object the frontend just added to S.signals
+    const { sym, type: typ, strike, premium, spotPrice: spot, score, verdict,
+            oiVerdict, dilipFormula, oiScore, candleConfluence, ceWalls, peFloors, atr } = x;
 
-async function tryAlertScan(stk, typ, spot, sigResult) {
-  if (!alertEngine.isConfigured()) return; // no Telegram creds set — skip silently, cheap check
-
-  // FIXED (2026-09-28): this used to make its OWN /oi-analysis call here, duplicating
-  // the /oi-analysis call /signal-analysis already made to build sigResult (user caught
-  // this — real double-call, not the "reused" claim made when this file was first
-  // written today). sigResult already carries atmStrike/oiChain/ceWalls/peFloors from
-  // that same first call (server.js's S={...} assembly, ~line 1350) -- using those
-  // directly means zero additional API calls for the whole dual-generator + existing
-  // Telegram path, not just a reduction.
-  const strike = sigResult.atmStrike;
-  if (!strike) return;
-  const strikeRow = (sigResult.oiChain || []).find(c => c.strike === strike);
-  const premium = strikeRow ? (typ === "CE" ? strikeRow.CE_ltp : strikeRow.PE_ltp) : null;
-
-  // Hold zone + exit level — ported from computeLevels() in index.html so Telegram
-  // carries the same "stay in while price is here, get out if it breaks this level"
-  // guidance the UI card shows. Same ATR-based buffer, same wall/floor source
-  // (sigResult.ceWalls/peFloors, from the same original /oi-analysis call). Exit is ONE
-  // level, ONE meaning — the point at which the setup has failed — not restated
-  // separately as a "stop-loss" and a "caution" level.
-  let holdZone = null, exitLevel = null;
-  if (spot) {
-    const atr = sigResult.atr && sigResult.atr > 0 && sigResult.atr < 0.05 * spot ? sigResult.atr : 0.005 * spot;
-    const isPE = typ === "PE";
-    let wallStrike = (sigResult.ceWalls || [])[0] ? parseFloat(sigResult.ceWalls[0].strike) : Math.round(spot + 2 * atr);
-    let floorStrike = (sigResult.peFloors || [])[0] ? parseFloat(sigResult.peFloors[0].strike) : Math.round(spot - 2 * atr);
-    if (wallStrike < spot) wallStrike = Math.round(spot + 2 * atr);
-    if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atr);
-
-    if (isPE) {
-      holdZone = `${Math.round(spot - atr)}–${Math.round(spot)}`;
-      exitLevel = Math.round(wallStrike);
-    } else {
-      holdZone = `${Math.round(spot)}–${Math.round(spot + atr)}`;
-      exitLevel = Math.round(floorStrike);
+    // Hold zone + exit level — same ATR-based buffer as before, from fields already
+    // on the signal object (ceWalls/peFloors, atr), not fetched again here.
+    let holdZone = null, exitLevel = null;
+    if (spot) {
+      const atrVal = atr && atr > 0 && atr < 0.05 * spot ? atr : 0.005 * spot;
+      const isPE = typ === "PE";
+      let wallStrike = (ceWalls || [])[0] ? parseFloat(ceWalls[0].strike) : Math.round(spot + 2 * atrVal);
+      let floorStrike = (peFloors || [])[0] ? parseFloat(peFloors[0].strike) : Math.round(spot - 2 * atrVal);
+      if (wallStrike < spot) wallStrike = Math.round(spot + 2 * atrVal);
+      if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atrVal);
+      if (isPE) { holdZone = `${Math.round(spot - atrVal)}–${Math.round(spot)}`; exitLevel = Math.round(wallStrike); }
+      else { holdZone = `${Math.round(spot)}–${Math.round(spot + atrVal)}`; exitLevel = Math.round(floorStrike); }
     }
-  }
 
-  // Plain-language reason — avoids jargon like "Ramesh wall"/"Suresh floor"/raw OI
-  // formula text. Built from the same direction + OI-support signal the UI card uses,
-  // just said the way a non-technical reader would want it.
-  let whyBuy = null;
-  const hasSupport = typ === "CE" ? !!(sigResult.peFloors || [])[0] : !!(sigResult.ceWalls || [])[0];
-  if (typ === "CE") {
-    whyBuy = hasSupport
-      ? "Buyers are defending the level below — downside looks protected, room to move up."
-      : "Price and momentum both point up — buyers in control right now.";
-  } else {
-    whyBuy = hasSupport
-      ? "Sellers are defending the level above — upside looks capped, room to move down."
-      : "Price and momentum both point down — sellers in control right now.";
-  }
+    let whyBuy = null;
+    const hasSupport = typ === "CE" ? !!(peFloors || [])[0] : !!(ceWalls || [])[0];
+    whyBuy = typ === "CE"
+      ? (hasSupport ? "Buyers are defending the level below — downside looks protected, room to move up."
+                    : "Price and momentum both point up — buyers in control right now.")
+      : (hasSupport ? "Sellers are defending the level above — upside looks capped, room to move down."
+                    : "Price and momentum both point down — sellers in control right now.");
 
-  // Restore the combined-score gate here (previously enforced by the caller, before
-  // tryAlertScan was moved outside that gate so the dual-generator path below could
-  // run independently of it). evaluateAndAlertAny has no internal score check.
-  if (sigResult.score >= MIN_CONFIDENCE && sigResult.verdict !== "AVOID" && sigResult.verdict !== "TRAP") {
-    await alertEngine.evaluateAndAlertAny({
-      symbol: stk.sym, strike, side: typ,
-      score: sigResult.score, verdict: sigResult.verdict,
-      premium, spot,
-      suggestedTarget: sigResult.suggestedTarget ?? null,
-      exitLevel, holdZone, whyBuy
+    // Combined-score alert: fires because this signal already cleared the same bar
+    // that put it in the Dilip OI tab (frontend only calls this endpoint for signals
+    // already in S.signals, so this is always true — kept as a defensive check).
+    if (score >= MIN_CONFIDENCE && verdict !== "AVOID" && verdict !== "TRAP") {
+      await alertEngine.evaluateAndAlertAny({
+        symbol: sym, strike, side: typ, score, verdict, premium, spot,
+        suggestedTarget: x.suggestedTarget ?? null, exitLevel, holdZone, whyBuy
+      });
+    }
+
+    // Dual-generator: Dilip OI / Candle Confluence, independent of the combined score.
+    await alertEngine.evaluateDualGeneratorAlert({
+      symbol: sym, strike, side: typ, spot, premium,
+      oiVerdict, dilipFormula, dilipMinScore: MIN_CONFIDENCE, dilipScore: oiScore,
+      candleConfluenceScore: candleConfluence?.score ?? null,
+      candleDirection: candleConfluence?.direction ?? null
     });
-  }
 
-  // Dual-generator alert path (2026-09-28): Dilip OI and Candle Confluence checked
-  // independently of the combined score/verdict above -- reuses the SAME oi/strike/
-  // premium already fetched for evaluateAndAlertAny, zero extra API calls added.
-  // Own cooldown key inside evaluateDualGeneratorAlert, so it never depends on whether
-  // evaluateAndAlertAny above also fired.
-  await alertEngine.evaluateDualGeneratorAlert({
-    symbol: stk.sym, strike, side: typ, spot, premium,
-    oiVerdict: sigResult.oiVerdict, dilipFormula: sigResult.dilipFormula,
-    dilipMinScore: MIN_CONFIDENCE, dilipScore: sigResult.oiScore,
-    candleConfluenceScore: sigResult.candleConfluence?.score ?? null,
-    candleDirection: sigResult.candleConfluence?.direction ?? null
-  });
-}
+    res.json({status: true});
+  } catch (e) {
+    log(`[ALERT] /telegram-alert error: ${e.message}`, "WARN");
+    res.json({status: false, error: e.message});
+  }
+});
 
 setInterval(runServerScan, 25000);
 
