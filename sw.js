@@ -1,6 +1,7 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v147'; // bumped 2026-09-28 -- ALL pill color changed (green->indigo),
-// Bear/Bull summary counts now generator-aware (match what tapping the box shows).
+const CACHE = 'fno-v148'; // bumped 2026-09-28 -- live badge updates: a requalifying
+// stock now updates its existing card in place (score/verdict/candleConfluence
+// refresh) instead of being silently skipped as a duplicate. Zero extra API calls.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
