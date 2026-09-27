@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v142'; // bumped 2026-09-28 -- removed duplicate BEAR/BULL/STRONG pills, made summary
-// bar counters (top) themselves tappable filters instead; pill row now just MOD/Dilip OI/Candle.
+const CACHE = 'fno-v143'; // bumped 2026-09-28 -- generator pill row is now exactly 3 pills:
+// ALL / Dilip OI / Candle Confluence (dropped MOD from this row, ALL is default-active).
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
