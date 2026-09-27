@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v146'; // bumped 2026-09-28 -- added explicit ALL box to summary bar
-// (5 boxes: ALL/BEAR/BULL/STRONG/SCANNED) so bear/bull/strong reset is visible.
+const CACHE = 'fno-v147'; // bumped 2026-09-28 -- ALL pill color changed (green->indigo),
+// Bear/Bull summary counts now generator-aware (match what tapping the box shows).
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
