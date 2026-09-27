@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v145'; // bumped 2026-09-28 -- removed redundant Signal Log header icon
-// (SCANNED box does that now), distinct pill colors, Bear/Bull now generator-aware.
+const CACHE = 'fno-v146'; // bumped 2026-09-28 -- added explicit ALL box to summary bar
+// (5 boxes: ALL/BEAR/BULL/STRONG/SCANNED) so bear/bull/strong reset is visible.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
