@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v141'; // bumped 2026-09-28 -- merged Dilip OI/Candle Confluence sub-tabs into
-// one filterable signal list (single filter row: ALL/BEAR/BULL/STRONG/MOD/Dilip OI/Candle Confluence).
+const CACHE = 'fno-v142'; // bumped 2026-09-28 -- removed duplicate BEAR/BULL/STRONG pills, made summary
+// bar counters (top) themselves tappable filters instead; pill row now just MOD/Dilip OI/Candle.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
