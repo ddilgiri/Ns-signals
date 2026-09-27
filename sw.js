@@ -1,6 +1,6 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v143'; // bumped 2026-09-28 -- generator pill row is now exactly 3 pills:
-// ALL / Dilip OI / Candle Confluence (dropped MOD from this row, ALL is default-active).
+const CACHE = 'fno-v144'; // bumped 2026-09-28 -- tapping SCANNED box now opens Signal Log
+// (same as the header clipboard icon) instead of resetting filters to all.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
