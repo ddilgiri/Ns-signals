@@ -161,7 +161,14 @@ function computeCandleConfluence(rawCandles, { vwap, macdHist, sectorPeersUp, se
   else if (score >= 60) gate = 'STRONG';
   else gate = 'ELIGIBLE';
 
-  return { score, earned, max, breakdown, gate };
+  // Directional lean, so this can be checked against Dilip formula's CE/PE call --
+  // current candle direction + VWAP position, same signals already scored above.
+  // BULLISH -> agrees with a CE signal, BEARISH -> agrees with a PE signal.
+  const direction = curGreen && (aboveVwap !== false) ? 'BULLISH'
+    : !curGreen && (aboveVwap !== true) ? 'BEARISH'
+    : 'MIXED';
+
+  return { score, earned, max, breakdown, gate, direction };
 }
 
 module.exports = { computeCandleConfluence, closeStrength };

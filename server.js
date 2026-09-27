@@ -1349,11 +1349,26 @@ app.post("/signal-analysis",async(e,t)=>{
     C="WEAK";
     O=`Score reached ${E>=75?"STRONG":"MODERATE"} level but candle-structure confluence is only ${S.candleConfluence.score}% (needs 50%+) -- capped at WEAK, structural reliability too low to trust this score`;
   }
+  // Real feature (2026-09-27): candle-confluence CONFIRMATION flag -- Dilip formula
+  // (S.dilipFormula, CE/PE) stays the primary trigger, unchanged. This is a second,
+  // independent generator: when candle-confluence score >=90% AND its own directional
+  // lean agrees with what Dilip formula already called, both generators agree --
+  // flagged as a confirmed/double-generator signal on the card. Does NOT change the
+  // verdict tier itself (STRONG/MODERATE/WEAK/AVOID) or override any gate above --
+  // purely an additional confirmation badge on top of the existing trigger.
+  let candleConfirmsFormula=false, candleConfirmNote=null;
+  if(S.candleConfluence && S.candleConfluence.score!=null && S.candleConfluence.score>=90){
+    const formulaSide=S.dilipFormula==="CE"?"BULLISH":S.dilipFormula==="PE"?"BEARISH":null;
+    if(formulaSide && S.candleConfluence.direction===formulaSide){
+      candleConfirmsFormula=true;
+      candleConfirmNote=`Candle structure ${S.candleConfluence.score}% (${S.candleConfluence.direction}) confirms Dilip formula ${S.dilipFormula} -- two independent generators agree`;
+    }
+  }
   let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
-  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
+  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms,candleConfirmsFormula,candleConfirmNote});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 
