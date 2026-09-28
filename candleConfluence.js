@@ -307,8 +307,34 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, 
   const baseCandles = series.map(toCandle);
   let runningEma20 = typeof ema20 === 'number' ? ema20 : baseCandles[baseCandles.length - 1].close;
   let runningEma50 = typeof ema50 === 'number' ? ema50 : baseCandles[baseCandles.length - 1].close;
-  const runningVwap = typeof vwap === 'number' ? vwap : baseCandles[baseCandles.length - 1].close;
   const baseAtr = typeof atr === 'number' && atr > 0 ? atr : null;
+
+  // VWAP running state (2026-09-28 fix, user report: "vwap candles wrong"). The
+  // passed-in `vwap` is the REAL session VWAP as of the last real candle, but it
+  // was previously reused UNCHANGED across every projected step -- so once price
+  // projected away from it, the VWAP-vote kept firing the SAME direction every
+  // single step, self-reinforcing a monotonic red or green run instead of acting
+  // as independent information. Fix: track real cumulative (sum(typicalPrice*vol),
+  // sum(vol)) from the real candles, then roll it forward with each projected
+  // candle's own typical price (weighted by the real session's average volume per
+  // candle, since projected candles have no real volume) so VWAP genuinely drifts
+  // toward wherever price is projected to go, same as it would intraday.
+  let vwapNumerator = 0, vwapDenominator = 0;
+  baseCandles.forEach(c => {
+    const typicalPrice = (c.high + c.low + c.close) / 3;
+    vwapNumerator += typicalPrice * c.volume;
+    vwapDenominator += c.volume;
+  });
+  const avgRealVolume = baseCandles.length ? (vwapDenominator / baseCandles.length) || 1 : 1;
+  let runningVwap = typeof vwap === 'number' ? vwap
+    : (vwapDenominator > 0 ? vwapNumerator / vwapDenominator : baseCandles[baseCandles.length - 1].close);
+  // If real VWAP was passed in but real volume sum is 0/unusable (bad/zero-volume
+  // candle data), fall back to seeding the running total from the passed vwap
+  // itself so the roll-forward below still works off a sane starting point.
+  if (vwapDenominator <= 0 && typeof vwap === 'number') {
+    vwapNumerator = vwap * avgRealVolume;
+    vwapDenominator = avgRealVolume;
+  }
 
   const projected = [];
   let greenCount = 0, redCount = 0;
@@ -341,13 +367,23 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, 
     projected.push({ step: step + 1, ...p, bias: next.bias, confidence: next.confidence });
 
     // Append this projected candle to the series so the NEXT iteration's EMA/streak
-    // reads see it, same as a real candle would arrive in a live series.
-    series.push([`proj-${step + 1}`, p.open, p.high, p.low, p.close, 0]);
+    // reads see it, same as a real candle would arrive in a live series. Volume
+    // stored as the real session's average (not 0) so the VWAP roll-forward below
+    // weights this projected candle realistically instead of as a zero-weight bar.
+    series.push([`proj-${step + 1}`, p.open, p.high, p.low, p.close, avgRealVolume]);
     // Roll EMA20/EMA50 forward one step with the projected close (standard EMA
-    // recurrence), so trend context drifts realistically across the 24 steps.
+    // recurrence), so trend context drifts realistically across the session.
     const k20 = 2 / 21, k50 = 2 / 51;
     runningEma20 = p.close * k20 + runningEma20 * (1 - k20);
     runningEma50 = p.close * k50 + runningEma50 * (1 - k50);
+    // Roll VWAP forward too (this was the actual bug -- it was previously frozen
+    // at the real session's VWAP for every projected step, so once price drifted
+    // away from it the VWAP-vote kept firing the same direction every step,
+    // artificially reinforcing a monotonic red/green run).
+    const projTypicalPrice = (p.high + p.low + p.close) / 3;
+    vwapNumerator += projTypicalPrice * avgRealVolume;
+    vwapDenominator += avgRealVolume;
+    runningVwap = vwapDenominator > 0 ? vwapNumerator / vwapDenominator : runningVwap;
   }
 
   const verdict = greenCount > redCount ? 'BULLISH' : redCount > greenCount ? 'BEARISH' : 'NEUTRAL';

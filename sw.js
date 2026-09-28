@@ -1,9 +1,9 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v154'; // bumped 2026-09-28 -- Session candle projection now uses
-// a DYNAMIC real-candle count (however many 15m candles actually exist at
-// research time -- 5 at 10:25, 14 at 12:50, etc) instead of a fixed 3, and only
-// projects the remaining slots to 3:00 PM. More real data -> fewer projected
-// candles -> less all-red/all-green bias.
+const CACHE = 'fno-v155'; // bumped 2026-09-28 -- FIX: VWAP was frozen at the real
+// session's VWAP for every projected candle (never rolled forward like EMA20/50
+// were), so once price projected away from it the VWAP-vote kept firing the SAME
+// direction every step, self-reinforcing an artificial monotonic red/green run.
+// VWAP now rolls forward with each projected candle's typical price, same as EMA.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
