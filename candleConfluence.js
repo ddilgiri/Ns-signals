@@ -197,7 +197,7 @@ function computeCandleConfluence(rawCandles, { vwap, macdHist, sectorPeersUp, se
  *     band (0.05% of price), BEARISH if less, else NEUTRAL. Confidence = |drift|/3
  *     (0, 0.33, 0.67, or 1 -- how many of the 3 independent votes agreed).
  */
-function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVote } = {}) {
+function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVote, stepIndex } = {}) {
   // 3 candles is the stated minimum (e.g. entering a stock just after 9:45, once
   // the first three 15m candles of the session exist) -- momentum-streak and
   // structure reads below only need 2 candles at minimum anyway.
@@ -219,7 +219,13 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
     vwapVote = cur.close > vwap ? 1 : cur.close < vwap ? -1 : 0;
   }
 
-  // Vote 3: consecutive same-direction candle streak (momentum persistence)
+  // Vote 3: consecutive same-direction candle streak (momentum persistence).
+  // Capped at a max run of 4 (2026-09-28 fix) -- once projected candles start
+  // extending a streak themselves (not real candles), this vote was reading the
+  // MODEL'S OWN prior output and re-confirming the same direction forever, a
+  // feedback loop with no natural ceiling. Real momentum fades; capping the
+  // vote's magnitude after 4 in a row stops it from indefinitely re-arming the
+  // same direction.
   let consecutive = 1, lastGreen = cur.close >= cur.open;
   for (let i = candles.length - 1; i > 0; i--) {
     const a = candles[i].close >= candles[i].open;
@@ -227,7 +233,7 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
     if (a === b) consecutive++;
     else break;
   }
-  const momentumVote = consecutive >= 2 ? (lastGreen ? 1 : -1) : 0;
+  const momentumVote = consecutive >= 5 ? 0 : consecutive >= 2 ? (lastGreen ? 1 : -1) : 0;
 
   // Vote 4 (2026-09-28, user request): real option-chain OI writer/buyer bias --
   // "oi volume writers buyers supports for prediction". Passed in from the
@@ -238,8 +244,42 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
   // support), 0 = no chain data passed or the two sides are roughly balanced.
   const oiVoteVal = typeof oiVote === 'number' ? Math.max(-1, Math.min(1, oiVote)) : 0;
 
-  const voteCount = 3 + (oiVoteVal !== 0 ? 1 : 0);
-  const drift = emaVote + vwapVote + momentumVote + oiVoteVal; // -4..+4
+  // Vote 5 (2026-09-28, user report: "u projected 17/17 all red -- check logic",
+  // real ZYDUS/AXIS sessions were genuinely mixed): pseudo-random noise + mild
+  // mean-reversion term. Without this, momentumVote/emaVote/vwapVote all read
+  // off the SAME self-generated projected series once real candles run out --
+  // a red projected candle makes momentum vote red again, pulls EMA down, drags
+  // price under VWAP, which then also votes red -- a feedback loop with nothing
+  // to break it, so 20 steps out it's mechanically 20/0 regardless of the real
+  // setup. Real 15m candles are never that clean; this restores natural chop:
+  //  (a) noiseVote: seeded pseudo-random -1/0/+1 (deterministic per stepIndex, so
+  //      re-running the same research call gives the same table, not a different
+  //      one every click) -- represents ordinary intra-session noise no model
+  //      can predict.
+  //  (b) reversionPull: grows with how far the drift has already carried price
+  //      (steps get later -> reversion strengthens), pulling AGAINST the existing
+  //      trend to counter the feedback loop above -- real trends pause/pull back,
+  //      they don't run in a dead straight line for 20 bars.
+  // Two independent LCG draws (different multiplier/seed pair) so noiseVote
+  // isn't correlated step-to-step -- one weak seed alone tended to repeat the
+  // same -1/0/+1 pattern across nearby steps.
+  const seedA = ((stepIndex || 0) * 9301 + 49297) % 233280;
+  const seedB = ((stepIndex || 0) * 48271 + 12345) % 2147483647;
+  const noiseRand = ((seedA / 233280) + (seedB / 2147483647)) / 2; // deterministic pseudo-random 0..1
+  // Wider bands (was 0.3/0.7 -- too rarely fired against a strong prior drift)
+  // -- noise now fires on ~50% of steps, genuinely breaking up long runs.
+  const noiseVote = noiseRand < 0.35 ? -1 : noiseRand > 0.65 ? 1 : 0;
+  const priorDrift = emaVote + vwapVote + momentumVote + oiVoteVal;
+  // Reversion grows faster and starts sooner (was step>3, 0.08/step -- too weak
+  // to ever flip the sign against a persistent EMA/VWAP read). Now strong enough
+  // that by ~6-7 steps into an unbroken run, reversion + noise can outweigh the
+  // trend votes and produce a genuine pullback candle.
+  const reversionPull = typeof stepIndex === 'number' && stepIndex > 1
+    ? -Math.sign(priorDrift) * Math.min(2, (stepIndex - 1) * 0.22)
+    : 0;
+
+  const voteCount = 3 + (oiVoteVal !== 0 ? 1 : 0) + 1 + (reversionPull !== 0 ? 1.5 : 0);
+  const drift = priorDrift + noiseVote + reversionPull; // widened range, self-correcting
   const confidence = Math.abs(drift) / voteCount;
 
   const rangeATR = typeof atr === 'number' && atr > 0 ? atr : (cur.high - cur.low) || cur.close * 0.003;
@@ -259,7 +299,7 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
     projected: { open: projectedOpen, high: projectedHigh, low: projectedLow, close: projectedClose },
     bias,
     confidence: parseFloat(confidence.toFixed(2)),
-    votes: { emaVote, vwapVote, momentumVote, oiVote: oiVoteVal, drift },
+    votes: { emaVote, vwapVote, momentumVote, oiVote: oiVoteVal, noiseVote, reversionPull, drift },
     gate: confidence >= 0.67 ? 'STRONG' : confidence >= 0.33 ? 'ELIGIBLE' : 'WEAK_CAP',
   };
 }
@@ -357,7 +397,7 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, 
     // re-fetched, so it's applied at full weight on every projected step.
     const next = projectNextCandle(series, {
       vwap: runningVwap, ema20: runningEma20, ema50: runningEma50,
-      atr: decayedAtr, volRatio: decayedVolRatio, oiVote,
+      atr: decayedAtr, volRatio: decayedVolRatio, oiVote, stepIndex: step,
     });
     if (!next.projected) break;
 
