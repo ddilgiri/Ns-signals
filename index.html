@@ -2863,11 +2863,29 @@ async function runResearch() {
     // /market-bias just cached server-side (via the /signal-analysis calls above) --
     // zero new Angel API calls, purely a local computation on already-fetched data.
     // Needs >=3 real 15m candles today (available ~9:45 AM onward).
+    // OI writer/buyer vote (2026-09-28, user request: "oi analysis chain u may
+    // add to get project some more.. strong.. so that oi volume writers buyers
+    // supports for prediction"): aggregate CE vs PE oiChangePct across the near
+    // chain already fetched above (oiResult), -1 (PE/bearish OI dominance) to
+    // +1 (CE/bullish OI dominance). Reuses oiResult.chain -- zero new API calls.
+    var oiVoteVal = 0;
+    try {
+      var oiChain = oiResult.chain || [];
+      var totalCeOi = 0, totalPeOi = 0;
+      oiChain.forEach(function(c) {
+        if (typeof c.CE_oiChangePct === 'number') totalCeOi += c.CE_oiChangePct;
+        if (typeof c.PE_oiChangePct === 'number') totalPeOi += c.PE_oiChangePct;
+      });
+      var oiDiff = totalCeOi - totalPeOi;
+      // Normalize: +-30 combined pct spread maps to full +-1 vote strength.
+      oiVoteVal = Math.max(-1, Math.min(1, oiDiff / 30));
+    } catch (e) { /* leave at 0 if chain shape unexpected */ }
+
     var projection24 = null;
     try {
       var projResp = await fetch(getServer() + '/candle-projection-session', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbolToken: stockMeta.token })
+        body: JSON.stringify({ symbolToken: stockMeta.token, oiVote: oiVoteVal })
       });
       projection24 = await projResp.json();
     } catch (e) { /* best-effort, research still shows without it */ }
@@ -2970,6 +2988,28 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   var nareshText = scenario ? fillTemplate(scenario.naresh, activeTargets) : 'No urgency read available yet — needs a second data cycle.';
   var bestStrikeText = scenario ? fillTemplate(scenario.best, activeTargets) : 'No trade guidance yet — check back once cycle data is available.';
   var colourKey = scenario ? scenario.colour : 'GREY';
+
+  // Candle-projection fallback (2026-09-28, user request: "best strike caution is
+  // hardcoded or not wired check"): when the OI-cycle scenario has nothing yet
+  // (GREY -- no fresh cycle-over-cycle OI/LTP data), fall back to the session
+  // candle projection's verdict so a strong projected move isn't silently
+  // ignored just because OI hasn't ticked over yet. Only fires on GREY -- a
+  // real OI-scenario read (RED/GREEN/AMBER) always takes priority, since that's
+  // confirmed by actual chain activity, not just projected candles.
+  var projectionFallbackUsed = false;
+  if (colourKey === 'GREY' && projection24 && projection24.status && projection24.gate !== 'INSUFFICIENT_DATA'
+      && (projection24.verdict === 'BULLISH' || projection24.verdict === 'BEARISH')) {
+    var projStrong = Math.abs(projection24.greenCount - projection24.redCount) >= 8; // e.g. 20/0, 18/2 etc -- lopsided, not a near-tie
+    if (projStrong) {
+      projectionFallbackUsed = true;
+      colourKey = projection24.verdict === 'BEARISH' ? 'RED' : 'GREEN';
+      var projSide = colourKey === 'RED' ? 'PE' : 'CE';
+      var projStrike = colourKey === 'RED' ? putOtmStrike : callOtmStrike;
+      bestStrikeText = '🕯️ Candle projection (' + projection24.greenCount + ' green / ' + projection24.redCount + ' red) suggests ' + projection24.verdict + ' — no fresh OI-cycle confirmation yet, so treat as a lead, not a confirmed Case 2/6 signal. Nearest strike: ' + projStrike + ' ' + projSide + '.';
+      maheshText = 'OI cycle is flat/GREY right now (no fresh writer/buyer data), but the 20-candle session projection leans ' + projection24.verdict + ' (' + projection24.greenCount + ' green vs ' + projection24.redCount + ' red) — wait for OI to confirm before sizing up.';
+      nareshText = 'Urgency: LOW — this is a projection-only lead, not an OI-confirmed signal. Watch for the chain to actually start moving on the ' + projSide + ' side before treating this as urgent.';
+    }
+  }
   var verdictColor = _RS_COLOUR_VAR[colourKey];
 
   // Index tie-breaker (Step 0): only meaningful for the two confirmed
@@ -3074,7 +3114,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
   // maheshText/nareshText are still computed above (bestStrikeText and
   // cautionFlags depend on the same scenario/regime data), just not rendered.
 
-  var confLabel = colourKey === 'RED' || colourKey === 'GREEN' ? (indexTieBreakerUsed ? 'CONFIRMED (index tie-break)' : 'DIRECTIONAL') : colourKey === 'AMBER' ? 'CAUTION / SCALP ONLY' : 'NO TRADE';
+  var confLabel = projectionFallbackUsed ? 'PROJECTION LEAD (unconfirmed)' : (colourKey === 'RED' || colourKey === 'GREEN' ? (indexTieBreakerUsed ? 'CONFIRMED (index tie-break)' : 'DIRECTIONAL') : colourKey === 'AMBER' ? 'CAUTION / SCALP ONLY' : 'NO TRADE');
   html += '<div style="margin:0 13px 12px;background:' + verdictColor + '22;border-radius:12px;padding:12px 14px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:10px;font-weight:800;color:' + verdictColor + ';letter-spacing:.3px">BEST STRIKE</div><div style="font-size:9px;font-weight:800;color:' + verdictColor + ';background:var(--card);padding:2px 8px;border-radius:10px">' + confLabel + '</div></div>';
   html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + bestStrikeText + '</div>';

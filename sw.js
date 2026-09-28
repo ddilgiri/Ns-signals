@@ -1,7 +1,9 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v152'; // bumped 2026-09-28 -- Ramesh/Suresh/Mahesh/Naresh
-// narration cards removed from Research tab (candle projection table +
-// Best Strike/Caution/Suggested Strike only now).
+const CACHE = 'fno-v153'; // bumped 2026-09-28 -- Best Strike/Caution now fall back
+// to the candle projection verdict when OI-scenario is GREY (was previously
+// disconnected -- projection could say strong BEARISH while Best Strike still
+// said "No trade"). Projection also now takes a 4th vote from real OI chain
+// writer/buyer bias (CE vs PE oiChangePct), not just price technicals.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

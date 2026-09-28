@@ -197,7 +197,7 @@ function computeCandleConfluence(rawCandles, { vwap, macdHist, sectorPeersUp, se
  *     band (0.05% of price), BEARISH if less, else NEUTRAL. Confidence = |drift|/3
  *     (0, 0.33, 0.67, or 1 -- how many of the 3 independent votes agreed).
  */
-function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {}) {
+function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVote } = {}) {
   // 3 candles is the stated minimum (e.g. entering a stock just after 9:45, once
   // the first three 15m candles of the session exist) -- momentum-streak and
   // structure reads below only need 2 candles at minimum anyway.
@@ -229,15 +229,25 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {
   }
   const momentumVote = consecutive >= 2 ? (lastGreen ? 1 : -1) : 0;
 
-  const drift = emaVote + vwapVote + momentumVote; // -3..+3
-  const confidence = Math.abs(drift) / 3;
+  // Vote 4 (2026-09-28, user request): real option-chain OI writer/buyer bias --
+  // "oi volume writers buyers supports for prediction". Passed in from the
+  // Research tab's already-fetched /oi-analysis chain (aggregate CE vs PE
+  // oiChangePct across near strikes), so this is direction support from where
+  // real money is actually being written/bought, not just price technicals.
+  // -1 = PE-side OI dominance (bearish support), +1 = CE-side dominance (bullish
+  // support), 0 = no chain data passed or the two sides are roughly balanced.
+  const oiVoteVal = typeof oiVote === 'number' ? Math.max(-1, Math.min(1, oiVote)) : 0;
+
+  const voteCount = 3 + (oiVoteVal !== 0 ? 1 : 0);
+  const drift = emaVote + vwapVote + momentumVote + oiVoteVal; // -4..+4
+  const confidence = Math.abs(drift) / voteCount;
 
   const rangeATR = typeof atr === 'number' && atr > 0 ? atr : (cur.high - cur.low) || cur.close * 0.003;
   const volAdjust = typeof volRatio === 'number' ? Math.max(0.6, Math.min(1.6, volRatio)) : 1;
   const expectedRange = rangeATR * volAdjust;
 
   const projectedOpen = cur.close;
-  const projectedClose = parseFloat((cur.close + (drift / 3) * expectedRange * 0.5).toFixed(2));
+  const projectedClose = parseFloat((cur.close + (drift / voteCount) * expectedRange * 0.5).toFixed(2));
   const projectedHigh = parseFloat((Math.max(projectedOpen, projectedClose) + expectedRange * 0.25).toFixed(2));
   const projectedLow = parseFloat((Math.min(projectedOpen, projectedClose) - expectedRange * 0.25).toFixed(2));
 
@@ -249,7 +259,7 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {
     projected: { open: projectedOpen, high: projectedHigh, low: projectedLow, close: projectedClose },
     bias,
     confidence: parseFloat(confidence.toFixed(2)),
-    votes: { emaVote, vwapVote, momentumVote, drift },
+    votes: { emaVote, vwapVote, momentumVote, oiVote: oiVoteVal, drift },
     gate: confidence >= 0.67 ? 'STRONG' : confidence >= 0.33 ? 'ELIGIBLE' : 'WEAK_CAP',
   };
 }
@@ -273,7 +283,7 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {
 const SESSION_TOTAL_CANDLES = 23; // 9:15 through the 3:00 PM candle, 15m each
 const PROJECTED_CANDLES = SESSION_TOTAL_CANDLES - 3; // 3 real candles already exist
 
-function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {}) {
+function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVote } = {}) {
   if (!rawCandles || rawCandles.length < 3) {
     return { candles: [], verdict: 'NEUTRAL', greenCount: 0, redCount: 0, gate: 'INSUFFICIENT_DATA' };
   }
@@ -297,9 +307,12 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio }
     const decayedAtr = baseAtr != null ? baseAtr * Math.max(0.5, 1 - step * 0.025) : null;
     const decayedVolRatio = typeof volRatio === 'number' ? 1 + (volRatio - 1) * Math.max(0.3, 1 - step * 0.035) : 1;
 
+    // OI writer/buyer bias does NOT decay like ATR/volRatio -- a strike's written
+    // wall/floor stays in place for the rest of the session unless the chain is
+    // re-fetched, so it's applied at full weight on every projected step.
     const next = projectNextCandle(series, {
       vwap: runningVwap, ema20: runningEma20, ema50: runningEma50,
-      atr: decayedAtr, volRatio: decayedVolRatio,
+      atr: decayedAtr, volRatio: decayedVolRatio, oiVote,
     });
     if (!next.projected) break;
 

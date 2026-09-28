@@ -950,13 +950,18 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
 // /market-bias) right before this. If the cache is somehow empty (bias never
 // fetched for this token), returns INSUFFICIENT_DATA rather than fetching itself.
 app.post("/candle-projection-session",(e,t)=>{
-  const{symbolToken:a}=e.body||{};
+  const{symbolToken:a,oiVote:v}=e.body||{};
   if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
   const cached=BIAS_CACHE[a];
   if(!cached||!cached.todayCandles||cached.todayCandles.length<3){
     return t.json({status:!0,candles:[],verdict:"NEUTRAL",greenCount:0,redCount:0,gate:"INSUFFICIENT_DATA",message:"Need at least 3 real 15m candles today (available after ~9:45 AM) -- run Research again once market has been open a bit."});
   }
-  const result=projectSessionCandles(cached.todayCandles,{vwap:cached.vwap,ema20:cached.ema20,ema50:cached.ema50,atr:cached.atr,volRatio:cached.volRatio});
+  // oiVote (2026-09-28, user request): -1..+1 real option-chain writer/buyer
+  // bias computed client-side from the same /oi-analysis chain Research already
+  // fetched (aggregate CE vs PE oiChangePct across near strikes) -- feeds the
+  // projection as a persistent 4th vote alongside EMA/VWAP/momentum.
+  const oiVoteNum=typeof v==="number"&&!isNaN(v)?Math.max(-1,Math.min(1,v)):0;
+  const result=projectSessionCandles(cached.todayCandles,{vwap:cached.vwap,ema20:cached.ema20,ema50:cached.ema50,atr:cached.atr,volRatio:cached.volRatio,oiVote:oiVoteNum});
   t.json({status:!0,...result});
 });
 
