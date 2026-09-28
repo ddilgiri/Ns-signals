@@ -3068,21 +3068,11 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
     }
   }
 
-  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--red);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
-  html += '<div style="font-size:10px;font-weight:800;color:var(--red);margin-bottom:4px;letter-spacing:.3px">RAMESH · OI</div>';
-  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + rameshText + '</div></div>';
-
-  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--green);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
-  html += '<div style="font-size:10px;font-weight:800;color:var(--green);margin-bottom:4px;letter-spacing:.3px">SURESH · LTP</div>';
-  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + sureshText + '</div></div>';
-
-  html += '<div style="margin:0 13px 8px;border-left:3px solid var(--purple);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
-  html += '<div style="font-size:10px;font-weight:800;color:var(--purple);margin-bottom:4px;letter-spacing:.3px">MAHESH · REGIME</div>';
-  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + maheshText + '</div></div>';
-
-  html += '<div style="margin:0 13px 10px;border-left:3px solid var(--amber);background:var(--card);border-radius:0 10px 10px 0;padding:10px 14px">';
-  html += '<div style="font-size:10px;font-weight:800;color:var(--amber);margin-bottom:4px;letter-spacing:.3px">NARESH · URGENCY</div>';
-  html += '<div style="font-size:13px;line-height:1.5;color:var(--text)">' + nareshText + '</div></div>';
+  // Ramesh/Suresh/Mahesh/Naresh narration cards removed from Research tab
+  // (2026-09-28, explicit request) -- Research now shows candle projection +
+  // Best Strike + Caution + Suggested Strike only. rameshText/sureshText/
+  // maheshText/nareshText are still computed above (bestStrikeText and
+  // cautionFlags depend on the same scenario/regime data), just not rendered.
 
   var confLabel = colourKey === 'RED' || colourKey === 'GREEN' ? (indexTieBreakerUsed ? 'CONFIRMED (index tie-break)' : 'DIRECTIONAL') : colourKey === 'AMBER' ? 'CAUTION / SCALP ONLY' : 'NO TRADE';
   html += '<div style="margin:0 13px 12px;background:' + verdictColor + '22;border-radius:12px;padding:12px 14px">';

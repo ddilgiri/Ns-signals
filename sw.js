@@ -1,7 +1,7 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v151'; // bumped 2026-09-28 -- Research tab session projection
-// now renders a full candle-by-candle table (step/O/H/L/C/bias), not just the
-// verdict summary line.
+const CACHE = 'fno-v152'; // bumped 2026-09-28 -- Ramesh/Suresh/Mahesh/Naresh
+// narration cards removed from Research tab (candle projection table +
+// Best Strike/Caution/Suggested Strike only now).
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
