@@ -1,7 +1,7 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v150'; // bumped 2026-09-28 -- Candle Confluence removed from the
-// Signals tab entirely (back to plain Dilip OI); a new 23-candle (3 real + 20
-// projected) session projection added to the Research tab instead.
+const CACHE = 'fno-v151'; // bumped 2026-09-28 -- Research tab session projection
+// now renders a full candle-by-candle table (step/O/H/L/C/bias), not just the
+// verdict summary line.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

@@ -3045,6 +3045,26 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       html += '<div style="font-size:16px;font-weight:900;color:' + pvColor + '">' + pvIcon + ' ' + pv + '</div>';
       html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + projection24.greenCount + ' green vs ' + projection24.redCount + ' red projected candles (majority vote)</div>';
       html += '</div>';
+
+      // Candle-by-candle table
+      html += '<div style="margin:0 13px 10px;overflow-x:auto">';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:10.5px">';
+      html += '<thead><tr style="color:var(--text3);text-transform:uppercase;font-size:9px;letter-spacing:.4px">';
+      html += '<th style="text-align:left;padding:4px 6px">#</th><th style="text-align:right;padding:4px 6px">Open</th><th style="text-align:right;padding:4px 6px">High</th><th style="text-align:right;padding:4px 6px">Low</th><th style="text-align:right;padding:4px 6px">Close</th><th style="text-align:center;padding:4px 6px">Bias</th>';
+      html += '</tr></thead><tbody>';
+      projection24.candles.forEach(function(c) {
+        var isGreen = c.close >= c.open;
+        var rowColor = isGreen ? 'var(--green)' : 'var(--red)';
+        html += '<tr style="border-top:1px solid var(--border)">';
+        html += '<td style="padding:4px 6px;color:var(--text3)">' + c.step + '</td>';
+        html += '<td style="text-align:right;padding:4px 6px">' + c.open.toFixed(2) + '</td>';
+        html += '<td style="text-align:right;padding:4px 6px">' + c.high.toFixed(2) + '</td>';
+        html += '<td style="text-align:right;padding:4px 6px">' + c.low.toFixed(2) + '</td>';
+        html += '<td style="text-align:right;padding:4px 6px;font-weight:700;color:' + rowColor + '">' + c.close.toFixed(2) + '</td>';
+        html += '<td style="text-align:center;padding:4px 6px">' + (isGreen ? '🟢' : '🔴') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
     }
   }
 
