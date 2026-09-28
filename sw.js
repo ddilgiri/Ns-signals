@@ -1,7 +1,7 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v148'; // bumped 2026-09-28 -- live badge updates: a requalifying
-// stock now updates its existing card in place (score/verdict/candleConfluence
-// refresh) instead of being silently skipped as a duplicate. Zero extra API calls.
+const CACHE = 'fno-v149'; // bumped 2026-09-28 -- Candle Confluence replaced with a
+// forward next-candle OHLC projection (was a retrospective score); all Telegram
+// alerting removed per user decision.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

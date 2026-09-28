@@ -171,4 +171,84 @@ function computeCandleConfluence(rawCandles, { vwap, macdHist, sectorPeersUp, se
   return { score, earned, max, breakdown, gate, direction };
 }
 
-module.exports = { computeCandleConfluence, closeStrength };
+/**
+ * projectNextCandle (2026-09-28): replaces the old "confluence %" idea, which only
+ * scored how clean the ALREADY-CLOSED candles looked (retrospective, not a forecast --
+ * a 70% score describes the past, it never said what happens next). This instead
+ * projects the NEXT 15m candle's OHLC and derives BULLISH/BEARISH/NEUTRAL from where
+ * that projection lands, using the same inputs computeCandleConfluence already has --
+ * ATR, EMA20/EMA50 slope, VWAP position, volume ratio, consecutive-candle streak.
+ * Zero new API calls: everything here is passed in from values /market-bias already
+ * computed for this same candle fetch (M=atr, h=ema20, S=ema50, H=vwap, L=volRatio).
+ *
+ * Method (statistical extrapolation, not a black box):
+ *  1. Direction drift = weighted vote of 3 independent reads that are already computed
+ *     elsewhere for this stock: EMA20-vs-EMA50 slope, close-vs-VWAP position, and the
+ *     current consecutive same-direction candle streak. Each contributes -1/0/+1.
+ *  2. Expected next-candle RANGE width = ATR, widened when volRatio shows unusually
+ *     high participation (more volume -> bigger likely range) and narrowed in a dead
+ *     session (volRatio well under 1).
+ *  3. Projected close = current close + (drift/3) * ATR * volAdjust -- i.e. the same
+ *     range width, scaled by how many of the 3 votes agree and by current participation.
+ *  4. Projected open = current close (candles open at prior close on a 15m NSE series).
+ *     Projected high/low = projected open/close +/- half the expected range, so the
+ *     projected candle's body sits inside a range sized off real volatility (ATR).
+ *  5. Bias: BULLISH if projected close > projected open by more than a small noise
+ *     band (0.05% of price), BEARISH if less, else NEUTRAL. Confidence = |drift|/3
+ *     (0, 0.33, 0.67, or 1 -- how many of the 3 independent votes agreed).
+ */
+function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {}) {
+  if (!rawCandles || rawCandles.length < 4) {
+    return { projected: null, bias: 'NEUTRAL', confidence: 0, gate: 'INSUFFICIENT_DATA' };
+  }
+  const candles = rawCandles.map(toCandle);
+  const cur = candles[candles.length - 1];
+
+  // Vote 1: EMA slope (trend already computed upstream, reused here)
+  let emaVote = 0;
+  if (typeof ema20 === 'number' && typeof ema50 === 'number') {
+    emaVote = ema20 > ema50 ? 1 : ema20 < ema50 ? -1 : 0;
+  }
+
+  // Vote 2: close vs VWAP (session fair-value reference, already computed upstream)
+  let vwapVote = 0;
+  if (typeof vwap === 'number') {
+    vwapVote = cur.close > vwap ? 1 : cur.close < vwap ? -1 : 0;
+  }
+
+  // Vote 3: consecutive same-direction candle streak (momentum persistence)
+  let consecutive = 1, lastGreen = cur.close >= cur.open;
+  for (let i = candles.length - 1; i > 0; i--) {
+    const a = candles[i].close >= candles[i].open;
+    const b = candles[i - 1].close >= candles[i - 1].open;
+    if (a === b) consecutive++;
+    else break;
+  }
+  const momentumVote = consecutive >= 2 ? (lastGreen ? 1 : -1) : 0;
+
+  const drift = emaVote + vwapVote + momentumVote; // -3..+3
+  const confidence = Math.abs(drift) / 3;
+
+  const rangeATR = typeof atr === 'number' && atr > 0 ? atr : (cur.high - cur.low) || cur.close * 0.003;
+  const volAdjust = typeof volRatio === 'number' ? Math.max(0.6, Math.min(1.6, volRatio)) : 1;
+  const expectedRange = rangeATR * volAdjust;
+
+  const projectedOpen = cur.close;
+  const projectedClose = parseFloat((cur.close + (drift / 3) * expectedRange * 0.5).toFixed(2));
+  const projectedHigh = parseFloat((Math.max(projectedOpen, projectedClose) + expectedRange * 0.25).toFixed(2));
+  const projectedLow = parseFloat((Math.min(projectedOpen, projectedClose) - expectedRange * 0.25).toFixed(2));
+
+  const noiseBand = projectedOpen * 0.0005; // 0.05% -- below this, call it NEUTRAL not a real move
+  const bodyMove = projectedClose - projectedOpen;
+  const bias = bodyMove > noiseBand ? 'BULLISH' : bodyMove < -noiseBand ? 'BEARISH' : 'NEUTRAL';
+
+  return {
+    projected: { open: projectedOpen, high: projectedHigh, low: projectedLow, close: projectedClose },
+    bias,
+    confidence: parseFloat(confidence.toFixed(2)),
+    votes: { emaVote, vwapVote, momentumVote, drift },
+    gate: confidence >= 0.67 ? 'STRONG' : confidence >= 0.33 ? 'ELIGIBLE' : 'WEAK_CAP',
+  };
+}
+
+module.exports = { computeCandleConfluence, closeStrength, projectNextCandle };

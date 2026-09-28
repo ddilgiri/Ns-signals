@@ -1,7 +1,6 @@
 const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
 const nanaLogic=require("./nanaLogic.js");
-const alertEngine=require("./alertEngine.js");
-const{computeCandleConfluence}=require("./candleConfluence.js");
+const{computeCandleConfluence,projectNextCandle}=require("./candleConfluence.js");
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -517,11 +516,11 @@ app.post("/signal-outcome",(req,res)=>{
 
 // ─── EXISTING ROUTES (unchanged) ───────────────────────────
 
-// Min-confidence threshold for the server-side scan loop (runServerScan) and the
-// Telegram alert path, kept in sync with the app's own "Min Confidence %" setting
-// (cfgMinConf in index.html) so both use whatever the user has actually set there,
-// not a hardcoded number. Defaults to 60 to match cfgMinConf's own default until the
-// app sends its real value (right after load, and on every change).
+// Min-confidence threshold for the server-side scan loop (runServerScan), kept in
+// sync with the app's own "Min Confidence %" setting (cfgMinConf in index.html) so
+// both use whatever the user has actually set there, not a hardcoded number.
+// Defaults to 60 to match cfgMinConf's own default until the app sends its real
+// value (right after load, and on every change).
 let MIN_CONFIDENCE = 60;
 app.post("/set-min-confidence", (req, res) => {
   const v = parseInt(req.body?.value);
@@ -749,7 +748,7 @@ app.post("/market-bias",async(e,t)=>{
   if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
   const n=BIAS_CACHE[a];
   if(n&&Date.now()-n.fetchTime<BIAS_TTL)return t.json(n.data);
-  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),IMI_val=calcIMI(g),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g),ADX_val=calcADX(g),REGIME=classifyRegime(a,ADX_val),RSI_Z=rsiZScore(a,D);
+  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),IMI_val=calcIMI(g),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g),ADX_val=calcADX(g),REGIME=classifyRegime(a,ADX_val),RSI_Z=rsiZScore(a,D);
   const PRICE_Z=priceZScore(m);
   const ABSORPTION=detectAbsorption(g);
   const KAMA_now=calcKAMA(m),KAMA_prev=m.length>1?calcKAMA(m.slice(0,-1)):null;
@@ -763,11 +762,19 @@ app.post("/market-bias",async(e,t)=>{
   // /signal-analysis, same pattern as the existing TRANSITION regime cap -- never blended
   // into SIGNAL_WEIGHTS since it measures structural reliability, not direction.
   const CANDLE_CONFLUENCE=computeCandleConfluence(k,{vwap:H,macdHist:$?.histogram??$?.hist??null});
+  // Next-candle projection (2026-09-28, user request): a "70% confluence" score only
+  // describes candles that already closed -- it can't claim to "know" the next move.
+  // This instead projects the next 15m candle's OHLC from the SAME already-computed
+  // inputs (ATR=M, EMA20=h, EMA50=S, VWAP=H, volRatio=L) -- zero new API calls -- and
+  // derives BULLISH/BEARISH/NEUTRAL from where that projection lands. Replaces the
+  // confluence score as the Candle Confluence tab's basis; old function/field kept
+  // for backward compat but no longer drives the badge.
+  const CANDLE_PROJECTION=projectNextCandle(k,{vwap:H,ema20:h,ema50:S,atr:M,volRatio:L});
 // Volume+Price direction match
 const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseFloat(c[5]),0)/Math.max(recentCandles.length,1);const priceUp=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])>parseFloat(recentCandles[0][4]);const priceDown=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])<parseFloat(recentCandles[0][4]);const volMatch=L>=1.2&&((f==="BULLISH"&&priceUp)||(f==="BEARISH"&&priceDown));const volFake=L>=1.2&&((f==="BULLISH"&&priceDown)||(f==="BEARISH"&&priceUp));
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
-const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
+const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,candleProjection:CANDLE_PROJECTION,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -932,36 +939,6 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   saveOISnapshot(i, oiResult);
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
-
-// ═══════════════════════════════════════════════════════
-// ALERT ENGINE — Telegram push for Case 2 (CE) / Case 6 (PE) only.
-// Standalone, additive: does NOT touch scan/scoring logic above.
-// Caller (frontend, per its existing 25s scan cycle) passes one strike's
-// already-fetched data — no new Angel API calls happen here.
-// Body: { symbol, strike, side, caseNum, oiPct, ltpPct, spot, candles,
-//         daysToExpiry, moneyness, currentIV, ivRecentHigh, ivRecentLow }
-// ═══════════════════════════════════════════════════════
-app.post("/alert-scan", async (req, res) => {
-  try {
-    const result = await alertEngine.evaluateAndAlert(req.body || {});
-    res.json({ status: true, alerted: !!result, alert: result || null, configured: alertEngine.isConfigured() });
-  } catch (err) {
-    log(`Alert-scan error: ${err.message}`, "WARN");
-    res.status(500).json({ status: false, message: err.message });
-  }
-});
-app.get("/alert-scan/test", async (req, res) => {
-  // One-off ping to verify Telegram env vars are wired correctly on Render.
-  if (!alertEngine.isConfigured()) {
-    return res.status(400).json({ status: false, message: "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set in environment" });
-  }
-  try {
-    await alertEngine.sendTelegramAlert("✅ NS-Signals alert engine test ping — Telegram wiring OK.");
-    res.json({ status: true, message: "Test alert sent" });
-  } catch (err) {
-    res.status(500).json({ status: false, message: err.message });
-  }
-});
 
 // Real feature (2026-09-05): added imi:8 -- per user's own research confirming IMI is
 // genuinely recommended specifically for intraday options trading (unlike RSI which is
@@ -1296,7 +1273,7 @@ app.post("/signal-analysis",async(e,t)=>{
   const{symbolToken:a,sym:s,exchange:n="NSE",isIndex:o=!1,spotPrice:r,type:i,bidAskImbalance:imb=null}=e.body;
   try{const[e,o,l,c,u]=await Promise.allSettled([axios.post(`http://localhost:${PORT}/market-bias`,{symbolToken:a,exchange:n},{headers:{"Content-Type":"application/json"}}),Promise.resolve({data:FII_DII_CACHE.data||{instBias:"NEUTRAL",fiiNet:0,diiNet:0,fiiBuy:0,fiiSell:0,diiBuy:0,diiSell:0}}),
     Promise.resolve({data:VIX_CACHE.data||{vix:null,regime:"UNKNOWN",premiumBuyable:true,guidance:""}}),
-    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,kama:p.kama??null,kamaSlope:p.kamaSlope||"UNKNOWN",priceZ:p.priceZ??0,absorptionDetected:p.absorptionDetected||false,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,candleConfluence:p.candleConfluence||{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],atmStrike:h?.atmStrike||null,oiChain:h?.chain||[]};
+    Promise.resolve({data:NEWS_CACHE.data||{sentiment:"NEUTRAL",sentimentScore:50,geoRisk:0}}),r?axios.post(`http://localhost:${PORT}/oi-analysis`,{symbol:s,spotPrice:r,expiry:getExpiryType(s)},{headers:{"Content-Type":"application/json"}}):Promise.resolve({data:null})]),p="fulfilled"===e.status?e.value.data:{},d="fulfilled"===o.status?o.value.data:{},g="fulfilled"===l.status?l.value.data:{},m="fulfilled"===c.status?c.value.data:{},h="fulfilled"===u.status&&u.value.data?.status?u.value.data:null,S={sym:s,type:i,bidAskImbalance:imb,bias:p.bias||"NEUTRAL",ema20:p.ema20||null,ema50:p.ema50||null,rsi:p.rsi??50,rsiZ:p.rsiZ??0,imi:p.imi??50,kama:p.kama??null,kamaSlope:p.kamaSlope||"UNKNOWN",priceZ:p.priceZ??0,absorptionDetected:p.absorptionDetected||false,adx:p.adx??null,regime:p.regime||"TRANSITION",regimePercentile:p.regimePercentile??null,vwap:p.vwap||null,aboveVwap:p.aboveVwap??null,pdh:p.pdh||null,pdl:p.pdl||null,orb_high:p.orb_high||null,orb_low:p.orb_low||null,volRatio:p.volRatio??1,volPriceDir:p.volPriceDir||"NEUTRAL",volDryUp:p.volDryUp||false,ltp:p.ltp||r||null,macd:p.macd||null,atr:p.atr||null,supertrend:p.supertrend||null,atrStopLong:p.atrStopLong||null,atrStopShort:p.atrStopShort||null,isExpiryDay:p.isExpiryDay||getExpiryWeekInfo(s).isNSEExpiryDay||false,candleConfluence:p.candleConfluence||{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:p.candleProjection||{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},instBias:d.instBias||"NEUTRAL",fiiNet:d.fiiNet??0,diiNet:d.diiNet??0,vixValue:g.vix||null,vixRegime:g.regime||"UNKNOWN",premiumBuyable:!1!==g.premiumBuyable,vixGuidance:g.guidance||"",newsSentiment:m.sentiment||"NEUTRAL",newsSentimentScore:m.sentimentScore??50,newsGeoRisk:m.geoRisk??0,pcr:h?.pcr||null,pcrBias:h?.pcrBias||"NEUTRAL",maxPain:h?.maxPain||null,oiSupportStrike:h?.supportStrike||null,oiResistStrike:h?.resistStrike||null,nearMaxPain:h?.nearMaxPain||!1,nearSupport:h?.nearSupport||!1,nearResistance:h?.nearResistance||!1,dilipFormula:h?.dilipFormula||"NEUTRAL",dilipFormulaNote:h?.dilipFormulaNote||"",ceSignal:h?.ceSignal||null,peSignal:h?.peSignal||null,putTrapRisk:h?.putTrapRisk||!1,callTrapRisk:h?.callTrapRisk||!1,oiRecommendation:h?.oiRecommendation||"NEUTRAL",oiScore:h?.oiScore||0,oiVerdict:h?.oiVerdict||"WEAK",oiNotes:h?.oiNotes||[],ceWalls:h?.ceWalls||[],peFloors:h?.peFloors||[],rameshTrapped:h?.rameshTrapped||!1,sureshTrapped:h?.sureshTrapped||!1,oiBattleBias:h?.oiBattleBias||"NEUTRAL",oiBattleSummary:h?.oiBattleSummary||[],gammaBlast:h?.gammaBlast||null,atmCeOI:h?.atmCeOI||0,atmPeOI:h?.atmPeOI||0,atmPCR:h?.atmPCR||null,strikePCR:h?.strikePCR||[],atmStrike:h?.atmStrike||null,oiChain:h?.chain||[]};
   // Attach OI trend history
   const oiTrend=getOITrend(s?.toUpperCase()||"");
   S.oiTrendData=oiTrend;
@@ -1356,12 +1333,15 @@ app.post("/signal-analysis",async(e,t)=>{
   // flagged as a confirmed/double-generator signal on the card. Does NOT change the
   // verdict tier itself (STRONG/MODERATE/WEAK/AVOID) or override any gate above --
   // purely an additional confirmation badge on top of the existing trigger.
+  // 2026-09-28: switched from the retrospective confluence score to the forward
+  // projection -- confirmation now means the PROJECTED next candle agrees with
+  // Dilip formula's call, not that past candles looked clean.
   let candleConfirmsFormula=false, candleConfirmNote=null;
-  if(S.candleConfluence && S.candleConfluence.score!=null && S.candleConfluence.score>=90){
+  if(S.candleProjection && S.candleProjection.bias && S.candleProjection.bias!=="NEUTRAL" && (S.candleProjection.confidence||0)>=0.67){
     const formulaSide=S.dilipFormula==="CE"?"BULLISH":S.dilipFormula==="PE"?"BEARISH":null;
-    if(formulaSide && S.candleConfluence.direction===formulaSide){
+    if(formulaSide && S.candleProjection.bias===formulaSide){
       candleConfirmsFormula=true;
-      candleConfirmNote=`Candle structure ${S.candleConfluence.score}% (${S.candleConfluence.direction}) confirms Dilip formula ${S.dilipFormula} -- two independent generators agree`;
+      candleConfirmNote=`Projected next candle (${S.candleProjection.bias}, confidence ${Math.round((S.candleProjection.confidence||0)*100)}%) confirms Dilip formula ${S.dilipFormula} -- two independent generators agree`;
     }
   }
   let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
@@ -1601,15 +1581,10 @@ async function runServerScan() {
         for (const typ of ["CE","PE"]) {
           const sig = await axios.post(`http://localhost:${PORT}/signal-analysis`, {symbolToken:String(stk.token),sym:stk.sym,exchange:"NSE",isIndex:!!stk.isIndex,spotPrice:spot,type:typ}, {headers:{"Content-Type":"application/json"}});
           const g = sig.data;
-          // REMOVED (2026-09-28): the server-side alert check that used to run here
-          // (tryAlertScan + dual-generator worthChecking pre-filter) is gone. It was a
-          // SEPARATE 15-stock/25s scan loop from the frontend's own scan, so it lagged
-          // the UI by up to ~6 minutes to rotate through all ~212 stocks -- meaning
-          // Telegram could fire well after (or even for stocks not currently shown in)
-          // the Signals tab. Per explicit user decision, Telegram alerts now fire
-          // directly from the frontend the moment a signal is added to S.signals (see
-          // scanSymbol() in index.html, and the new /telegram-alert endpoint below) --
-          // an exact mirror of what's on screen, no separate loop, no lag.
+          // REMOVED (2026-09-28): all Telegram alerting (tryAlertScan, the dual-generator
+          // worthChecking pre-filter, and later the /telegram-alert endpoint) has been
+          // removed per explicit user decision. This loop now only feeds
+          // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
           }
@@ -1626,68 +1601,6 @@ async function runServerScan() {
     serverScanRunning = false;
   }
 }
-
-// ── Telegram alert endpoint (2026-09-28): called DIRECTLY by the frontend the moment
-// a signal is added to S.signals (scanSymbol() in index.html, right after
-// S.signals.unshift(x)) -- an exact mirror of what's on screen, no separate scan loop,
-// no lag. Zero fetching here: every field it needs (strike, premium, ceWalls, peFloors,
-// candleConfluence, oiVerdict, dilipFormula) is already on the signal object the
-// frontend built. This replaces the old runServerScan-driven tryAlertScan path, which
-// ran on its own 15-stock/25s loop and could fire well after (or for stocks not
-// currently shown in) the Signals tab -- removed per explicit user decision. ──
-app.post("/telegram-alert", async (req, res) => {
-  if (!alertEngine.isConfigured()) return res.json({status: true, skipped: "not configured"});
-  try {
-    const x = req.body; // the exact signal object the frontend just added to S.signals
-    const { sym, type: typ, strike, premium, spotPrice: spot, score, verdict,
-            oiVerdict, dilipFormula, oiScore, candleConfluence, ceWalls, peFloors, atr } = x;
-
-    // Hold zone + exit level — same ATR-based buffer as before, from fields already
-    // on the signal object (ceWalls/peFloors, atr), not fetched again here.
-    let holdZone = null, exitLevel = null;
-    if (spot) {
-      const atrVal = atr && atr > 0 && atr < 0.05 * spot ? atr : 0.005 * spot;
-      const isPE = typ === "PE";
-      let wallStrike = (ceWalls || [])[0] ? parseFloat(ceWalls[0].strike) : Math.round(spot + 2 * atrVal);
-      let floorStrike = (peFloors || [])[0] ? parseFloat(peFloors[0].strike) : Math.round(spot - 2 * atrVal);
-      if (wallStrike < spot) wallStrike = Math.round(spot + 2 * atrVal);
-      if (floorStrike > spot) floorStrike = Math.round(spot - 2 * atrVal);
-      if (isPE) { holdZone = `${Math.round(spot - atrVal)}–${Math.round(spot)}`; exitLevel = Math.round(wallStrike); }
-      else { holdZone = `${Math.round(spot)}–${Math.round(spot + atrVal)}`; exitLevel = Math.round(floorStrike); }
-    }
-
-    let whyBuy = null;
-    const hasSupport = typ === "CE" ? !!(peFloors || [])[0] : !!(ceWalls || [])[0];
-    whyBuy = typ === "CE"
-      ? (hasSupport ? "Buyers are defending the level below — downside looks protected, room to move up."
-                    : "Price and momentum both point up — buyers in control right now.")
-      : (hasSupport ? "Sellers are defending the level above — upside looks capped, room to move down."
-                    : "Price and momentum both point down — sellers in control right now.");
-
-    // Combined-score alert: fires because this signal already cleared the same bar
-    // that put it in the Dilip OI tab (frontend only calls this endpoint for signals
-    // already in S.signals, so this is always true — kept as a defensive check).
-    if (score >= MIN_CONFIDENCE && verdict !== "AVOID" && verdict !== "TRAP") {
-      await alertEngine.evaluateAndAlertAny({
-        symbol: sym, strike, side: typ, score, verdict, premium, spot,
-        suggestedTarget: x.suggestedTarget ?? null, exitLevel, holdZone, whyBuy
-      });
-    }
-
-    // Dual-generator: Dilip OI / Candle Confluence, independent of the combined score.
-    await alertEngine.evaluateDualGeneratorAlert({
-      symbol: sym, strike, side: typ, spot, premium,
-      oiVerdict, dilipFormula, dilipMinScore: MIN_CONFIDENCE, dilipScore: oiScore,
-      candleConfluenceScore: candleConfluence?.score ?? null,
-      candleDirection: candleConfluence?.direction ?? null
-    });
-
-    res.json({status: true});
-  } catch (e) {
-    log(`[ALERT] /telegram-alert error: ${e.message}`, "WARN");
-    res.json({status: false, error: e.message});
-  }
-});
 
 setInterval(runServerScan, 25000);
 
