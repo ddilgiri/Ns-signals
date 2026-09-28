@@ -244,42 +244,33 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
   // support), 0 = no chain data passed or the two sides are roughly balanced.
   const oiVoteVal = typeof oiVote === 'number' ? Math.max(-1, Math.min(1, oiVote)) : 0;
 
-  // Vote 5 (2026-09-28, user report: "u projected 17/17 all red -- check logic",
-  // real ZYDUS/AXIS sessions were genuinely mixed): pseudo-random noise + mild
-  // mean-reversion term. Without this, momentumVote/emaVote/vwapVote all read
-  // off the SAME self-generated projected series once real candles run out --
-  // a red projected candle makes momentum vote red again, pulls EMA down, drags
-  // price under VWAP, which then also votes red -- a feedback loop with nothing
-  // to break it, so 20 steps out it's mechanically 20/0 regardless of the real
-  // setup. Real 15m candles are never that clean; this restores natural chop:
-  //  (a) noiseVote: seeded pseudo-random -1/0/+1 (deterministic per stepIndex, so
-  //      re-running the same research call gives the same table, not a different
-  //      one every click) -- represents ordinary intra-session noise no model
-  //      can predict.
-  //  (b) reversionPull: grows with how far the drift has already carried price
-  //      (steps get later -> reversion strengthens), pulling AGAINST the existing
-  //      trend to counter the feedback loop above -- real trends pause/pull back,
-  //      they don't run in a dead straight line for 20 bars.
-  // Two independent LCG draws (different multiplier/seed pair) so noiseVote
-  // isn't correlated step-to-step -- one weak seed alone tended to repeat the
-  // same -1/0/+1 pattern across nearby steps.
+  // Vote 5 (2026-09-28, tuned twice same day per user reports: first "17/17 all
+  // red", then after a fix "don't make all neutral -- prediction needed, u did
+  // AXIS/ZYDUS, recall that"). Two failure modes to balance:
+  //  (1) No noise/reversion at all -> momentumVote/emaVote/vwapVote all read off
+  //      the model's OWN prior projected candles once real data runs out, a
+  //      feedback loop that mechanically locks 20/0 one color regardless of setup.
+  //  (2) Reversion too strong/uncapped -> cancels the real trend entirely, output
+  //      degenerates into a long NEUTRAL tail with no directional call at all --
+  //      equally useless, the opposite failure. A prediction that gives up isn't
+  //      a prediction.
+  // Fix: noise is now MILD (small amplitude, doesn't override a real trend read)
+  // and reversion is a PERIODIC pullback (fires every ~5th step, one candle,
+  // then trend resumes) rather than a permanently growing drag -- mirrors how a
+  // real intraday trend actually behaves: mostly continues, with occasional
+  // pauses/pullbacks, not a dead straight line AND not cancelled into flatness.
   const seedA = ((stepIndex || 0) * 9301 + 49297) % 233280;
-  const seedB = ((stepIndex || 0) * 48271 + 12345) % 2147483647;
-  const noiseRand = ((seedA / 233280) + (seedB / 2147483647)) / 2; // deterministic pseudo-random 0..1
-  // Wider bands (was 0.3/0.7 -- too rarely fired against a strong prior drift)
-  // -- noise now fires on ~50% of steps, genuinely breaking up long runs.
-  const noiseVote = noiseRand < 0.35 ? -1 : noiseRand > 0.65 ? 1 : 0;
+  const noiseRand = seedA / 233280; // deterministic pseudo-random 0..1
+  const noiseVote = noiseRand < 0.15 ? -1 : noiseRand > 0.85 ? 1 : 0; // fires ~30% of steps, mild
   const priorDrift = emaVote + vwapVote + momentumVote + oiVoteVal;
-  // Reversion grows faster and starts sooner (was step>3, 0.08/step -- too weak
-  // to ever flip the sign against a persistent EMA/VWAP read). Now strong enough
-  // that by ~6-7 steps into an unbroken run, reversion + noise can outweigh the
-  // trend votes and produce a genuine pullback candle.
-  const reversionPull = typeof stepIndex === 'number' && stepIndex > 1
-    ? -Math.sign(priorDrift) * Math.min(2, (stepIndex - 1) * 0.22)
-    : 0;
+  // Periodic pullback: every 5th step (index 4, 9, 14...) gets ONE candle's worth
+  // of counter-trend pull, sized to roughly offset (not overwhelm) the trend
+  // votes -- a pause/pullback candle, not a permanent reversal signal.
+  const isPullbackStep = typeof stepIndex === 'number' && stepIndex > 0 && stepIndex % 5 === 4;
+  const reversionPull = isPullbackStep && priorDrift !== 0 ? -Math.sign(priorDrift) * 1.5 : 0;
 
-  const voteCount = 3 + (oiVoteVal !== 0 ? 1 : 0) + 1 + (reversionPull !== 0 ? 1.5 : 0);
-  const drift = priorDrift + noiseVote + reversionPull; // widened range, self-correcting
+  const voteCount = 3 + (oiVoteVal !== 0 ? 1 : 0) + (reversionPull !== 0 ? 1.5 : 0.3);
+  const drift = priorDrift + noiseVote + reversionPull;
   const confidence = Math.abs(drift) / voteCount;
 
   const rangeATR = typeof atr === 'number' && atr > 0 ? atr : (cur.high - cur.low) || cur.close * 0.003;

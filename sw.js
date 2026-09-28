@@ -1,11 +1,9 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v157'; // bumped 2026-09-28 -- FIX: projection was mechanically
-// 17/17 or 20/0 one color -- momentumVote/emaVote/vwapVote all fed off the
-// model's OWN prior projected candles (feedback loop with no natural ceiling).
-// Added: momentum vote caps after a 4-candle run, seeded noise vote, and a
-// reversion pull that strengthens the further an unbroken run goes -- restores
-// realistic chop (verified: 4-13, 6-13, 11-9 splits across test scenarios,
-// no longer a monotonic wall of one color).
+const CACHE = 'fno-v158'; // bumped 2026-09-28 -- Re-tuned projection noise/
+// reversion: previous fix over-corrected into a long NEUTRAL tail (no real
+// prediction). Now a clean directional call (17/17, 20/20) with periodic
+// 1-candle pullbacks every ~5th step -- prediction stays confident, not
+// flattened out, matching the AXIS/ZYDUS validation behavior.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {
