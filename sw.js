@@ -1,9 +1,9 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v153'; // bumped 2026-09-28 -- Best Strike/Caution now fall back
-// to the candle projection verdict when OI-scenario is GREY (was previously
-// disconnected -- projection could say strong BEARISH while Best Strike still
-// said "No trade"). Projection also now takes a 4th vote from real OI chain
-// writer/buyer bias (CE vs PE oiChangePct), not just price technicals.
+const CACHE = 'fno-v154'; // bumped 2026-09-28 -- Session candle projection now uses
+// a DYNAMIC real-candle count (however many 15m candles actually exist at
+// research time -- 5 at 10:25, 14 at 12:50, etc) instead of a fixed 3, and only
+// projects the remaining slots to 3:00 PM. More real data -> fewer projected
+// candles -> less all-red/all-green bias.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

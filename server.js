@@ -940,11 +940,14 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
 
-// Session-candle forward projection (2026-09-28, user request, Research tab only):
-// "if I enter a stock after 9:45 (3 real 15m candles exist), take those 3 real
-// candles and project the rest of the session (23 candles total, 9:15-3:00 PM ->
-// 3 real + 20 projected), then say bullish/bearish based on majority of green vs
-// red among the projected candles." Reads the SAME today's-candles array
+// Session-candle forward projection (2026-09-28, user request, Research tab only,
+// updated same day to use a DYNAMIC real-candle count -- "if I ask at 10:25 u'll
+// get 5 real candles, if I ask at 12:50 u'll get 14 real -- helps bcoz all chart
+// not always red or green, its mix, u'll get more prediction"): takes however
+// many real 15m candles exist today at request time (minimum 3, so available
+// ~9:45 AM onward) and projects only the remaining slots to the 3:00 PM candle
+// (23 total session slots, 9:15-3:00 PM). Verdict = majority of green vs red
+// among the PROJECTED candles only. Reads the SAME today's-candles array
 // /market-bias just cached (BIAS_CACHE[symbolToken].todayCandles) -- zero new
 // Angel API calls, since Research already calls /signal-analysis (which calls
 // /market-bias) right before this. If the cache is somehow empty (bias never

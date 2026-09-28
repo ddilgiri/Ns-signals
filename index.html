@@ -3081,7 +3081,7 @@ function renderResearchResult(sym, spot, spotPrevClose, oiResult, ceData, peData
       var pvBg = pv === 'BULLISH' ? 'rgba(34,197,94,.08)' : pv === 'BEARISH' ? 'rgba(239,68,68,.08)' : 'rgba(245,158,11,.08)';
       var pvIcon = pv === 'BULLISH' ? '📈' : pv === 'BEARISH' ? '📉' : '➖';
       html += '<div style="margin:0 13px 10px;background:' + pvBg + ';border:1px solid ' + pvColor + '40;border-radius:10px;padding:10px 14px">';
-      html += '<div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🕯️ Session Candle Projection (3 real + ' + projection24.candles.length + ' projected, 9:15–3:00)</div>';
+      html += '<div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🕯️ Session Candle Projection (' + (projection24.realCount || 3) + ' real + ' + projection24.candles.length + ' projected, 9:15–3:00)</div>';
       html += '<div style="font-size:16px;font-weight:900;color:' + pvColor + '">' + pvIcon + ' ' + pv + '</div>';
       html += '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + projection24.greenCount + ' green vs ' + projection24.redCount + ' red projected candles (majority vote)</div>';
       html += '</div>';

@@ -265,28 +265,42 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVo
 }
 
 /**
- * projectSessionCandles (2026-09-28, user request): "if I enter a stock after 9:45
- * (3 real 15m candles exist), take those 3 real OHLC candles and project the rest
- * of the session. Based on that, say bullish/bearish -- that is research." A full
- * NSE session (9:15-3:00, one 15m candle per slot, stopping at the 3:00 PM candle
- * rather than continuing to 3:15/3:30) is 23 candle slots total -- 3 real + 20
- * projected, per explicit user confirmation. This chains projectNextCandle()
- * forward: each projected candle becomes an input for projecting the one after
- * it, same inputs recomputed from the growing series each step (EMA20/50, ATR,
- * VWAP-drift proxy, volRatio decaying toward 1 as we get further from real data).
- * Zero new API calls -- runs entirely on the real candle array already fetched.
+ * projectSessionCandles (2026-09-28, updated same day per user request: "instead of
+ * projection all 20.. take real candle data.. if I ask at 10:25 u'll get 5 real
+ * candles, if I ask at 12:50 u'll get 14 real candles.. so it helps bcoz all chart
+ * not always red or green, its mix -- u'll get more prediction"). The real-candle
+ * count is now DYNAMIC, taken from however many 15m candles actually exist today
+ * at the moment Research is run -- NOT a fixed 3. Only the remaining slots to the
+ * 3:00 PM candle are projected, so the later in the session you research, the more
+ * real (genuinely mixed, not synthetic) candles anchor the read and the fewer are
+ * projected. A full NSE session (9:15-3:00, one 15m candle per slot, stopping at
+ * the 3:00 PM candle rather than continuing to 3:15/3:30) is 23 candle slots total.
+ * Minimum real candles to attempt a projection stays at 3 (per original spec --
+ * "after 9:45").
  *
- * Verdict: majority vote across the 20 projected candles (more green -> BULLISH,
- * more red -> BEARISH, tie -> NEUTRAL), per explicit user choice over a simple
+ * This chains projectNextCandle() forward: each projected candle becomes an input
+ * for projecting the one after it, same inputs recomputed from the growing series
+ * each step (EMA20/50, ATR, VWAP-drift proxy, volRatio decaying toward 1 as we get
+ * further from real data). Zero new API calls -- runs entirely on the real candle
+ * array already fetched.
+ *
+ * Verdict: majority vote across the projected candles (more green -> BULLISH, more
+ * red -> BEARISH, tie -> NEUTRAL), per explicit user choice over a simple
  * last-candle-close-vs-first-candle-open comparison.
  */
 const SESSION_TOTAL_CANDLES = 23; // 9:15 through the 3:00 PM candle, 15m each
-const PROJECTED_CANDLES = SESSION_TOTAL_CANDLES - 3; // 3 real candles already exist
+const MIN_REAL_CANDLES = 3; // minimum real candles required to attempt a projection
 
 function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, oiVote } = {}) {
-  if (!rawCandles || rawCandles.length < 3) {
-    return { candles: [], verdict: 'NEUTRAL', greenCount: 0, redCount: 0, gate: 'INSUFFICIENT_DATA' };
+  if (!rawCandles || rawCandles.length < MIN_REAL_CANDLES) {
+    return { candles: [], verdict: 'NEUTRAL', greenCount: 0, redCount: 0, gate: 'INSUFFICIENT_DATA', realCount: rawCandles ? rawCandles.length : 0 };
   }
+  // Real candle count is whatever actually exists today, capped at the session
+  // total (defensive -- shouldn't exceed 23 in practice). Remaining slots to
+  // 3:00 PM get projected -- fewer as the day goes on and more real data exists.
+  const realCount = Math.min(rawCandles.length, SESSION_TOTAL_CANDLES);
+  const projectedCount = Math.max(0, SESSION_TOTAL_CANDLES - realCount);
+
   // Work on a growing plain-OHLCV array in the same [time,open,high,low,close,volume]
   // shape projectNextCandle expects, so each iteration can reuse it unmodified.
   const series = rawCandles.map(r => r.slice ? r.slice() : r);
@@ -299,13 +313,18 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, 
   const projected = [];
   let greenCount = 0, redCount = 0;
 
-  for (let step = 0; step < PROJECTED_CANDLES; step++) {
+  for (let step = 0; step < projectedCount; step++) {
     // Volatility decays toward a calmer baseline the further out we project --
     // projecting a full session on today's opening-15-min ATR alone would
     // overstate the range; a mild decay keeps later candles' range realistic.
     // Scaled to reach the floor (0.5x / 0.3x) by the last of the 20 steps.
-    const decayedAtr = baseAtr != null ? baseAtr * Math.max(0.5, 1 - step * 0.025) : null;
-    const decayedVolRatio = typeof volRatio === 'number' ? 1 + (volRatio - 1) * Math.max(0.3, 1 - step * 0.035) : 1;
+    // Decay rate scaled to the actual number of projected steps (was hardcoded
+    // for a fixed 20 -- now projectedCount varies with how late in the session
+    // Research is run), so the floor (0.5x atr / 0.3x volRatio pull) is still
+    // reached by the LAST projected step regardless of how many there are.
+    const decayFrac = projectedCount > 1 ? step / (projectedCount - 1) : 0;
+    const decayedAtr = baseAtr != null ? baseAtr * Math.max(0.5, 1 - decayFrac * 0.5) : null;
+    const decayedVolRatio = typeof volRatio === 'number' ? 1 + (volRatio - 1) * Math.max(0.3, 1 - decayFrac * 0.7) : 1;
 
     // OI writer/buyer bias does NOT decay like ATR/volRatio -- a strike's written
     // wall/floor stays in place for the rest of the session unless the chain is
@@ -332,7 +351,7 @@ function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio, 
   }
 
   const verdict = greenCount > redCount ? 'BULLISH' : redCount > greenCount ? 'BEARISH' : 'NEUTRAL';
-  return { candles: projected, verdict, greenCount, redCount, gate: projected.length === PROJECTED_CANDLES ? 'COMPLETE' : 'PARTIAL' };
+  return { candles: projected, verdict, greenCount, redCount, realCount, projectedCount, gate: projected.length === projectedCount ? 'COMPLETE' : 'PARTIAL' };
 }
 
 module.exports = { computeCandleConfluence, closeStrength, projectNextCandle, projectSessionCandles };
