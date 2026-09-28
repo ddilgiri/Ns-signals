@@ -1,9 +1,8 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v155'; // bumped 2026-09-28 -- FIX: VWAP was frozen at the real
-// session's VWAP for every projected candle (never rolled forward like EMA20/50
-// were), so once price projected away from it the VWAP-vote kept firing the SAME
-// direction every step, self-reinforcing an artificial monotonic red/green run.
-// VWAP now rolls forward with each projected candle's typical price, same as EMA.
+const CACHE = 'fno-v156'; // bumped 2026-09-28 -- Research tab candle table now
+// shows the REAL today's OHLC candles first (marked REAL, untouched actual data),
+// then the PROJECTED candles (marked PROJ) continuing the same step numbering --
+// previously only projected candles were shown, real ones were invisible.
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

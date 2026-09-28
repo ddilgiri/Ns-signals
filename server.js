@@ -965,7 +965,13 @@ app.post("/candle-projection-session",(e,t)=>{
   // projection as a persistent 4th vote alongside EMA/VWAP/momentum.
   const oiVoteNum=typeof v==="number"&&!isNaN(v)?Math.max(-1,Math.min(1,v)):0;
   const result=projectSessionCandles(cached.todayCandles,{vwap:cached.vwap,ema20:cached.ema20,ema50:cached.ema50,atr:cached.atr,volRatio:cached.volRatio,oiVote:oiVoteNum});
-  t.json({status:!0,...result});
+  // realCandles (2026-09-28, user request: "real candle should be real ohlc
+  // correct") -- the actual today's OHLC as fetched from Angel One, UNTOUCHED
+  // by any projection math, so the Research tab can show exactly what really
+  // happened today before showing what's projected. Same array the projection
+  // itself reads from (cached.todayCandles), just formatted for display.
+  const realCandles=cached.todayCandles.map(r=>({time:r[0],open:parseFloat(r[1]),high:parseFloat(r[2]),low:parseFloat(r[3]),close:parseFloat(r[4]),volume:parseFloat(r[5])||0}));
+  t.json({status:!0,realCandles,...result});
 });
 
 // Real feature (2026-09-05): added imi:8 -- per user's own research confirming IMI is
