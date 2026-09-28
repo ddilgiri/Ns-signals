@@ -1,6 +1,6 @@
 const express=require("express"),cors=require("cors"),axios=require("axios"),speakeasy=require("speakeasy"),fs=require("fs"),path=require("path"),app=express(),PORT=process.env.PORT||3001;
 const nanaLogic=require("./nanaLogic.js");
-const{computeCandleConfluence,projectNextCandle}=require("./candleConfluence.js");
+const{computeCandleConfluence,projectNextCandle,projectSessionCandles}=require("./candleConfluence.js");
 app.use(cors({origin:"*"})),app.use(express.json({limit:"10mb"})),app.use(express.static(__dirname));
 
 const SESSION={jwtToken:"",refreshToken:"",feedToken:"",apiKey:"",clientCode:"",expiresAt:0};
@@ -774,7 +774,7 @@ app.post("/market-bias",async(e,t)=>{
 const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseFloat(c[5]),0)/Math.max(recentCandles.length,1);const priceUp=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])>parseFloat(recentCandles[0][4]);const priceDown=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])<parseFloat(recentCandles[0][4]);const volMatch=L>=1.2&&((f==="BULLISH"&&priceUp)||(f==="BEARISH"&&priceDown));const volFake=L>=1.2&&((f==="BULLISH"&&priceDown)||(f==="BEARISH"&&priceUp));
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
-const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,candleProjection:CANDLE_PROJECTION,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now()},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
+const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,candleProjection:CANDLE_PROJECTION,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now(),todayCandles:k,ema20:h,ema50:S,vwap:H,atr:M,volRatio:L},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -939,6 +939,26 @@ const gbResult=detectGammaBlast({spotPrice:l,atmStrike:S,atmCeOI:P.CE_oi||0,atmP
   saveOISnapshot(i, oiResult);
   log(`OI ${i}: PCR=${w} OIRec=${se} Score=${ne} Formula=${q} ExpiryWk=${exInfo.isNSEExpiryWeek}`,"INFO");
   t.json(oiResult)}catch(we){const be=we.response?.data?.message||we.message;log(`OI analysis error: ${be}`,"WARN"),t.status(500).json({status:!1,message:be})}})
+
+// Session-candle forward projection (2026-09-28, user request, Research tab only):
+// "if I enter a stock after 9:45 (3 real 15m candles exist), take those 3 real
+// candles and project the rest of the session (23 candles total, 9:15-3:00 PM ->
+// 3 real + 20 projected), then say bullish/bearish based on majority of green vs
+// red among the projected candles." Reads the SAME today's-candles array
+// /market-bias just cached (BIAS_CACHE[symbolToken].todayCandles) -- zero new
+// Angel API calls, since Research already calls /signal-analysis (which calls
+// /market-bias) right before this. If the cache is somehow empty (bias never
+// fetched for this token), returns INSUFFICIENT_DATA rather than fetching itself.
+app.post("/candle-projection-session",(e,t)=>{
+  const{symbolToken:a}=e.body||{};
+  if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
+  const cached=BIAS_CACHE[a];
+  if(!cached||!cached.todayCandles||cached.todayCandles.length<3){
+    return t.json({status:!0,candles:[],verdict:"NEUTRAL",greenCount:0,redCount:0,gate:"INSUFFICIENT_DATA",message:"Need at least 3 real 15m candles today (available after ~9:45 AM) -- run Research again once market has been open a bit."});
+  }
+  const result=projectSessionCandles(cached.todayCandles,{vwap:cached.vwap,ema20:cached.ema20,ema50:cached.ema50,atr:cached.atr,volRatio:cached.volRatio});
+  t.json({status:!0,...result});
+});
 
 // Real feature (2026-09-05): added imi:8 -- per user's own research confirming IMI is
 // genuinely recommended specifically for intraday options trading (unlike RSI which is
@@ -1326,29 +1346,14 @@ app.post("/signal-analysis",async(e,t)=>{
     C="WEAK";
     O=`Score reached ${E>=75?"STRONG":"MODERATE"} level but candle-structure confluence is only ${S.candleConfluence.score}% (needs 50%+) -- capped at WEAK, structural reliability too low to trust this score`;
   }
-  // Real feature (2026-09-27): candle-confluence CONFIRMATION flag -- Dilip formula
-  // (S.dilipFormula, CE/PE) stays the primary trigger, unchanged. This is a second,
-  // independent generator: when candle-confluence score >=90% AND its own directional
-  // lean agrees with what Dilip formula already called, both generators agree --
-  // flagged as a confirmed/double-generator signal on the card. Does NOT change the
-  // verdict tier itself (STRONG/MODERATE/WEAK/AVOID) or override any gate above --
-  // purely an additional confirmation badge on top of the existing trigger.
-  // 2026-09-28: switched from the retrospective confluence score to the forward
-  // projection -- confirmation now means the PROJECTED next candle agrees with
-  // Dilip formula's call, not that past candles looked clean.
-  let candleConfirmsFormula=false, candleConfirmNote=null;
-  if(S.candleProjection && S.candleProjection.bias && S.candleProjection.bias!=="NEUTRAL" && (S.candleProjection.confidence||0)>=0.67){
-    const formulaSide=S.dilipFormula==="CE"?"BULLISH":S.dilipFormula==="PE"?"BEARISH":null;
-    if(formulaSide && S.candleProjection.bias===formulaSide){
-      candleConfirmsFormula=true;
-      candleConfirmNote=`Projected next candle (${S.candleProjection.bias}, confidence ${Math.round((S.candleProjection.confidence||0)*100)}%) confirms Dilip formula ${S.dilipFormula} -- two independent generators agree`;
-    }
-  }
+  // candleConfirmsFormula removed (2026-09-28): the Candle Confluence generator no
+  // longer drives anything in the Signals tab -- candleProjection now only powers
+  // the Research tab's 23-candle session projection.
   let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
   log(`Signal ${s} ${i}: score=${E} verdict=${C} VIX=${S.vixValue} RSI=${S.rsi} bias=${S.bias}`,"INFO");
-  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms,candleConfirmsFormula,candleConfirmNote});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
+  (()=>{let safeS={};try{const j=JSON.stringify(S);safeS=JSON.parse(j);}catch(e){Object.keys(S).forEach(k=>{try{JSON.stringify(S[k]);safeS[k]=S[k];}catch(e){}});}t.json({status:!0,sym:s,type:i,score:E,totalEarned:f,totalPossible:I,verdict:C,actionNote:O,hardBlock:A,hardBlockReason:A?k:null,breakdown:N,reasons:b,warnings:_,...safeS,suggestedStop:T,suggestedTarget:y,riskReward:w,signalId,oiTrend,marketStatus:ms});})()}catch(e){log(`signal-analysis error: ${e.message} | ${e.stack?.split('\n')[1]||''}`,"ERR");try{t.status(500).json({status:!1,message:e.message});}catch(re){}}})
 
 app.get("/gainers",async(e,t)=>{if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});try{const a=await axios.get(`${ANGEL_API}/rest/secure/angelbroking/marketData/v1/gainersAndLosers`,{params:e.query,headers:getHeaders(!0),timeout:15e3});t.json(a.data)}catch(e){const a=e.response?.data?.message||e.message;t.status(500).json({status:!1,message:a})}})
 

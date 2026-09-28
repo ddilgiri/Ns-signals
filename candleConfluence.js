@@ -198,7 +198,10 @@ function computeCandleConfluence(rawCandles, { vwap, macdHist, sectorPeersUp, se
  *     (0, 0.33, 0.67, or 1 -- how many of the 3 independent votes agreed).
  */
 function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {}) {
-  if (!rawCandles || rawCandles.length < 4) {
+  // 3 candles is the stated minimum (e.g. entering a stock just after 9:45, once
+  // the first three 15m candles of the session exist) -- momentum-streak and
+  // structure reads below only need 2 candles at minimum anyway.
+  if (!rawCandles || rawCandles.length < 3) {
     return { projected: null, bias: 'NEUTRAL', confidence: 0, gate: 'INSUFFICIENT_DATA' };
   }
   const candles = rawCandles.map(toCandle);
@@ -251,4 +254,72 @@ function projectNextCandle(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {
   };
 }
 
-module.exports = { computeCandleConfluence, closeStrength, projectNextCandle };
+/**
+ * projectSessionCandles (2026-09-28, user request): "if I enter a stock after 9:45
+ * (3 real 15m candles exist), take those 3 real OHLC candles and project the rest
+ * of the session. Based on that, say bullish/bearish -- that is research." A full
+ * NSE session (9:15-3:00, one 15m candle per slot, stopping at the 3:00 PM candle
+ * rather than continuing to 3:15/3:30) is 23 candle slots total -- 3 real + 20
+ * projected, per explicit user confirmation. This chains projectNextCandle()
+ * forward: each projected candle becomes an input for projecting the one after
+ * it, same inputs recomputed from the growing series each step (EMA20/50, ATR,
+ * VWAP-drift proxy, volRatio decaying toward 1 as we get further from real data).
+ * Zero new API calls -- runs entirely on the real candle array already fetched.
+ *
+ * Verdict: majority vote across the 20 projected candles (more green -> BULLISH,
+ * more red -> BEARISH, tie -> NEUTRAL), per explicit user choice over a simple
+ * last-candle-close-vs-first-candle-open comparison.
+ */
+const SESSION_TOTAL_CANDLES = 23; // 9:15 through the 3:00 PM candle, 15m each
+const PROJECTED_CANDLES = SESSION_TOTAL_CANDLES - 3; // 3 real candles already exist
+
+function projectSessionCandles(rawCandles, { vwap, ema20, ema50, atr, volRatio } = {}) {
+  if (!rawCandles || rawCandles.length < 3) {
+    return { candles: [], verdict: 'NEUTRAL', greenCount: 0, redCount: 0, gate: 'INSUFFICIENT_DATA' };
+  }
+  // Work on a growing plain-OHLCV array in the same [time,open,high,low,close,volume]
+  // shape projectNextCandle expects, so each iteration can reuse it unmodified.
+  const series = rawCandles.map(r => r.slice ? r.slice() : r);
+  const baseCandles = series.map(toCandle);
+  let runningEma20 = typeof ema20 === 'number' ? ema20 : baseCandles[baseCandles.length - 1].close;
+  let runningEma50 = typeof ema50 === 'number' ? ema50 : baseCandles[baseCandles.length - 1].close;
+  const runningVwap = typeof vwap === 'number' ? vwap : baseCandles[baseCandles.length - 1].close;
+  const baseAtr = typeof atr === 'number' && atr > 0 ? atr : null;
+
+  const projected = [];
+  let greenCount = 0, redCount = 0;
+
+  for (let step = 0; step < PROJECTED_CANDLES; step++) {
+    // Volatility decays toward a calmer baseline the further out we project --
+    // projecting a full session on today's opening-15-min ATR alone would
+    // overstate the range; a mild decay keeps later candles' range realistic.
+    // Scaled to reach the floor (0.5x / 0.3x) by the last of the 20 steps.
+    const decayedAtr = baseAtr != null ? baseAtr * Math.max(0.5, 1 - step * 0.025) : null;
+    const decayedVolRatio = typeof volRatio === 'number' ? 1 + (volRatio - 1) * Math.max(0.3, 1 - step * 0.035) : 1;
+
+    const next = projectNextCandle(series, {
+      vwap: runningVwap, ema20: runningEma20, ema50: runningEma50,
+      atr: decayedAtr, volRatio: decayedVolRatio,
+    });
+    if (!next.projected) break;
+
+    const p = next.projected;
+    const isGreen = p.close >= p.open;
+    if (isGreen) greenCount++; else redCount++;
+    projected.push({ step: step + 1, ...p, bias: next.bias, confidence: next.confidence });
+
+    // Append this projected candle to the series so the NEXT iteration's EMA/streak
+    // reads see it, same as a real candle would arrive in a live series.
+    series.push([`proj-${step + 1}`, p.open, p.high, p.low, p.close, 0]);
+    // Roll EMA20/EMA50 forward one step with the projected close (standard EMA
+    // recurrence), so trend context drifts realistically across the 24 steps.
+    const k20 = 2 / 21, k50 = 2 / 51;
+    runningEma20 = p.close * k20 + runningEma20 * (1 - k20);
+    runningEma50 = p.close * k50 + runningEma50 * (1 - k50);
+  }
+
+  const verdict = greenCount > redCount ? 'BULLISH' : redCount > greenCount ? 'BEARISH' : 'NEUTRAL';
+  return { candles: projected, verdict, greenCount, redCount, gate: projected.length === PROJECTED_CANDLES ? 'COMPLETE' : 'PARTIAL' };
+}
+
+module.exports = { computeCandleConfluence, closeStrength, projectNextCandle, projectSessionCandles };
