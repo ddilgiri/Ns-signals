@@ -3564,10 +3564,10 @@ function _buildMonitorNarration(pos) {
   var headline = B(pos.sym + ' ' + pos.strike + pos.side) + ' — ';
   if (livePrem != null) {
     var pnlPerUnit = pnlNum;
-    var pnlLot = pnlNum * pos.lot;
+    var pnlLot = pnlNum * pos.lot * (pos.lots || 1);
     var pnlPctN = pos.entry > 0 ? (pnlNum / pos.entry * 100) : 0;
     var pnlSign = pnlPerUnit >= 0 ? '+' : '';
-    var ltpVsEntry = '₹' + livePrem.toFixed(2) + ' (' + pnlSign + '₹' + pnlPerUnit.toFixed(2) + ' from entry · ' + pnlSign + '₹' + Math.abs(pnlLot).toFixed(0) + ' lot P&L · ' + (pnlPctN > 0 ? '+' : '') + pnlPctN.toFixed(1) + '%)';
+    var ltpVsEntry = '₹' + livePrem.toFixed(2) + ' (' + pnlSign + '₹' + pnlPerUnit.toFixed(2) + ' from entry · ' + pnlSign + '₹' + Math.abs(pnlLot).toFixed(0) + ' P&L · ' + (pnlPctN > 0 ? '+' : '') + pnlPctN.toFixed(1) + '%)';
     headline += pnlPerUnit >= 0 ? G(ltpVsEntry) : R(ltpVsEntry);
   } else {
     headline += 'Entry ₹' + pos.entry.toFixed(2) + ' · live price loading…';
