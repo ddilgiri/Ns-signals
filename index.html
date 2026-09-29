@@ -3569,25 +3569,92 @@ function _buildMonitorNarration(pos) {
     exitWarning = '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 11px;margin-top:8px;font-size:11px;font-weight:700;color:var(--red)">⚠️ EXIT WATCH: OI unwinding at your ' + pos.strike + ' ' + pos.side + ' (OI chg ' + myOiChg.toFixed(1) + '%) — writers exiting, momentum fading.</div>';
   }
 
-  // ── Build final HTML ──
-  var html = '<div style="padding:10px 13px 4px;border-top:1px solid var(--border)">';
+  // ── Build story lines (single flowing narration, no character headers) ──
+  var lines = [];
 
-  // Header: position + premium P&L line
-  var premLine = '';
+  // Line 1: position headline with live premium + P&L
   if (livePrem) {
     var pnlSign = pnlNum >= 0 ? '+' : '';
     var pnlCol = pnlNum >= 0 ? 'var(--green)' : 'var(--red)';
-    premLine = '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">' + pos.sym + ' ' + pos.strike + pos.side + ' — ₹' + livePrem.toFixed(2) + ' <span style="color:' + pnlCol + '">(' + pnlSign + '₹' + (pnlNum !== null ? pnlNum.toFixed(2) : '—') + ' from entry)</span></div>';
+    lines.push('<b>' + pos.sym + ' ' + pos.strike + pos.side + '</b> — ₹' + livePrem.toFixed(2) + ' <span style="color:' + pnlCol + '">(' + pnlSign + '₹' + (pnlNum !== null ? Math.abs(pnlNum).toFixed(2) : '—') + (pnlNum !== null && pnlNum >= 0 ? ' profit' : ' loss') + ' from entry)</span>');
+  } else {
+    lines.push('<b>' + pos.sym + ' ' + pos.strike + pos.side + '</b> — Entry ₹' + pos.entry.toFixed(2));
   }
-  if (spotDesc) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">' + spotDesc + '</div>';
-  if (volLine)  html += '<div style="font-size:11px;color:var(--text2);margin-bottom:6px">' + volLine + '</div>';
-  if (premLine) html += premLine;
 
-  html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">📞 Ramesh (CE Chain)</div><div style="font-size:11px;line-height:1.7;color:var(--text2)">' + rameshText + '</div></div>';
-  html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">📉 Suresh (PE Chain)</div><div style="font-size:11px;line-height:1.7;color:var(--text2)">' + sureshText + '</div></div>';
-  html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">🧱 Mahesh (Wall/Floor)</div><div style="font-size:11px;line-height:1.7;color:var(--text2)">' + maheshText + '</div></div>';
-  html += '<div style="margin-bottom:4px"><div style="font-size:10px;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">⚡ Naresh (Urgency)</div><div style="font-size:11px;line-height:1.7;color:var(--text2)">' + nareshText + '</div></div>';
-  html += exitWarning;
+  // Line 2: spot movement
+  if (spotDesc) lines.push(spotDesc);
+
+  // Line 3: volume
+  if (volLine) lines.push(volLine);
+
+  // Line 4: wall/floor status
+  if (pos.side === 'PE' && peFloor) {
+    var peFloorRow = nearChain.find(function(c) { return c.strike === peFloor; });
+    var peFloorOiChg = peFloorRow ? peFloorRow.PE_oiChangePct : null;
+    var floorStatus = (typeof peFloorOiChg === 'number' && peFloorOiChg < -5) ? 'showing some unwinding — watch closely' : 'still holding steady, no major unwinding seen';
+    lines.push('<b>' + peFloor + ' Put wall</b> ' + floorStatus + '.');
+  } else if (pos.side === 'CE' && ceWall) {
+    var ceWallRow = nearChain.find(function(c) { return c.strike === ceWall; });
+    var ceWallOiChg = ceWallRow ? ceWallRow.CE_oiChangePct : null;
+    var wallStatus = (typeof ceWallOiChg === 'number' && ceWallOiChg < -5) ? 'resistance weakening — writers exiting' : 'resistance holding firm, no breakout pressure yet';
+    lines.push('<b>' + ceWall + ' Call wall</b> ' + wallStatus + '.');
+  }
+
+  // Line 5: PCR context
+  if (pcrLine) lines.push(pcrLine);
+
+  // Line 6: OI at user's strike
+  if (typeof myOiChg === 'number') {
+    if (oiUnwinding) {
+      lines.push('⚠️ OI unwinding at your <b>' + pos.strike + ' ' + pos.side + '</b> (' + myOiChg.toFixed(1) + '%) — writers exiting, momentum fading.');
+    } else if (oiBuilding) {
+      lines.push('OI building at your <b>' + pos.strike + ' ' + pos.side + '</b> (+' + myOiChg.toFixed(1) + '%) — writers adding, position strengthening.');
+    }
+  }
+
+  // Line 7: stop distance + verdict
+  var slLine = '';
+  if (livePrem) {
+    var distToSl = livePrem - slLevel;
+    if (livePrem <= slLevel) {
+      slLine = '🔴 <b>SL breached</b> — premium ₹' + livePrem.toFixed(2) + ' is below your ₹' + slLevel.toFixed(2) + ' stop. <b>Exit now.</b>';
+    } else if (livePrem <= pos.entry * 0.95) {
+      slLine = '🟠 Approaching stop — only ₹' + distToSl.toFixed(2) + ' buffer to SL (₹' + slLevel.toFixed(2) + '). Watch closely.';
+    } else {
+      slLine = 'Still well above your stop (SL ₹' + slLevel.toFixed(2) + ', buffer ₹' + distToSl.toFixed(2) + ') — range intact.';
+    }
+  } else {
+    slLine = 'SL level: ₹' + slLevel.toFixed(2) + ' (10% below entry).';
+  }
+  lines.push(slLine);
+
+  // Line 8: hold/exit call
+  if (oiUnwinding || (livePrem && livePrem <= slLevel)) {
+    lines.push('<b>Exit triggered.</b>');
+  } else if (livePrem && livePrem <= pos.entry * 0.95) {
+    lines.push('<b>No exit yet — but tighten watch.</b>');
+  } else {
+    lines.push('<b>Hold, no trigger hit.</b>');
+  }
+
+  // Line 9: what to watch next
+  if (pos.side === 'PE') {
+    var watchBelow = peFloor ? peFloor : (pos.strike - strikeGap);
+    var watchAbove = peFloor ? (peFloor + strikeGap) : pos.strike;
+    lines.push('Watching for either a break below <b>₹' + watchBelow + '</b> or a push back above <b>₹' + watchAbove + '</b>.');
+  } else {
+    var watchAboveCE = ceWall ? ceWall : (pos.strike + strikeGap);
+    var watchBelowCE = ceWall ? (ceWall - strikeGap) : pos.strike;
+    lines.push('Watching for either a push above <b>₹' + watchAboveCE + '</b> or a reversal below <b>₹' + watchBelowCE + '</b>.');
+  }
+
+  // ── Render as flowing paragraph lines ──
+  var html = '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">';
+  lines.forEach(function(line, i) {
+    var mt = i === 0 ? '0' : '5px';
+    html += '<div style="font-size:12px;line-height:1.7;color:var(--text2);margin-top:' + mt + '">' + line + '</div>';
+  });
+  if (exitWarning) html += exitWarning;
   html += '<div style="font-size:9px;color:var(--text3);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">Last updated: ' + (pos.lastFetch ? new Date(pos.lastFetch).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—') + '</div>';
   html += '</div>';
   return html;
