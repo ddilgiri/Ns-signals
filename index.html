@@ -3448,13 +3448,26 @@ function _buildMonitorNarration(pos) {
   var spotChgPct = (spot && pos.spotPrev && pos.spotPrev > 0)
                    ? ((spot - pos.spotPrev) / pos.spotPrev * 100) : 0;
 
-  // ── Detect chain-wide zero / flat OI (market closed or data not yet populated) ──
-  var totalOiAbs = 0, oiCount = 0;
+  // ── Detect first-cycle (all nulls) vs genuine flat (all ~0) ──
+  var totalOiAbs = 0, oiCount = 0, nullCount = 0, totalChainRows = 0;
   (chain || []).forEach(function(c) {
+    totalChainRows++;
     if (typeof c.CE_oiChangePct === 'number') { totalOiAbs += Math.abs(c.CE_oiChangePct); oiCount++; }
+    else nullCount++;
     if (typeof c.PE_oiChangePct === 'number') { totalOiAbs += Math.abs(c.PE_oiChangePct); oiCount++; }
+    else nullCount++;
   });
-  var chainIsFlat = oiCount > 0 && (totalOiAbs / oiCount) < 0.5; // avg change < 0.5% = flat/pre-market
+  var isFirstCycle = nullCount > oiCount; // majority null = server hasn't seen a prior cycle yet
+  var chainIsFlat  = !isFirstCycle && oiCount > 0 && (totalOiAbs / oiCount) < 0.5;
+
+  if (isFirstCycle) {
+    var fcSpot = spot ? ' Spot at ₹' + spot.toFixed(0) + '.' : '';
+    return '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">' +
+      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:5px">' + pos.sym + ' ' + pos.strike + pos.side + ' — first data cycle</div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.75">' + fcSpot + ' OI comparison needs two cycles to compute change%. This is the first fetch — server is building the baseline now.<br><br>Tap 🔄 in <b>30–60 seconds</b> to get the real narration once OI deltas are available.</div>' +
+      '<div style="font-size:9px;color:var(--text3);margin-top:9px;padding-top:6px;border-top:1px solid var(--border)">Last updated: ' + (pos.lastFetch ? new Date(pos.lastFetch).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—') + '</div></div>';
+  }
+
   if (chainIsFlat) {
     // Situational neutral narration — based on what little we know
     var neutralLines = [];
