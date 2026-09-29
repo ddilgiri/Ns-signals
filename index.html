@@ -3591,8 +3591,8 @@ function _buildMonitorNarration(pos) {
     nearChain.forEach(function(c) {
       var atm3 = Math.abs(c.strike - atmStrike) <= 3 * strikeGap;
       if (!atm3) return;
-      if (pos.side === 'CE' && typeof c.CE_volume === 'number') { volTotal += c.CE_volume; volRows++; }
-      else if (pos.side === 'PE' && typeof c.PE_volume === 'number') { volTotal += c.PE_volume; volRows++; }
+      if (pos.side === 'CE' && (typeof c.CE_vol === 'number' || typeof c.CE_volume === 'number')) { volTotal += (c.CE_vol || c.CE_volume || 0); volRows++; }
+      else if (pos.side === 'PE' && (typeof c.PE_vol === 'number' || typeof c.PE_volume === 'number')) { volTotal += (c.PE_vol || c.PE_volume || 0); volRows++; }
     });
     // Fallback: use sigData if chain has no volume
     if (volRows === 0 && sigData && sigData.breakdown) {
