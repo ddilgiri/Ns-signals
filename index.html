@@ -21,6 +21,7 @@
 <div style="display:flex;gap:7px;margin-bottom:10px">
 <input class="field-inp" id="monStrike" type="number" placeholder="Strike e.g. 810" style="flex:1;padding:9px 11px;font-size:13px" min="0" step="1">
 <input class="field-inp" id="monEntry" type="number" placeholder="Entry ₹ e.g. 18.65" style="flex:1;padding:9px 11px;font-size:13px" min="0" step="0.05">
+<input class="field-inp" id="monLots" type="number" placeholder="Lots" style="flex:0 0 58px;padding:9px 7px;font-size:13px;text-align:center" min="1" step="1" value="1">
 </div>
 <button class="btn-primary" onclick="addMonitorPosition()" style="padding:10px;font-size:13px">📌 Add &amp; Start Monitoring</button>
 </div></div>
@@ -3314,6 +3315,7 @@ function addMonitorPosition() {
   var side = document.getElementById('monSide').value;
   var strike = parseFloat(document.getElementById('monStrike').value);
   var entry = parseFloat(document.getElementById('monEntry').value);
+  var lots = parseInt(document.getElementById('monLots').value) || 1;
   if (!sym) { toast('⚠️ Enter symbol'); return; }
   if (!strike || strike <= 0) { toast('⚠️ Enter valid strike'); return; }
   if (!entry || entry <= 0) { toast('⚠️ Enter entry premium'); return; }
@@ -3329,7 +3331,7 @@ function addMonitorPosition() {
 
   var pos = {
     id: sym + '_' + side + '_' + strike + '_' + Date.now(),
-    sym: sym, token: stockMeta.token, lot: stockMeta.lot || 1,
+    sym: sym, token: stockMeta.token, lot: stockMeta.lot || 1, lots: lots,
     side: side, strike: strike, entry: entry,
     addedAt: Date.now(), lastFetch: 0,
     spot: null, spotPrev: null,
@@ -3343,6 +3345,7 @@ function addMonitorPosition() {
   document.getElementById('monSym').value = '';
   document.getElementById('monStrike').value = '';
   document.getElementById('monEntry').value = '';
+  document.getElementById('monLots').value = '1';
 
   renderMonitorList();
   // Immediately fetch data for this new position
@@ -3771,7 +3774,8 @@ function _buildMonitorNarration(pos) {
 function _updateMonitorCardLive(pos) {
   var livePrem = _getMonLivePrem(pos) || null;
   if (!livePrem) return;
-  var pnl = pos.entry > 0 ? (livePrem - pos.entry) * pos.lot : 0;
+  var _lots2 = pos.lots || 1;
+  var pnl = pos.entry > 0 ? (livePrem - pos.entry) * pos.lot * _lots2 : 0;
   var pnlPct = pos.entry > 0 ? ((livePrem - pos.entry) / pos.entry * 100) : 0;
   var mood = _monMood(livePrem, pos.entry);
 
@@ -3794,7 +3798,7 @@ function _updateMonitorCardLive(pos) {
   var pnlEl = document.getElementById('mon-pnl-' + pos.id);
   if (pnlEl) {
     var sign = pnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + '₹' + pnl.toFixed(0);
+    pnlEl.textContent = sign + '₹' + pnl.toFixed(0) + (_lots2 > 1 ? ' ×' + _lots2 : '');
     pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
   }
 
@@ -3819,7 +3823,8 @@ function _renderMonitorCard(pos) {
   if (!container) return;
 
   var livePrem = _getMonLivePrem(pos) || null;
-  var pnl = (livePrem && pos.entry > 0) ? (livePrem - pos.entry) * pos.lot : null;
+  var _lots = pos.lots || 1;
+  var pnl = (livePrem && pos.entry > 0) ? (livePrem - pos.entry) * pos.lot * _lots : null;
   var pnlPct = (livePrem && pos.entry > 0) ? ((livePrem - pos.entry) / pos.entry * 100) : null;
   var mood = _monMood(livePrem, pos.entry);
   var sideColor = pos.side === 'CE' ? 'var(--green)' : 'var(--red)';
@@ -3827,7 +3832,7 @@ function _renderMonitorCard(pos) {
   var spotChg = (spotLive && pos.spotPrev > 0) ? ((spotLive - pos.spotPrev) / pos.spotPrev * 100) : 0;
   var staleMin = pos.lastFetch ? Math.floor((Date.now() - pos.lastFetch) / 60000) : null;
   var staleTag = staleMin !== null ? (staleMin < 2 ? 'just now' : staleMin + 'm ago') : 'not fetched';
-  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0) + ' (' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%)') : '—';
+  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0) + (_lots > 1 ? ' ×' + _lots : '')) : '—';
   var pnlColor = pnl === null ? 'var(--text3)' : pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
   var borderColor = pos.side === 'CE' ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)';
@@ -3882,6 +3887,7 @@ function _renderMonitorCard(pos) {
   html += _buildMonitorNarration(pos);
   html += '</div>';
   html += '<div style="padding:7px 13px;cursor:pointer;font-size:10px;font-weight:700;color:var(--blue);text-align:center" onclick="_toggleMonNarration(\'' + pos.id + '\')" id="mon-tap-' + pos.id + '">' + (pos.narrationExpanded ? '▲ Hide analysis' : '▼ Tap for Ramesh/Suresh/Mahesh/Naresh analysis') + '</div>';
+  html += '<div style="padding:0 13px 10px"><button onclick="event.stopPropagation();addMonitorToTrade(\'' + pos.id + '\')" style="width:100%;padding:8px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);border-radius:8px;color:var(--blue);font-size:11px;font-weight:800;cursor:pointer">📋 Add to Paper Trade</button></div>';
   html += '</div>';
 
   container.innerHTML = html;
@@ -3897,6 +3903,61 @@ function _toggleMonNarration(id) {
   if (tapEl) tapEl.textContent = pos.narrationExpanded ? '▲ Hide analysis' : '▼ Tap for Ramesh/Suresh/Mahesh/Naresh analysis';
   // If expanding and no data yet, fetch now
   if (pos.narrationExpanded && !pos.oiResult) _fetchMonitorPosition(id);
+}
+
+// ── Add monitor position directly to paper trades tab ────────
+function addMonitorToTrade(id) {
+  var pos = MONITOR_POSITIONS.find(function(p) { return p.id === id; });
+  if (!pos) return;
+  var prem = _getMonLivePrem(pos) || pos.entry;
+  if (!prem || prem <= 0) { toast('⚠️ No live premium — using entry price'); prem = pos.entry; }
+
+  // Check if already in trades
+  var existing = S.paperTrades.find(function(t) {
+    return t.sym === pos.sym && t.strike === pos.strike && t.type === pos.side && t.status === 'OPEN';
+  });
+  if (existing) {
+    // Add another lot
+    existing.lotPrices = existing.lotPrices || [existing.entryPremium || existing.avgPremium];
+    existing.lotPrices.push(prem);
+    existing.lots = existing.lotPrices.length;
+    existing.avgPremium = existing.lotPrices.reduce(function(a,b){return a+b;},0) / existing.lots;
+    existing.currentPremium = prem;
+    existing.pnl = (prem - existing.avgPremium) * existing.lot * existing.lots;
+    savePaperTrades();
+    renderTradesV4();
+    toast('➕ Lot ' + existing.lots + ' added @ ₹' + prem.toFixed(2) + ' | Avg: ₹' + existing.avgPremium.toFixed(2));
+    return;
+  }
+
+  var lots = pos.lots || 1;
+  var lotPrices = [];
+  for (var i = 0; i < lots; i++) lotPrices.push(pos.entry);
+
+  var trade = {
+    id: String(Date.now()),
+    sigId: null,
+    sym: pos.sym, strike: pos.strike, type: pos.side,
+    lot: pos.lot || 1, lots: lots,
+    lotPrices: lotPrices,
+    avgPremium: pos.entry, entryPremium: pos.entry,
+    currentPremium: prem, prevClose: 0,
+    pnl: (prem - pos.entry) * (pos.lot || 1) * lots,
+    date: new Date().toLocaleDateString('en-IN'),
+    status: 'OPEN',
+    ceWalls: [], peFloors: [],
+    holdZone: '--', holdReason: '',
+    exitZone: '--', exitReason: '',
+    bias: pos.side === 'CE' ? 'BULLISH' : 'BEARISH'
+  };
+  S.paperTrades.unshift(trade);
+  savePaperTrades();
+  renderTradesV4();
+  // Switch to trades tab
+  var trTab = document.querySelector('[onclick*="showTab"][onclick*="trades"]') ||
+              document.querySelector('.tab-btn[data-tab="trades"]');
+  if (trTab) trTab.click();
+  toast('📋 Added ' + pos.sym + ' ' + pos.strike + pos.side + ' × ' + lots + ' lot(s) @ ₹' + pos.entry.toFixed(2));
 }
 
 // ── Render the full list ──────────────────────────────────────
