@@ -3489,19 +3489,35 @@ function _buildMonitorNarration(pos) {
   var isFirstCycle = nullCount > oiCount; // majority null = server hasn't seen a prior cycle yet
   var chainIsFlat  = !isFirstCycle && oiCount > 0 && (totalOiAbs / oiCount) < 0.5;
 
+  // Build headline with LTP vs entry (used in both first-cycle and flat paths)
+  function _fcHeadline() {
+    var h = B(pos.sym + ' ' + pos.strike + pos.side) + ' — ';
+    if (livePrem != null) {
+      var _diff = livePrem - pos.entry;
+      var _pct = pos.entry > 0 ? (_diff / pos.entry * 100) : 0;
+      var _lot = _diff * (pos.lot || 1) * (pos.lots || 1);
+      var _sign = _diff >= 0 ? '+' : '';
+      var _str = '₹' + livePrem.toFixed(2) + ' (' + _sign + '₹' + Math.abs(_diff).toFixed(2) + ' from entry · ' + _sign + '₹' + Math.abs(_lot).toFixed(0) + ' P&L · ' + (_pct >= 0 ? '+' : '') + _pct.toFixed(1) + '%)';
+      h += _diff >= 0 ? G(_str) : R(_str);
+    } else {
+      h += 'Entry ₹' + pos.entry.toFixed(2) + (spot ? ' · Spot ₹' + spot.toFixed(0) : '');
+    }
+    return h;
+  }
+
   if (isFirstCycle) {
-    var fcSpot = spot ? ' Spot at ₹' + spot.toFixed(0) + '.' : '';
+    var fcSpot = spot ? ' Spot ₹' + spot.toFixed(0) + (spotChgPct !== 0 ? ' (' + (spotChgPct > 0 ? '+' : '') + spotChgPct.toFixed(2) + '%)' : '') + '.' : '';
     return '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">' +
-      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:5px">' + pos.sym + ' ' + pos.strike + pos.side + ' — first data cycle</div>' +
-      '<div style="font-size:12px;color:var(--text2);line-height:1.75">' + fcSpot + ' OI comparison needs two cycles to compute change%. This is the first fetch — server is building the baseline now.<br><br>Tap 🔄 in <b>30–60 seconds</b> to get the real narration once OI deltas are available.</div>' +
+      '<div style="font-size:12.5px;line-height:1.8;color:var(--text2)">' + _fcHeadline() + '</div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.75;margin-top:6px">' + fcSpot + ' OI change% needs two fetch cycles — tap 🔄 in 30–60s for full narration.</div>' +
       '<div style="font-size:9px;color:var(--text3);margin-top:9px;padding-top:6px;border-top:1px solid var(--border)">Last updated: ' + (pos.lastFetch ? new Date(pos.lastFetch).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—') + '</div></div>';
   }
 
   if (chainIsFlat) {
     // Situational neutral narration — based on what little we know
     var neutralLines = [];
-    // Headline
-    neutralLines.push('<b>' + pos.sym + ' ' + pos.strike + pos.side + '</b> — Entry ₹' + pos.entry.toFixed(2) + (spot ? ', spot at <b>₹' + spot.toFixed(0) + '</b>' : '') + '.');
+    // Headline with LTP
+    neutralLines.push(_fcHeadline());
     // Spot context if available
     if (spot && spotChgPct !== 0) {
       var absN = Math.abs(spotChgPct);

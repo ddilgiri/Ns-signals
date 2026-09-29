@@ -1,5 +1,5 @@
 // NSE F&O Signal Engine — Service Worker v1
-const CACHE = 'fno-v178'; // bumped 2026-09-28 -- Projection engine rebuilt to
+const CACHE = 'fno-v179'; // bumped 2026-09-28 -- Projection engine rebuilt to
 // match the user's manual AXISBANK 24-candle blind-projection methodology (PDF
 // uploaded same day): now runs the SAME 16-parameter Structure/Volume/Momentum/
 // Timing confluence framework per step (close strength, higher-low structure,
