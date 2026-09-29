@@ -3381,6 +3381,14 @@ async function _fetchMonitorPosition(id) {
     if (pos.side === 'CE') { pos.ceData = sigData; pos.peData = null; }
     else { pos.peData = sigData; pos.ceData = null; }
 
+    // Store premPrev from chain at user's strike (for LTP % from prev close display)
+    if (pos.oiResult && pos.oiResult.chain) {
+      var _myRow = pos.oiResult.chain.find(function(c) { return c.strike === pos.strike; });
+      if (_myRow) {
+        pos.premPrev = pos.side === 'CE' ? (_myRow.CE_prevClose || 0) : (_myRow.PE_prevClose || 0);
+      }
+    }
+
     pos.lastFetch = Date.now();
     _saveMonitorPositions();
     _renderMonitorCard(pos);
@@ -3515,19 +3523,15 @@ function _buildMonitorNarration(pos) {
 
   var lines = [];
 
-  // ── LINE 1: Headline — position + live LTP + P&L (per unit + per lot) ──
+  // ── LINE 1: Headline — position + LTP vs entry comparison ──
   var headline = B(pos.sym + ' ' + pos.strike + pos.side) + ' — ';
   if (livePrem != null) {
     var pnlPerUnit = pnlNum;
     var pnlLot = pnlNum * pos.lot;
     var pnlPctN = pos.entry > 0 ? (pnlNum / pos.entry * 100) : 0;
-    var pnlSign = pnlPerUnit >= 0 ? '+' : '-';
-    var ltpDisp = '₹' + livePrem.toFixed(2);
-    var pnlDetail = ' (' + pnlSign + '₹' + Math.abs(pnlPerUnit).toFixed(2) + ' · ' + pnlSign + '₹' + Math.abs(pnlLot).toFixed(0) + ' total · ' + (pnlPctN > 0 ? '+' : '') + pnlPctN.toFixed(1) + '%)';
-    var pnlStr = pnlPerUnit >= 0
-      ? G(ltpDisp + pnlDetail)
-      : R(ltpDisp + pnlDetail);
-    headline += pnlStr;
+    var pnlSign = pnlPerUnit >= 0 ? '+' : '';
+    var ltpVsEntry = '₹' + livePrem.toFixed(2) + ' (' + pnlSign + '₹' + pnlPerUnit.toFixed(2) + ' from entry · ' + pnlSign + '₹' + Math.abs(pnlLot).toFixed(0) + ' lot P&L · ' + (pnlPctN > 0 ? '+' : '') + pnlPctN.toFixed(1) + '%)';
+    headline += pnlPerUnit >= 0 ? G(ltpVsEntry) : R(ltpVsEntry);
   } else {
     headline += 'Entry ₹' + pos.entry.toFixed(2) + ' · live price loading…';
   }
@@ -3757,13 +3761,16 @@ function _updateMonitorCardLive(pos) {
   var pnlPct = pos.entry > 0 ? ((livePrem - pos.entry) / pos.entry * 100) : 0;
   var mood = _monMood(livePrem, pos.entry);
 
-  // LTP — colored by direction vs entry, show % vs entry
-  var ltpChgNum = livePrem - pos.entry;
-  var ltpCol = ltpChgNum > 0 ? 'var(--green)' : ltpChgNum < 0 ? 'var(--red)' : 'var(--text)';
-  var ltpPct = pos.entry > 0 ? (ltpChgNum / pos.entry * 100) : 0;
+  // LTP — colored by % from prev close (same style as spot)
+  var ltpPrev = pos.premPrev || 0;
+  var ltpChgPct2 = ltpPrev > 0 ? ((livePrem - ltpPrev) / ltpPrev * 100) : 0;
+  var ltpCol = ltpChgPct2 > 0 ? 'var(--green)' : ltpChgPct2 < 0 ? 'var(--red)' : 'var(--text)';
+  var ltpChgStr2 = ltpPrev > 0 && ltpChgPct2 !== 0
+    ? ' <span style="font-size:10px;font-weight:700">(' + (ltpChgPct2 > 0 ? '+' : '') + ltpChgPct2.toFixed(1) + '%)</span>'
+    : '';
   var ltpEl = document.getElementById('mon-ltp-' + pos.id);
   if (ltpEl) {
-    ltpEl.innerHTML = '₹' + livePrem.toFixed(2) + ' <span style="font-size:10px;font-weight:700">(' + (ltpPct > 0 ? '+' : '') + ltpPct.toFixed(1) + '%)</span>';
+    ltpEl.innerHTML = '₹' + livePrem.toFixed(2) + ltpChgStr2;
     ltpEl.style.color = ltpCol;
   }
 
@@ -3820,15 +3827,18 @@ function _renderMonitorCard(pos) {
     spotDisplay = '₹<b>' + spotLive.toFixed(0) + '</b>' + spotChgStr;
   } else { spotDisplay = '—'; }
 
-  // LTP display: colored by change from entry, show % vs entry
+  // LTP display: colored by % change from prev close (same style as spot)
   var ltpDisplay, ltpColor;
-  if (livePrem && pos.entry > 0) {
-    var ltpChg = livePrem - pos.entry;
-    var ltpPctDisp = (ltpChg / pos.entry * 100);
-    ltpColor = ltpChg > 0 ? 'var(--green)' : ltpChg < 0 ? 'var(--red)' : 'var(--text)';
-    ltpDisplay = '₹' + livePrem.toFixed(2) + ' <span style="font-size:10px;font-weight:700">(' + (ltpPctDisp > 0 ? '+' : '') + ltpPctDisp.toFixed(1) + '%)</span>';
+  if (livePrem) {
+    var ltpPrev = pos.premPrev || 0;
+    var ltpChgPct = ltpPrev > 0 ? ((livePrem - ltpPrev) / ltpPrev * 100) : 0;
+    ltpColor = ltpChgPct > 0 ? 'var(--green)' : ltpChgPct < 0 ? 'var(--red)' : 'var(--text)';
+    var ltpChgStr = ltpPrev > 0 && ltpChgPct !== 0
+      ? ' <span style="font-size:10px;font-weight:700">(' + (ltpChgPct > 0 ? '+' : '') + ltpChgPct.toFixed(1) + '%)</span>'
+      : '';
+    ltpDisplay = '₹' + livePrem.toFixed(2) + ltpChgStr;
   } else {
-    ltpColor = 'var(--text3)';
+    ltpColor = 'var(--text)';
     ltpDisplay = '₹—';
   }
 
