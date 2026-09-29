@@ -3515,13 +3515,18 @@ function _buildMonitorNarration(pos) {
 
   var lines = [];
 
-  // ── LINE 1: Headline — position + live LTP + P&L ──
+  // ── LINE 1: Headline — position + live LTP + P&L (per unit + per lot) ──
   var headline = B(pos.sym + ' ' + pos.strike + pos.side) + ' — ';
   if (livePrem != null) {
-    var pnlAbs = Math.abs(pnlNum).toFixed(2);
-    var pnlStr = pnlNum >= 0
-      ? G('₹' + livePrem.toFixed(2) + ' (+₹' + pnlAbs + ' from entry)')
-      : R('₹' + livePrem.toFixed(2) + ' (-₹' + pnlAbs + ' from entry)');
+    var pnlPerUnit = pnlNum;
+    var pnlLot = pnlNum * pos.lot;
+    var pnlPctN = pos.entry > 0 ? (pnlNum / pos.entry * 100) : 0;
+    var pnlSign = pnlPerUnit >= 0 ? '+' : '-';
+    var ltpDisp = '₹' + livePrem.toFixed(2);
+    var pnlDetail = ' (' + pnlSign + '₹' + Math.abs(pnlPerUnit).toFixed(2) + ' · ' + pnlSign + '₹' + Math.abs(pnlLot).toFixed(0) + ' total · ' + (pnlPctN > 0 ? '+' : '') + pnlPctN.toFixed(1) + '%)';
+    var pnlStr = pnlPerUnit >= 0
+      ? G(ltpDisp + pnlDetail)
+      : R(ltpDisp + pnlDetail);
     headline += pnlStr;
   } else {
     headline += 'Entry ₹' + pos.entry.toFixed(2) + ' · live price loading…';
@@ -3554,21 +3559,39 @@ function _buildMonitorNarration(pos) {
     lines.push({ text: moveDesc + ' to ' + spotStr + contextNote });
   }
 
-  // ── LINE 3: Volume — situational ──
-  if (sigData && sigData.breakdown) {
-    var volF = sigData.breakdown.find(function(f) { return f.label && f.label.toLowerCase().indexOf('volume') !== -1; });
-    if (volF) {
-      var volHigh = volF.value > 0;
-      var volNote = volF.note || '';
-      var volDesc;
-      if (volHigh) {
-        volDesc = 'Volume is ' + G(B('strong')) + (spot && spotChgPct > 0 ? ' — conviction behind the move.' : ' — heavy activity, watch for direction.');
-      } else {
-        volDesc = 'Volume on this move is ' + A(B('thin')) + (volNote ? ' — ' + volNote : ' — no conviction yet, could fade.');
+  // ── LINE 3: Volume — derived from chain near ATM ──
+  (function() {
+    // Sum volume for the 3 nearest strikes either side of ATM
+    var volTotal = 0, volRows = 0;
+    nearChain.forEach(function(c) {
+      var atm3 = Math.abs(c.strike - atmStrike) <= 3 * strikeGap;
+      if (!atm3) return;
+      if (pos.side === 'CE' && typeof c.CE_volume === 'number') { volTotal += c.CE_volume; volRows++; }
+      else if (pos.side === 'PE' && typeof c.PE_volume === 'number') { volTotal += c.PE_volume; volRows++; }
+    });
+    // Fallback: use sigData if chain has no volume
+    if (volRows === 0 && sigData && sigData.breakdown) {
+      var volF = sigData.breakdown.find(function(f) { return f.label && f.label.toLowerCase().indexOf('volume') !== -1; });
+      if (volF) {
+        var volHigh = volF.value > 0;
+        lines.push({ text: 'Volume is ' + (volHigh ? G(B('strong')) + ' — conviction present.' : A(B('thin')) + ' — no conviction yet, could fade.') });
       }
-      lines.push({ text: volDesc });
+      return;
     }
-  }
+    if (volRows === 0) return;
+    var avgVol = volTotal / volRows;
+    var volDesc;
+    if (avgVol > 50000) {
+      volDesc = G(B('Very heavy volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — strong conviction' + (spotChgPct > 0.5 ? ' behind the rally.' : spotChgPct < -0.5 ? ' behind the selloff.' : ', watch the direction.');
+    } else if (avgVol > 15000) {
+      volDesc = G(B('Good volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — ' + (spotChgPct > 0.3 ? 'participation is solid.' : 'decent activity, not conclusive yet.');
+    } else if (avgVol > 3000) {
+      volDesc = A(B('Moderate volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — some interest but not a strong conviction move.';
+    } else {
+      volDesc = R(B('Thin volume')) + ' — low participation. Move could be noise, not trend.';
+    }
+    lines.push({ text: volDesc });
+  })();
 
   // ── LINE 4: Wall/Floor status — situational words ──
   if (pos.side === 'PE') {
@@ -3734,11 +3757,15 @@ function _updateMonitorCardLive(pos) {
   var pnlPct = pos.entry > 0 ? ((livePrem - pos.entry) / pos.entry * 100) : 0;
   var mood = _monMood(livePrem, pos.entry);
 
-  // LTP — colored by direction vs entry
+  // LTP — colored by direction vs entry, show % vs entry
   var ltpChgNum = livePrem - pos.entry;
   var ltpCol = ltpChgNum > 0 ? 'var(--green)' : ltpChgNum < 0 ? 'var(--red)' : 'var(--text)';
+  var ltpPct = pos.entry > 0 ? (ltpChgNum / pos.entry * 100) : 0;
   var ltpEl = document.getElementById('mon-ltp-' + pos.id);
-  if (ltpEl) { ltpEl.innerHTML = '₹' + livePrem.toFixed(2); ltpEl.style.color = ltpCol; }
+  if (ltpEl) {
+    ltpEl.innerHTML = '₹' + livePrem.toFixed(2) + ' <span style="font-size:10px;font-weight:700">(' + (ltpPct > 0 ? '+' : '') + ltpPct.toFixed(1) + '%)</span>';
+    ltpEl.style.color = ltpCol;
+  }
 
   // P&L
   var pnlEl = document.getElementById('mon-pnl-' + pos.id);
@@ -3793,12 +3820,13 @@ function _renderMonitorCard(pos) {
     spotDisplay = '₹<b>' + spotLive.toFixed(0) + '</b>' + spotChgStr;
   } else { spotDisplay = '—'; }
 
-  // LTP display: colored by change from entry
+  // LTP display: colored by change from entry, show % vs entry
   var ltpDisplay, ltpColor;
-  if (livePrem) {
+  if (livePrem && pos.entry > 0) {
     var ltpChg = livePrem - pos.entry;
+    var ltpPctDisp = (ltpChg / pos.entry * 100);
     ltpColor = ltpChg > 0 ? 'var(--green)' : ltpChg < 0 ? 'var(--red)' : 'var(--text)';
-    ltpDisplay = '₹' + livePrem.toFixed(2);
+    ltpDisplay = '₹' + livePrem.toFixed(2) + ' <span style="font-size:10px;font-weight:700">(' + (ltpPctDisp > 0 ? '+' : '') + ltpPctDisp.toFixed(1) + '%)</span>';
   } else {
     ltpColor = 'var(--text3)';
     ltpDisplay = '₹—';
