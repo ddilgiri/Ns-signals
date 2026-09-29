@@ -3443,11 +3443,10 @@ function _getMonLivePrem(pos) {
 function _monMood(livePrem, entryPrem) {
   if (!livePrem || !entryPrem) return { label: '⚪ NEUTRAL', cls: 'flat', color: 'var(--text3)' };
   var sl = entryPrem * 0.9;
-  var pct = (livePrem - entryPrem) / entryPrem * 100;
   if (livePrem <= sl) return { label: '🔴 SL HIT', cls: 'slhit', color: 'var(--red)' };
   if (livePrem <= entryPrem * 0.95) return { label: '🟠 NEAR SL', cls: 'danger', color: '#f97316' };
-  if (pct > 10) return { label: '🟢 PROFIT', cls: 'profit', color: 'var(--green)' };
-  if (pct < -3) return { label: '🟡 WATCH', cls: 'watch', color: 'var(--amber)' };
+  if (livePrem > entryPrem) return { label: '🟢 PROFIT', cls: 'profit', color: 'var(--green)' };
+  if (livePrem < entryPrem) return { label: '🟡 WATCH', cls: 'watch', color: 'var(--amber)' };
   return { label: '⚪ NEUTRAL', cls: 'flat', color: 'var(--text3)' };
 }
 
