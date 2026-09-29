@@ -3665,19 +3665,23 @@ function _buildMonitorNarration(pos) {
     lines.push({ text: wallText });
   }
 
-  // ── LINE 5: PCR — situational ──
+  // ── LINE 5: PCR — situational, side-aware ──
   if (pcr) {
-    var pcrText, pcrCol;
+    var pcrText;
+    var isPE = pos.side === 'PE';
     if (pcr > 1.4) {
-      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + G('heavy Put-writing, bulls defending hard') + '. Favors ' + G('Put buyers') + '.';
+      // High PCR = lots of puts = bearish market = good for PE, bad for CE
+      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + (isPE ? G('Put-heavy, market bearish — ') + G('favors your PE.') : R('Put-heavy, market bearish — not ideal for CE.'));
     } else if (pcr > 1.1) {
-      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + G('Put side favored') + ', no shift detected.';
+      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + (isPE ? G('Put side favored') + ', backing your PE.' : A('Put side favored') + ', slight headwind for CE.');
     } else if (pcr < 0.7) {
-      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + R('Call-heavy') + ', bears in control. Not ideal for CE buyers.';
+      // Low PCR = call-heavy = bullish market = bad for PE, good for CE
+      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + (isPE ? R('Call-heavy, bulls active — headwind for your PE.') : G('Call-heavy, bulls in control — ') + G('favors your CE.'));
     } else if (pcr < 0.9) {
-      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + A('slightly bearish tilt') + ', watch for shift.';
+      // Slightly call-heavy = slight bullish tilt = slightly bad for PE
+      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — ' + (isPE ? A('slight bullish tilt') + ', watch for reversal.' : G('slight bullish tilt') + ', supports CE.');
     } else {
-      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — balanced, no clear bias from Put/Call ratio.';
+      pcrText = 'PCR at ' + B(pcr.toFixed(2)) + ' — balanced, no strong bias from Put/Call ratio.';
     }
     lines.push({ text: pcrText });
   }
