@@ -3465,7 +3465,12 @@ function _buildMonitorNarration(pos) {
     return Math.abs(c.strike - atmStrike) <= 6 * strikeGap;
   }).sort(function(a, b) { return a.strike - b.strike; });
 
+  // Fall back to chain LTP at user's strike if LIVE_PREMIUMS not yet populated
   var livePrem = _getMonLivePrem(pos);
+  if (!livePrem && pos.oiResult && pos.oiResult.chain) {
+    var _myChainRow = pos.oiResult.chain.find(function(c) { return c.strike === pos.strike; });
+    if (_myChainRow) livePrem = pos.side === 'CE' ? (_myChainRow.CE_ltp || null) : (_myChainRow.PE_ltp || null);
+  }
   var pnlNum   = (livePrem != null && pos.entry > 0) ? (livePrem - pos.entry) : null;
   var slLevel  = pos.entry * 0.9;
   var spot     = pos.spot || 0;
@@ -3797,7 +3802,7 @@ function _updateMonitorCardLive(pos) {
   var pnlEl = document.getElementById('mon-pnl-' + pos.id);
   if (pnlEl) {
     var sign = pnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + '₹' + pnl.toFixed(0) + (_lots2 > 1 ? ' ×' + _lots2 : '');
+    pnlEl.textContent = sign + '₹' + pnl.toFixed(0) + (_lots2 > 1 ? ' (' + _lots2 + ' lots)' : '');
     pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
   }
 
@@ -3831,7 +3836,7 @@ function _renderMonitorCard(pos) {
   var spotChg = (spotLive && pos.spotPrev > 0) ? ((spotLive - pos.spotPrev) / pos.spotPrev * 100) : 0;
   var staleMin = pos.lastFetch ? Math.floor((Date.now() - pos.lastFetch) / 60000) : null;
   var staleTag = staleMin !== null ? (staleMin < 2 ? 'just now' : staleMin + 'm ago') : 'not fetched';
-  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0) + (_lots > 1 ? ' ×' + _lots : '')) : '—';
+  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0) + (_lots > 1 ? ' (' + _lots + ' lots)' : '')) : '—';
   var pnlColor = pnl === null ? 'var(--text3)' : pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
   var borderColor = pos.side === 'CE' ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)';
@@ -3878,8 +3883,8 @@ function _renderMonitorCard(pos) {
   html += '<div style="flex:1"></div>';
   html += '<div style="font-size:9px;color:var(--text3)">' + staleTag + '</div>';
   html += '<span id="mon-loading-' + pos.id + '" style="display:none;margin-left:6px" class="spin" style="width:12px;height:12px"></span>';
-  html += '<button id="mon-refresh-' + pos.id + '" onclick="event.stopPropagation();_fetchMonitorPosition(\'' + pos.id + '\')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;margin-left:6px;color:var(--blue)">🔄</button>';
-  html += '<button onclick="event.stopPropagation();removeMonitorPosition(\'' + pos.id + '\')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;margin-left:2px;color:var(--text3)">✕</button>';
+  html += '<button id="mon-refresh-' + pos.id + '" onclick="event.stopPropagation();_fetchMonitorPosition(\'' + pos.id + '\')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:4px 6px;color:var(--blue)">🔄</button>';
+  html += '<button onclick="event.stopPropagation();if(confirm(\'Remove ' + pos.sym + ' ' + pos.strike + pos.side + ' from monitor?\'))removeMonitorPosition(\'' + pos.id + '\')" style="background:none;border:none;font-size:12px;cursor:pointer;padding:4px 8px;margin-left:8px;color:var(--text3);border-left:1px solid var(--border)">✕ Remove</button>';
   html += '</div>';
   // ── Narration (collapsed by default, tap to expand) ──
   html += '<div id="mon-narr-' + pos.id + '" style="display:' + (pos.narrationExpanded ? 'block' : 'none') + '">';
