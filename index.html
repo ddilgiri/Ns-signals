@@ -3734,23 +3734,32 @@ function _updateMonitorCardLive(pos) {
   var pnlPct = pos.entry > 0 ? ((livePrem - pos.entry) / pos.entry * 100) : 0;
   var mood = _monMood(livePrem, pos.entry);
 
+  // LTP — colored by direction vs entry
+  var ltpChgNum = livePrem - pos.entry;
+  var ltpCol = ltpChgNum > 0 ? 'var(--green)' : ltpChgNum < 0 ? 'var(--red)' : 'var(--text)';
   var ltpEl = document.getElementById('mon-ltp-' + pos.id);
-  if (ltpEl) ltpEl.innerHTML = '₹' + livePrem.toFixed(2);
+  if (ltpEl) { ltpEl.innerHTML = '₹' + livePrem.toFixed(2); ltpEl.style.color = ltpCol; }
 
+  // P&L
   var pnlEl = document.getElementById('mon-pnl-' + pos.id);
   if (pnlEl) {
     var sign = pnl >= 0 ? '+' : '';
     pnlEl.innerHTML = sign + '₹' + pnl.toFixed(0) + ' (' + sign + pnlPct.toFixed(1) + '%)';
     pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
   }
+
+  // Mood badge
   var moodEl = document.getElementById('mon-mood-' + pos.id);
   if (moodEl) { moodEl.textContent = mood.label; moodEl.style.color = mood.color; }
 
+  // Spot — colored by % change from prev close
   var spotEl = document.getElementById('mon-spot-' + pos.id);
-  if (spotEl && LIVE_PRICES[pos.sym]) {
-    var sp = LIVE_PRICES[pos.sym];
-    var spChg = pos.spotPrev > 0 ? ((sp - pos.spotPrev) / pos.spotPrev * 100) : 0;
-    spotEl.innerHTML = 'Spot ₹' + sp.toFixed(0) + ' <span style="color:' + (spChg >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (spChg >= 0 ? '+' : '') + spChg.toFixed(2) + '%</span>';
+  var spLive = LIVE_PRICES[pos.sym] || pos.spot;
+  if (spotEl && spLive) {
+    var spChg = pos.spotPrev > 0 ? ((spLive - pos.spotPrev) / pos.spotPrev * 100) : 0;
+    var spCol = spChg > 0 ? 'var(--green)' : spChg < 0 ? 'var(--red)' : 'var(--text3)';
+    var spChgStr = spChg !== 0 ? ' <span style="color:' + spCol + ';font-weight:800">' + (spChg > 0 ? '+' : '') + spChg.toFixed(2) + '%</span>' : '';
+    spotEl.innerHTML = '₹<b>' + spLive.toFixed(0) + '</b>' + spChgStr;
   }
 }
 
@@ -3776,18 +3785,37 @@ function _renderMonitorCard(pos) {
   var html = '<div style="border-left:3px solid ' + borderColor + '">';
   // ── Header row ──
   html += '<div style="display:flex;align-items:center;gap:8px;padding:11px 13px 7px" onclick="_toggleMonNarration(\'' + pos.id + '\')" style="cursor:pointer">';
+  // Spot display: colored by direction vs prev close
+  var spotDisplay;
+  if (spotLive) {
+    var spotChgCol = spotChg > 0 ? 'var(--green)' : spotChg < 0 ? 'var(--red)' : 'var(--text3)';
+    var spotChgStr = spotChg !== 0 ? ' <span style="color:' + spotChgCol + ';font-weight:800">' + (spotChg > 0 ? '+' : '') + spotChg.toFixed(2) + '%</span>' : '';
+    spotDisplay = '₹<b>' + spotLive.toFixed(0) + '</b>' + spotChgStr;
+  } else { spotDisplay = '—'; }
+
+  // LTP display: colored by change from entry
+  var ltpDisplay, ltpColor;
+  if (livePrem) {
+    var ltpChg = livePrem - pos.entry;
+    ltpColor = ltpChg > 0 ? 'var(--green)' : ltpChg < 0 ? 'var(--red)' : 'var(--text)';
+    ltpDisplay = '₹' + livePrem.toFixed(2);
+  } else {
+    ltpColor = 'var(--text3)';
+    ltpDisplay = '₹—';
+  }
+
   html += '<div style="flex:1;min-width:0">';
   html += '<div style="font-size:13px;font-weight:900;color:var(--text)">' + pos.sym + ' <span style="color:' + sideColor + '">' + pos.strike + ' ' + pos.side + '</span></div>';
-  html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">Entry ₹' + pos.entry.toFixed(2) + ' · Lot ' + pos.lot + ' · <span id="mon-spot-' + pos.id + '">Spot' + (spotLive ? ' ₹' + spotLive.toFixed(0) + (spotChg ? ' <span style=\"color:' + (spotChg >= 0 ? 'var(--green)' : 'var(--red)') + '\">' + (spotChg >= 0 ? '+' : '') + spotChg.toFixed(2) + '%</span>' : '') : '—') + '</span></div>';
+  html += '<div style="font-size:10px;color:var(--text3);margin-top:2px">Entry ₹' + pos.entry.toFixed(2) + ' · Lot ' + pos.lot + ' · Spot <span id="mon-spot-' + pos.id + '">' + spotDisplay + '</span></div>';
   html += '</div>';
   html += '<div style="text-align:right;flex-shrink:0">';
-  html += '<div id="mon-ltp-' + pos.id + '" style="font-size:15px;font-weight:900;color:var(--text);font-family:Roboto,sans-serif">' + (livePrem ? '₹' + livePrem.toFixed(2) : '₹—') + '</div>';
+  html += '<div id="mon-ltp-' + pos.id + '" style="font-size:15px;font-weight:900;color:' + ltpColor + ';font-family:Roboto,sans-serif">' + ltpDisplay + '</div>';
   html += '<div id="mon-pnl-' + pos.id + '" style="font-size:11px;font-weight:800;color:' + pnlColor + '">' + pnlStr + '</div>';
   html += '</div>';
   html += '</div>';
   // ── Live bar ──
   html += '<div style="display:flex;align-items:center;gap:0;padding:5px 13px 6px;background:var(--card2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">';
-  html += '<div style="flex:1;font-size:11px;font-weight:800" id="mon-mood-' + pos.id + '" style="color:' + mood.color + '">' + mood.label + '</div>';
+  html += '<div id="mon-mood-' + pos.id + '" style="flex:1;font-size:11px;font-weight:800;color:' + mood.color + '">' + mood.label + '</div>';
   html += '<div style="font-size:9px;color:var(--text3)">' + staleTag + '</div>';
   html += '<span id="mon-loading-' + pos.id + '" style="display:none;margin-left:6px" class="spin" style="width:12px;height:12px"></span>';
   html += '<button id="mon-refresh-' + pos.id + '" onclick="event.stopPropagation();_fetchMonitorPosition(\'' + pos.id + '\')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;margin-left:6px;color:var(--blue)">🔄</button>';
