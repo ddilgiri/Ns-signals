@@ -3636,6 +3636,15 @@ function _buildMonitorNarration(pos) {
   }
   lines.push({ text: slLine });
 
+  // ── Choppy detector: OI present but mixed/no clear bias ──
+  // Choppy = has OI data + no strong wall/floor + PCR neutral + myOiChg weak
+  var hasOiData    = oiCount > 0 && (totalOiAbs / oiCount) >= 0.5;
+  var noClearWall  = !ceWall && !peFloor;
+  var pcrNeutral   = !pcr || (pcr >= 0.9 && pcr <= 1.1);
+  var myOiWeak     = typeof myOiChg !== 'number' || Math.abs(myOiChg) <= 3;
+  var spotChoppy   = Math.abs(spotChgPct) < 0.5;
+  var isChoppy     = hasOiData && (noClearWall || pcrNeutral) && myOiWeak && spotChoppy && !oiUnwinding && !oiBuilding;
+
   // ── LINE 8: Verdict — situational, bold, colored ──
   var verdict;
   if (livePrem != null && livePrem <= slLevel) {
@@ -3643,9 +3652,18 @@ function _buildMonitorNarration(pos) {
   } else if (oiUnwinding && livePrem != null && livePrem <= pos.entry * 0.95) {
     verdict = R(B('Exit — OI unwinding + near SL. Double risk.'));
   } else if (oiUnwinding) {
-    verdict = A(B('Consider exiting or tight trailing stop — writers leaving.'));
+    verdict = A(B('Consider exiting or trailing stop — writers leaving.'));
   } else if (livePrem != null && livePrem <= pos.entry * 0.94) {
     verdict = A(B('No exit yet — but tighten your stop now.'));
+  } else if (isChoppy) {
+    // Choppy — recommend based on P&L state
+    if (pnlNum != null && pnlNum > 0) {
+      verdict = A(B('Choppy — no clear trend.')) + ' You\'re in profit (₹' + pnlNum.toFixed(2) + '). ' + G(B('Consider partial exit or trail stop.'));
+    } else if (pnlNum != null && pnlNum < 0) {
+      verdict = A(B('Choppy — no clear trend.')) + ' Premium slipping. ' + A(B('Wait for OI to give direction, or exit to protect capital.'));
+    } else {
+      verdict = A(B('Choppy — no clear trend either way.')) + ' OI mixed, spot flat. ' + B('Wait for a clear signal before adding or exiting.');
+    }
   } else if (oiBuilding && pnlNum != null && pnlNum > 0) {
     verdict = G(B('Hold strong — OI backing you and trade in profit.'));
   } else if (pnlNum != null && pnlNum > 0) {
