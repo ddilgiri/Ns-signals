@@ -260,6 +260,16 @@ var _pChgInit=_pSign+_pDiff.toFixed(2)+" ("+_pSign+_pPct.toFixed(1)+"%)";var _pr
       allItems.push({src:"trade",id:tr.id,sym:tr.sym,strike:tr.strike,type:tr.type,premium:tr.currentPremium});
     }
   });
+  // Include monitor positions so LIVE_PREMIUMS stays populated for LTP display
+  if(typeof MONITOR_POSITIONS !== 'undefined') {
+    MONITOR_POSITIONS.forEach(function(pos){
+      var k=pos.sym+"_"+pos.strike+"_"+pos.side;
+      if(pos.sym&&pos.strike&&pos.side&&!seen[k]){
+        seen[k]=true;
+        allItems.push({src:"monitor",id:pos.id,sym:pos.sym,strike:pos.strike,type:pos.side,premium:pos.entry});
+      }
+    });
+  }
   if(!allItems.length)return;
   try{
     var resp=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:allItems.map(function(x){return{symbol:x.sym,strike:x.strike,type:x.type};})})});
@@ -298,6 +308,8 @@ el.className=baseClass+" "+(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-n
           if(capEl)capEl.textContent=calcCapital(ltp,sig.lot||1);
         }
       }
+      // Store in LIVE_PREMIUMS for monitor card LTP display
+      LIVE_PREMIUMS[k] = ltp;
       // Update paper trade live premium (also handled by refreshOpenTradePrices but keep in sync)
       S.paperTrades.forEach(function(tr){
         if(tr.sym===item.sym&&tr.strike===item.strike&&tr.type===item.type){
@@ -316,6 +328,8 @@ el.className=baseClass+" "+(dayDiff>0?"price-up":dayDiff<0?"price-down":"price-n
       });
     });
     savePaperTrades();
+    // Update monitor cards with fresh live premiums
+    if(typeof autoRefreshMonitorPositions === 'function') autoRefreshMonitorPositions();
   }catch(err){console.warn("batchUpdatePremiums error:",err.message);}
 }
 function updateAllCards(){
