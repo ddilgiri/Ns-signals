@@ -3802,7 +3802,7 @@ function _updateMonitorCardLive(pos) {
   var pnlEl = document.getElementById('mon-pnl-' + pos.id);
   if (pnlEl) {
     var sign = pnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + '₹' + pnl.toFixed(0) + (_lots2 > 1 ? ' (' + _lots2 + ' lots)' : '');
+    pnlEl.textContent = sign + '₹' + pnl.toFixed(0);
     pnlEl.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
   }
 
@@ -3836,7 +3836,7 @@ function _renderMonitorCard(pos) {
   var spotChg = (spotLive && pos.spotPrev > 0) ? ((spotLive - pos.spotPrev) / pos.spotPrev * 100) : 0;
   var staleMin = pos.lastFetch ? Math.floor((Date.now() - pos.lastFetch) / 60000) : null;
   var staleTag = staleMin !== null ? (staleMin < 2 ? 'just now' : staleMin + 'm ago') : 'not fetched';
-  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0) + (_lots > 1 ? ' (' + _lots + ' lots)' : '')) : '—';
+  var pnlStr = pnl !== null ? ((pnl >= 0 ? '+' : '') + '₹' + pnl.toFixed(0)) : '—';
   var pnlColor = pnl === null ? 'var(--text3)' : pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text3)';
 
   var borderColor = pos.side === 'CE' ? 'rgba(34,197,94,.5)' : 'rgba(239,68,68,.5)';
