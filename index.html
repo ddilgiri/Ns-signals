@@ -3759,17 +3759,28 @@ function _buildMonitorNarration(pos) {
   if (pos.side === 'PE') {
     var wBelow = peFloor || (pos.strike - strikeGap);
     var wAbove = peFloor ? (peFloor + strikeGap) : pos.strike;
-    if (spotChgPct > 0.5) {
+    var spotBelowFloor = spot && spot < wBelow;
+    var spotBelowAbove = spot && spot < wAbove;
+    if (spotBelowFloor) {
+      // Spot already below floor — most urgent
+      watchLine = R(B('⚠️ Spot ₹' + spot.toFixed(0) + ' already below floor ₹' + wBelow + '.')) + ' Floor is gone. ' + R(B('Exit if PE premium is not holding.'));
+    } else if (spotBelowAbove && spotChgPct < -0.5) {
+      // Spot between floor and above-level, falling — approaching floor
+      watchLine = 'Spot at ₹' + spot.toFixed(0) + ' — approaching floor ' + R(B('₹' + wBelow)) + '. ' + R('Break below = exit immediately.') + ' Hold only if floor OI holds.';
+    } else if (spotChgPct > 0.5) {
       watchLine = 'Bounce is happening — if spot crosses back ' + B('₹' + wAbove) + ' with volume, PE may recover. Break ' + R('below ₹' + wBelow) + ' is the exit signal.';
     } else if (spotChgPct < -1) {
-      watchLine = 'Spot falling — PE gaining. Watch if it holds ' + G('below ₹' + wAbove) + '. Break below ' + R('₹' + wBelow) + ' = floor gone, exit.';
+      watchLine = 'Spot falling — PE gaining. Watch if spot stays ' + G('below ₹' + wAbove) + '. Break below ' + R('₹' + wBelow) + ' = floor gone, exit.';
     } else {
       watchLine = 'Watching for break below ' + R(B('₹' + wBelow)) + ' (exit) or push back above ' + G(B('₹' + wAbove)) + ' (recovery).';
     }
   } else {
     var wAboveCE = ceWall || (pos.strike + strikeGap);
     var wBelowCE = ceWall ? (ceWall - strikeGap) : pos.strike;
-    if (spotChgPct < -0.5) {
+    var spotAboveWall = spot && spot > wAboveCE;
+    if (spotAboveWall) {
+      watchLine = G(B('✅ Spot ₹' + spot.toFixed(0) + ' already above wall ₹' + wAboveCE + '.')) + ' Resistance broken. ' + G(B('CE running — stay in or trail stop up.'));
+    } else if (spotChgPct < -0.5) {
       watchLine = 'Spot dipping — CE under pressure. Watch if it reclaims ' + G(B('₹' + wBelowCE)) + '. Break below that level = signal weakening.';
     } else if (spotChgPct > 1) {
       watchLine = 'Spot moving up — CE has momentum. Break above ' + G(B('₹' + wAboveCE)) + ' = strong run. Stay in.';
