@@ -3574,35 +3574,56 @@ function _buildMonitorNarration(pos) {
   }
   lines.push({ text: headline, bold: true });
 
-  // ── LINE 2: Spot move — situational words ──
+  // ── LINE 2: Spot move — cross-referenced with side + volume + OI ──
   if (spot) {
     var absChg = Math.abs(spotChgPct);
     var spotCol = spotChgPct > 0 ? 'var(--green)' : spotChgPct < 0 ? 'var(--red)' : 'var(--text3)';
     var spotStr = C('₹' + spot.toFixed(0) + ' (' + (spotChgPct > 0 ? '+' : '') + spotChgPct.toFixed(2) + '%)', spotCol);
-    var moveDesc;
-    if (absChg > 2)        moveDesc = (spotChgPct > 0 ? 'Surged sharply' : 'Crashed sharply');
-    else if (absChg > 1)   moveDesc = (spotChgPct > 0 ? 'Pushed up' : 'Slid down');
-    else if (absChg > 0.4) moveDesc = (spotChgPct > 0 ? 'Edged up' : 'Drifted lower');
-    else                   moveDesc = 'Barely moved';
-    // Describe bounce vs fade based on position side
-    var contextNote = '';
-    if (pos.side === 'PE') {
-      if (spotChgPct > 1)       contextNote = ', putting your PE under pressure.';
-      else if (spotChgPct > 0.3) contextNote = ', slight bounce — PE holding but watch closely.';
-      else if (spotChgPct < -1)  contextNote = ', spot falling — PE gaining strength.';
-      else                       contextNote = ', spot stable — PE unaffected.';
-    } else {
-      if (spotChgPct < -1)       contextNote = ', putting your CE under pressure.';
-      else if (spotChgPct < -0.3) contextNote = ', slight dip — CE holding but watch closely.';
-      else if (spotChgPct > 1)    contextNote = ', spot rising — CE gaining strength.';
-      else                        contextNote = ', spot stable — CE unaffected.';
-    }
-    lines.push({ text: moveDesc + ' to ' + spotStr + contextNote });
+    var isPE = pos.side === 'PE';
+    var spotUp = spotChgPct > 0, spotDown = spotChgPct < 0;
+    var bigMove = absChg > 1.5, medMove = absChg > 0.5, smallMove = absChg > 0.2;
+    var withYou = (isPE && spotDown) || (!isPE && spotUp);
+    var againstYou = (isPE && spotUp) || (!isPE && spotDown);
+    var volHigh = false, volStr2 = '';
+    // Quick volume check
+    (function(){
+      var vt=0,vr=0;
+      nearChain.forEach(function(c){
+        if(Math.abs(c.strike-atmStrike)<=3*strikeGap){
+          var v=isPE?(c.PE_vol||c.PE_volume||0):(c.CE_vol||c.CE_volume||0);
+          if(v){vt+=v;vr++;}
+        }
+      });
+      if(vr>0){volHigh=(vt/vr)>20000; volStr2=' (volume '+(volHigh?'heavy':'light')+')';}
+    })();
+    var s2;
+    if (bigMove && withYou && volHigh)
+      s2 = (isPE?'Crashing':'Surging') + ' hard to ' + spotStr + volStr2 + ' — strong conviction move, your ' + pos.side + ' is in the sweet spot.';
+    else if (bigMove && withYou && !volHigh)
+      s2 = (isPE?'Falling':'Rising') + ' sharply to ' + spotStr + ' but volume is light — momentum may not sustain.';
+    else if (bigMove && againstYou && volHigh)
+      s2 = (isPE?'Surging':'Crashing') + ' hard to ' + spotStr + volStr2 + ' — strong adverse move, your ' + pos.side + ' is under real pressure.';
+    else if (bigMove && againstYou)
+      s2 = (isPE?'Pushed up':'Sold off') + ' to ' + spotStr + ' — working against your ' + pos.side + '. Watch SL.';
+    else if (medMove && withYou && oiBuilding)
+      s2 = (isPE?'Drifting lower':'Moving up') + ' to ' + spotStr + ' — OI backing the move, your ' + pos.side + ' gaining strength.';
+    else if (medMove && withYou)
+      s2 = (isPE?'Sliding to':'Edging up to') + ' ' + spotStr + ' — favorable for your ' + pos.side + ', watch if it continues.';
+    else if (medMove && againstYou && oiUnwinding)
+      s2 = (isPE?'Bouncing to':'Dipping to') + ' ' + spotStr + ' — moving against you and OI unwinding. Double pressure on your ' + pos.side + '.';
+    else if (medMove && againstYou)
+      s2 = (isPE?'Edged up':'Dipped') + ' to ' + spotStr + ' — slight headwind for your ' + pos.side + ', but no panic yet.';
+    else if (smallMove && withYou)
+      s2 = 'Nudged ' + (isPE?'lower':'higher') + ' to ' + spotStr + ' — small move, ' + pos.side + ' holding fine.';
+    else if (smallMove && againstYou)
+      s2 = 'Ticked ' + (isPE?'up':'down') + ' to ' + spotStr + ' — minor move against you, not a concern yet.';
+    else
+      s2 = 'Spot at ' + spotStr + ' — barely moved, no directional pressure on your ' + pos.side + '.';
+    lines.push({ text: s2 });
   }
 
-  // ── LINE 3: Volume — derived from chain near ATM ──
+  // ── LINE 3: Volume ──
   (function() {
-    // Sum volume for the 3 nearest strikes either side of ATM
     var volTotal = 0, volRows = 0;
     nearChain.forEach(function(c) {
       var atm3 = Math.abs(c.strike - atmStrike) <= 3 * strikeGap;
@@ -3610,44 +3631,57 @@ function _buildMonitorNarration(pos) {
       if (pos.side === 'CE' && (typeof c.CE_vol === 'number' || typeof c.CE_volume === 'number')) { volTotal += (c.CE_vol || c.CE_volume || 0); volRows++; }
       else if (pos.side === 'PE' && (typeof c.PE_vol === 'number' || typeof c.PE_volume === 'number')) { volTotal += (c.PE_vol || c.PE_volume || 0); volRows++; }
     });
-    // Fallback: use sigData if chain has no volume
     if (volRows === 0 && sigData && sigData.breakdown) {
       var volF = sigData.breakdown.find(function(f) { return f.label && f.label.toLowerCase().indexOf('volume') !== -1; });
-      if (volF) {
-        var volHigh = volF.value > 0;
-        lines.push({ text: 'Volume is ' + (volHigh ? G(B('strong')) + ' — conviction present.' : A(B('thin')) + ' — no conviction yet, could fade.') });
-      }
+      if (volF) { lines.push({ text: 'Volume is ' + (volF.value > 0 ? G(B('strong')) + ' — conviction present.' : A(B('thin')) + ' — no conviction yet, could fade.') }); }
       return;
     }
     if (volRows === 0) return;
     var avgVol = volTotal / volRows;
-    var volDesc;
+    var withYouV = (pos.side==='PE'&&spotChgPct<-0.3)||(pos.side==='CE'&&spotChgPct>0.3);
+    var againstYouV = (pos.side==='PE'&&spotChgPct>0.5)||(pos.side==='CE'&&spotChgPct<-0.5);
+    var vd;
     if (avgVol > 50000) {
-      volDesc = G(B('Very heavy volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — strong conviction' + (spotChgPct > 0.5 ? ' behind the rally.' : spotChgPct < -0.5 ? ' behind the selloff.' : ', watch the direction.');
+      if (withYouV) vd = G(B('Very heavy volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — market is piling in your direction. Strong conviction.';
+      else if (againstYouV) vd = R(B('Very heavy volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — but it\'s moving against you. High participation on the wrong side.';
+      else vd = G(B('Very heavy volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — strong market activity, watch which side it breaks.';
     } else if (avgVol > 15000) {
-      volDesc = G(B('Good volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — ' + (spotChgPct > 0.3 ? 'participation is solid.' : 'decent activity, not conclusive yet.');
+      if (withYouV) vd = G(B('Good volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — solid participation, move has backing.';
+      else if (againstYouV) vd = A(B('Good volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — decent activity but working against your side.';
+      else vd = G(B('Good volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — healthy market, waiting for direction.';
     } else if (avgVol > 3000) {
-      volDesc = A(B('Moderate volume')) + ' (' + (volTotal / 1000).toFixed(0) + 'K contracts) — some interest but not a strong conviction move.';
+      if (oiBuilding) vd = A(B('Moderate volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — OI building despite thin volume. Watch for pickup.';
+      else vd = A(B('Moderate volume')) + ' (' + (volTotal/1000).toFixed(0) + 'K) — some interest but not a high-conviction move yet.';
     } else {
-      volDesc = R(B('Thin volume')) + ' — low participation. Move could be noise, not trend.';
+      if (withYouV) vd = A(B('Thin volume')) + ' — move is in your favor but low participation. Could reverse without follow-through.';
+      else vd = R(B('Thin volume')) + ' — low participation. Do not read too much into this price action.';
     }
-    lines.push({ text: volDesc });
+    lines.push({ text: vd });
   })();
 
-  // ── LINE 4: Wall/Floor status — situational words ──
+  // ── LINE 4: Wall/Floor ──
   if (pos.side === 'PE') {
     var keyLevel = peFloor || pos.strike;
     var floorRow = nearChain.find(function(c) { return c.strike === keyLevel; });
     var floorOiChg = floorRow ? floorRow.PE_oiChangePct : null;
     var floorText;
+    var spotNearFloor = spot && Math.abs(spot - keyLevel) < strikeGap;
     if (typeof floorOiChg === 'number' && floorOiChg < -8) {
-      floorText = R(B(keyLevel + ' Put support crumbling')) + ' — OI unwinding (' + floorOiChg.toFixed(1) + '%), writers pulling out. Floor at risk.';
+      floorText = spotNearFloor
+        ? R(B(keyLevel + ' Put floor crumbling')) + ' — OI unwinding (' + floorOiChg.toFixed(1) + '%) and spot approaching. ' + R('Critical — floor may break.')
+        : R(B(keyLevel + ' Put support crumbling')) + ' — writers pulling out (' + floorOiChg.toFixed(1) + '%). Floor at risk, stay alert.';
     } else if (typeof floorOiChg === 'number' && floorOiChg < -3) {
-      floorText = A(B(keyLevel + ' Put wall softening')) + ' — some OI shed (' + floorOiChg.toFixed(1) + '%). Still holding but losing grip.';
+      floorText = spotNearFloor
+        ? A(B(keyLevel + ' Put wall softening')) + ' — OI shedding (' + floorOiChg.toFixed(1) + '%) with spot nearby. ' + A('Watch closely.')
+        : A(B(keyLevel + ' Put wall softening')) + ' — some OI shed (' + floorOiChg.toFixed(1) + '%). Still holding but losing grip.';
     } else if (typeof floorOiChg === 'number' && floorOiChg > 5) {
-      floorText = G(B(keyLevel + ' Put wall strengthening')) + ' — fresh OI added (+' + floorOiChg.toFixed(1) + '%), floor being defended actively.';
+      floorText = spotNearFloor
+        ? G(B(keyLevel + ' Put wall actively defended')) + ' — fresh OI added (+' + floorOiChg.toFixed(1) + '%) as spot tests the level. ' + G('Strong floor.')
+        : G(B(keyLevel + ' Put wall strengthening')) + ' — fresh OI (+' + floorOiChg.toFixed(1) + '%), writers backing the floor.';
     } else {
-      floorText = B(keyLevel + ' Put wall') + ' still holding steady — no major unwinding seen.';
+      floorText = spotNearFloor
+        ? B(keyLevel + ' Put wall') + ' steady as spot approaches — ' + A('key test in progress, watch for OI reaction.')
+        : B(keyLevel + ' Put wall') + ' holding steady — no major unwinding, floor intact.';
     }
     lines.push({ text: floorText });
   } else {
@@ -3655,12 +3689,19 @@ function _buildMonitorNarration(pos) {
     var wallRow = nearChain.find(function(c) { return c.strike === keyWall; });
     var wallOiChg = wallRow ? wallRow.CE_oiChangePct : null;
     var wallText;
+    var spotNearWall = spot && Math.abs(spot - keyWall) < strikeGap;
     if (typeof wallOiChg === 'number' && wallOiChg < -8) {
-      wallText = G(B(keyWall + ' CE resistance breaking down')) + ' — call writers exiting (' + wallOiChg.toFixed(1) + '%), wall weakening. CE may run.';
+      wallText = spotNearWall
+        ? G(B(keyWall + ' CE wall breaking')) + ' — call writers fleeing (' + wallOiChg.toFixed(1) + '%) as spot approaches. ' + G('Breakout possible.')
+        : G(B(keyWall + ' CE resistance weakening')) + ' — writers exiting (' + wallOiChg.toFixed(1) + '%). Wall losing strength, CE may push through.';
     } else if (typeof wallOiChg === 'number' && wallOiChg > 5) {
-      wallText = R(B(keyWall + ' CE wall building')) + ' — fresh shorts added (+' + wallOiChg.toFixed(1) + '%), resistance strengthening. Upside capped.';
+      wallText = spotNearWall
+        ? R(B(keyWall + ' CE wall being reinforced')) + ' — fresh shorts (+' + wallOiChg.toFixed(1) + '%) as spot approaches. ' + R('Resistance stiffening.')
+        : R(B(keyWall + ' CE wall building')) + ' — shorts added (+' + wallOiChg.toFixed(1) + '%), upside being capped.';
     } else {
-      wallText = B(keyWall + ' CE wall') + ' holding firm — resistance intact, no breakout pressure yet.';
+      wallText = spotNearWall
+        ? B(keyWall + ' CE wall') + ' being tested — ' + A('OI stable for now, watch for writers to add or exit.')
+        : B(keyWall + ' CE wall') + ' holding firm — resistance intact, no breakout pressure yet.';
     }
     lines.push({ text: wallText });
   }
@@ -3710,58 +3751,76 @@ function _buildMonitorNarration(pos) {
     lines.push({ text: myOiText });
   }
 
-  // ── LINE 7: Stop distance — colored, situational ──
+  // ── LINE 7: Stop distance — cross-referenced with trend ──
   var slLine;
   if (livePrem != null) {
     var buf = livePrem - slLevel;
+    var withYouSL = (pos.side==='PE'&&spotChgPct<-0.3)||(pos.side==='CE'&&spotChgPct>0.3);
+    var againstYouSL = (pos.side==='PE'&&spotChgPct>0.5)||(pos.side==='CE'&&spotChgPct<-0.5);
     if (livePrem <= slLevel) {
-      slLine = R('🔴 ' + B('SL breached') + ' — premium ₹' + livePrem.toFixed(2) + ' is below your stop ₹' + slLevel.toFixed(2) + '.');
+      slLine = R('🔴 ' + B('SL breached') + ' — premium ₹' + livePrem.toFixed(2) + ' below your stop ₹' + slLevel.toFixed(2) + '. Exit now.');
     } else if (livePrem <= pos.entry * 0.94) {
-      slLine = A('🟠 Only ₹' + buf.toFixed(2) + ' above SL (₹' + slLevel.toFixed(2) + ')') + ' — getting close, do not ignore.';
+      slLine = againstYouSL
+        ? A('🟠 Only ₹' + buf.toFixed(2) + ' above SL') + ' and spot moving against you — ' + R('tighten stop immediately.')
+        : A('🟠 Only ₹' + buf.toFixed(2) + ' above SL (₹' + slLevel.toFixed(2) + ')') + ' — getting close, do not ignore.';
+    } else if (pnlNum > 0 && withYouSL) {
+      slLine = G('₹' + buf.toFixed(2) + ' cushion above SL') + ' — trade profitable and spot moving with you. ' + G('Consider trailing stop up.');
     } else if (pnlNum > 0) {
       slLine = G('₹' + buf.toFixed(2) + ' cushion above SL') + ' — trade is profitable, range intact.';
+    } else if (againstYouSL) {
+      slLine = A('₹' + buf.toFixed(2) + ' above SL but spot working against you') + ' — keep watching, do not add.';
     } else {
-      slLine = 'Still ₹' + B(buf.toFixed(2)) + ' above your stop (₹' + slLevel.toFixed(2) + ') — range intact.';
+      slLine = '₹' + B(buf.toFixed(2)) + ' above your stop (₹' + slLevel.toFixed(2) + ') — range intact.';
     }
   } else {
     slLine = 'SL level: ' + B('₹' + slLevel.toFixed(2)) + ' (10% below entry ₹' + pos.entry.toFixed(2) + ').';
   }
   lines.push({ text: slLine });
 
-  // ── Choppy detector: OI present but mixed/no clear bias ──
-  // Choppy = has OI data + no strong wall/floor + PCR neutral + myOiChg weak
-  var hasOiData    = oiCount > 0 && (totalOiAbs / oiCount) >= 0.5;
-  var noClearWall  = !ceWall && !peFloor;
-  var pcrNeutral   = !pcr || (pcr >= 0.9 && pcr <= 1.1);
-  var myOiWeak     = typeof myOiChg !== 'number' || Math.abs(myOiChg) <= 3;
-  var spotChoppy   = Math.abs(spotChgPct) < 0.5;
-  var isChoppy     = hasOiData && (noClearWall || pcrNeutral) && myOiWeak && spotChoppy && !oiUnwinding && !oiBuilding;
+  // ── Choppy detector ──
+  var hasOiData  = oiCount > 0 && (totalOiAbs / oiCount) >= 0.5;
+  var pcrNeutral = !pcr || (pcr >= 0.9 && pcr <= 1.1);
+  var myOiWeak   = typeof myOiChg !== 'number' || Math.abs(myOiChg) <= 3;
+  var spotChoppy = Math.abs(spotChgPct) < 0.5;
+  var isChoppy   = hasOiData && pcrNeutral && myOiWeak && spotChoppy && !oiUnwinding && !oiBuilding;
 
-  // ── LINE 8: Verdict — situational, bold, colored ──
+  // ── LINE 8: Verdict — full confluence ──
   var verdict;
+  var inProfit = pnlNum != null && pnlNum > 0;
+  var nearSL = livePrem != null && livePrem <= pos.entry * 0.95;
+  var withYouV2 = (pos.side==='PE'&&spotChgPct<-0.3)||(pos.side==='CE'&&spotChgPct>0.3);
+  var againstYouV2 = (pos.side==='PE'&&spotChgPct>0.5)||(pos.side==='CE'&&spotChgPct<-0.5);
   if (livePrem != null && livePrem <= slLevel) {
     verdict = R(B('Exit now. SL hit.'));
-  } else if (oiUnwinding && livePrem != null && livePrem <= pos.entry * 0.95) {
-    verdict = R(B('Exit — OI unwinding + near SL. Double risk.'));
+  } else if (oiUnwinding && nearSL) {
+    verdict = R(B('Exit — OI unwinding + near SL. Double risk, do not wait.'));
+  } else if (oiUnwinding && againstYouV2) {
+    verdict = R(B('Exit or tighten stop — OI leaving + spot against you. Position deteriorating.'));
+  } else if (oiUnwinding && inProfit) {
+    verdict = A(B('OI unwinding — consider booking partial profit or trailing stop tightly.'));
   } else if (oiUnwinding) {
-    verdict = A(B('Consider exiting or trailing stop — writers leaving.'));
-  } else if (livePrem != null && livePrem <= pos.entry * 0.94) {
-    verdict = A(B('No exit yet — but tighten your stop now.'));
+    verdict = A(B('Writers exiting your strike — watch closely, prepare to exit if spot turns.'));
+  } else if (nearSL && againstYouV2) {
+    verdict = A(B('Near SL and spot against you — tighten stop now, be ready to exit.'));
+  } else if (nearSL) {
+    verdict = A(B('Approaching SL — do not ignore. Tighten your stop.'));
   } else if (isChoppy) {
-    // Choppy — recommend based on P&L state
-    if (pnlNum != null && pnlNum > 0) {
-      verdict = A(B('Choppy — no clear trend.')) + ' You\'re in profit (₹' + pnlNum.toFixed(2) + '). ' + G(B('Consider partial exit or trail stop.'));
-    } else if (pnlNum != null && pnlNum < 0) {
-      verdict = A(B('Choppy — no clear trend.')) + ' Premium slipping. ' + A(B('Wait for OI to give direction, or exit to protect capital.'));
-    } else {
-      verdict = A(B('Choppy — no clear trend either way.')) + ' OI mixed, spot flat. ' + B('Wait for a clear signal before adding or exiting.');
-    }
-  } else if (oiBuilding && pnlNum != null && pnlNum > 0) {
-    verdict = G(B('Hold strong — OI backing you and trade in profit.'));
-  } else if (pnlNum != null && pnlNum > 0) {
+    if (inProfit) verdict = A(B('Choppy market.')) + ' ' + G('You\'re in profit — consider partial exit or trail stop to protect gains.');
+    else verdict = A(B('Choppy — no clear direction.')) + ' OI mixed, spot flat. Hold and wait for a clear signal.';
+  } else if (oiBuilding && inProfit && withYouV2) {
+    verdict = G(B('Strong hold — OI building, spot with you, in profit. Let it run.'));
+  } else if (oiBuilding && inProfit) {
+    verdict = G(B('Hold — OI backing your strike and trade in profit.'));
+  } else if (oiBuilding && withYouV2) {
+    verdict = G(B('Hold — OI and spot both in your favor. Position building strength.'));
+  } else if (inProfit && withYouV2) {
+    verdict = G(B('Hold — in profit and spot moving with you. No exit trigger.'));
+  } else if (inProfit) {
     verdict = G(B('Hold, in profit. No trigger hit.'));
+  } else if (againstYouV2) {
+    verdict = A(B('Hold but watch — spot working against you. Keep SL ready.'));
   } else {
-    verdict = B('Hold, no trigger hit.');
+    verdict = B('Hold — no exit trigger yet.');
   }
   lines.push({ text: verdict, bold: true });
 
