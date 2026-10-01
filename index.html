@@ -3686,13 +3686,24 @@ function _buildMonitorNarration(pos) {
     lines.push({ text: pcrText });
   }
 
-  // ── LINE 6: OI at user's specific strike ──
+  // ── LINE 6: OI at user's specific strike — context-aware ──
   if (typeof myOiChg === 'number' && Math.abs(myOiChg) > 2) {
     var myOiText;
+    var slHit = livePrem != null && livePrem <= slLevel;
     if (oiUnwinding) {
       myOiText = '⚠️ ' + R(B('OI unwinding at your ' + pos.strike + ' ' + pos.side + ' (' + myOiChg.toFixed(1) + '%)')) + ' — writers exiting, momentum fading. Stay alert.';
     } else if (oiBuilding) {
-      myOiText = G(B('OI adding at your ' + pos.strike + ' ' + pos.side + ' (+' + myOiChg.toFixed(1) + '%)')) + ' — writers are doubling down. Position strengthening.';
+      // OI adding must be read in context of spot direction vs your side
+      var tailwind = (pos.side === 'PE' && spotChgPct < -0.3) || (pos.side === 'CE' && spotChgPct > 0.3);
+      var headwind = (pos.side === 'PE' && spotChgPct > 0.5) || (pos.side === 'CE' && spotChgPct < -0.5);
+      if (headwind) {
+        // OI adding against spot trend = writers being trapped or aggressive shorts
+        myOiText = A(B('OI adding at ' + pos.strike + ' ' + pos.side + ' (+' + myOiChg.toFixed(1) + '%)')) + ' — but spot moving ' + (pos.side === 'PE' ? 'up' : 'down') + ' against you. Writers may be trapped or doubling into a losing side. ' + (slHit ? R('Do not rely on this — exit.') : A('Watch carefully.'));
+      } else if (tailwind) {
+        myOiText = G(B('OI adding at your ' + pos.strike + ' ' + pos.side + ' (+' + myOiChg.toFixed(1) + '%)')) + ' — spot moving with you. Writers doubling down, position strengthening.';
+      } else {
+        myOiText = G(B('OI adding at your ' + pos.strike + ' ' + pos.side + ' (+' + myOiChg.toFixed(1) + '%)')) + ' — fresh writer interest. Monitor spot direction to confirm.';
+      }
     } else {
       myOiText = 'OI at ' + B(pos.strike + ' ' + pos.side) + ' is ' + A('mildly shifting') + ' (' + (myOiChg > 0 ? '+' : '') + myOiChg.toFixed(1) + '%) — no strong signal yet.';
     }
@@ -3788,7 +3799,10 @@ function _buildMonitorNarration(pos) {
       watchLine = 'Watching for push above ' + G(B('₹' + wAboveCE)) + ' (target) or reversal below ' + R(B('₹' + wBelowCE)) + ' (exit alert).';
     }
   }
-  lines.push({ text: watchLine });
+  // Only push watch line if SL not already hit
+  if (livePrem == null || livePrem > slLevel) {
+    lines.push({ text: watchLine });
+  }
 
   // ── Render ──
   var html = '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">';
