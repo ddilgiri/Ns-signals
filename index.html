@@ -90,7 +90,7 @@ async function refreshFnoList(){
   }
 }
 function notifyZone(sym,strike,type,zone){if(isNotifMuted())return;var key=sym+"_"+strike+"_"+type+"_"+zone;if(_zoneAlerted[key])return;_zoneAlerted[key]=true;if(zone==="exit"){fxoNotify("🛑 EXIT NOW — "+sym+" "+strike+" "+type,"Spot hit EXIT zone — check immediately!","exit");}else if(zone==="hold"||zone==="hold-strong"){fxoNotify((zone==="hold-strong"?"💪 HOLD STRONG":"💛 HOLD")+" — "+sym+" "+strike+" "+type,"Spot in "+(zone==="hold-strong"?"HOLD STRONG":"HOLD")+" zone","hold");}}function getServer(){return"localhost"===location.hostname||"127.0.0.1"===location.hostname?"http://localhost:3001":""}function toggleTheme(){const e=document.documentElement,t="dark"===e.getAttribute("data-theme");e.setAttribute("data-theme",t?"light":"dark"),document.getElementById("themeBtn").textContent=t?"☀️":"🌙",document.getElementById("themeColorMeta").setAttribute("content",t?"#eef2f7":"#060918"),localStorage.setItem("fxo-theme",t?"light":"dark")}// ── LIVE TRADE PRICE POLLING ─────────────────────────────
-var _tradePriceTimer=null;
+var _tradePriceTimer=null,_tradeOiCounter=0;
 function startTradesPricePolling(){
   stopTradesPricePolling();
   refreshOpenTradePrices();
@@ -102,6 +102,33 @@ function stopTradesPricePolling(){
 async function refreshOpenTradePrices(){
   var openTrades=S.paperTrades.filter(function(t){return t.status==="OPEN"||!t.status;});
   if(!openTrades.length||!S.connected)return;
+  // Every 4th tick (~60s) refresh OI for open trades — runs even during active scan
+  _tradeOiCounter++;
+  if(_tradeOiCounter>=4){
+    _tradeOiCounter=0;
+    var tradeSymsSeen={};
+    for(var ti=0;ti<openTrades.length;ti++){
+      var tr=openTrades[ti];
+      if(tradeSymsSeen[tr.sym])continue;
+      tradeSymsSeen[tr.sym]=true;
+      try{
+        var ro=await fetch(getServer()+"/oi-analysis",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:tr.sym,spotPrice:LIVE_PRICES[tr.sym]||0})});
+        var rn=await ro.json();
+        if(!rn.status)continue;
+        openTrades.forEach(function(tx){
+          if(tx.sym!==tr.sym)return;
+          rn.ceWalls&&rn.ceWalls.length&&(tx.ceWalls=rn.ceWalls);
+          rn.peFloors&&rn.peFloors.length&&(tx.peFloors=rn.peFloors);
+          rn.ceSignal&&(tx.ceSignal=rn.ceSignal);
+          rn.peSignal&&(tx.peSignal=rn.peSignal);
+          tx.pcr=rn.pcr||tx.pcr;
+          tx.rameshTrapped=rn.rameshTrapped||false;
+          tx.sureshTrapped=rn.sureshTrapped||false;
+        });
+      }catch(err){}
+    }
+    addLog("OI refreshed for open trades","");
+  }
   var payload=openTrades.map(function(t){return{symbol:t.sym,strike:t.strike,type:t.type};});
   try{
     var r=await fetch(getServer()+"/live-trade-prices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trades:payload})});
