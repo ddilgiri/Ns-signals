@@ -3505,16 +3505,21 @@ function _buildMonitorNarration(pos) {
                    ? ((spot - pos.spotPrev) / pos.spotPrev * 100) : 0;
 
   // ── Detect first-cycle (all nulls) vs genuine flat (all ~0) ──
-  var totalOiAbs = 0, oiCount = 0, nullCount = 0, totalChainRows = 0;
+  var totalOiAbs = 0, oiCount = 0, nullCount = 0, totalChainRows = 0, totalVol = 0, volRows = 0;
   (chain || []).forEach(function(c) {
     totalChainRows++;
     if (typeof c.CE_oiChangePct === 'number') { totalOiAbs += Math.abs(c.CE_oiChangePct); oiCount++; }
     else nullCount++;
     if (typeof c.PE_oiChangePct === 'number') { totalOiAbs += Math.abs(c.PE_oiChangePct); oiCount++; }
     else nullCount++;
+    // Also tally volume to avoid false "flat" when volume is active
+    if (typeof c.CE_vol === 'number' && c.CE_vol > 0) { totalVol += c.CE_vol; volRows++; }
+    if (typeof c.PE_vol === 'number' && c.PE_vol > 0) { totalVol += c.PE_vol; volRows++; }
   });
   var isFirstCycle = nullCount > oiCount; // majority null = server hasn't seen a prior cycle yet
-  var chainIsFlat  = !isFirstCycle && oiCount > 0 && (totalOiAbs / oiCount) < 0.5;
+  var avgVolumePresent = volRows > 0 && (totalVol / volRows) > 500; // meaningful volume in chain
+  // chainIsFlat: OI change% all near zero AND no meaningful volume — truly inactive
+  var chainIsFlat  = !isFirstCycle && oiCount > 0 && (totalOiAbs / oiCount) < 0.5 && !avgVolumePresent;
   var slHitEarly   = livePrem != null && livePrem <= slLevel; // SL already breached
 
   // Build headline with LTP vs entry (used in both first-cycle and flat paths)
