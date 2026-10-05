@@ -3515,6 +3515,7 @@ function _buildMonitorNarration(pos) {
   });
   var isFirstCycle = nullCount > oiCount; // majority null = server hasn't seen a prior cycle yet
   var chainIsFlat  = !isFirstCycle && oiCount > 0 && (totalOiAbs / oiCount) < 0.5;
+  var slHitEarly   = livePrem != null && livePrem <= slLevel; // SL already breached
 
   // Build headline with LTP vs entry (used in both first-cycle and flat paths)
   function _fcHeadline() {
@@ -3532,6 +3533,18 @@ function _buildMonitorNarration(pos) {
     return h;
   }
 
+  // SL already hit — always show urgent exit, skip OI data quality checks
+  if (slHitEarly) {
+    var slLoss = (livePrem - pos.entry) * (pos.lot || 1) * (pos.lots || 1);
+    var slHtml = '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">';
+    slHtml += '<div style="font-size:12.5px;line-height:1.8">' + _fcHeadline() + '</div>';
+    slHtml += '<div style="font-size:12px;line-height:1.75;margin-top:6px;color:var(--red)"><b>🔴 SL HIT — Exit immediately.</b> Premium ₹' + (livePrem||0).toFixed(2) + ' is below your SL of ₹' + slLevel.toFixed(2) + '.</div>';
+    if (spot) slHtml += '<div style="font-size:12px;line-height:1.75;margin-top:5px;color:var(--text2)">Spot at ₹' + spot.toFixed(0) + (spotChgPct !== 0 ? ' (' + (spotChgPct > 0 ? '+' : '') + spotChgPct.toFixed(2) + '%)' : '') + ' — moving ' + ((pos.side === 'CE' && spotChgPct < 0) || (pos.side === 'PE' && spotChgPct > 0) ? R('against you') : 'with some recovery') + '.</div>';
+    slHtml += '<div style="font-size:12px;line-height:1.75;margin-top:5px">' + R(B('Do not hold hoping for reversal. Cut the position now.')) + '</div>';
+    slHtml += '<div style="font-size:9px;color:var(--text3);margin-top:9px;padding-top:6px;border-top:1px solid var(--border)">Last updated: ' + (pos.lastFetch ? new Date(pos.lastFetch).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—') + '</div></div>';
+    return slHtml;
+  }
+
   if (isFirstCycle) {
     var fcSpot = spot ? ' Spot ₹' + spot.toFixed(0) + (spotChgPct !== 0 ? ' (' + (spotChgPct > 0 ? '+' : '') + spotChgPct.toFixed(2) + '%)' : '') + '.' : '';
     return '<div style="padding:10px 13px 8px;border-top:1px solid var(--border)">' +
@@ -3543,9 +3556,7 @@ function _buildMonitorNarration(pos) {
   if (chainIsFlat) {
     // Situational neutral narration — based on what little we know
     var neutralLines = [];
-    // Headline with LTP
     neutralLines.push(_fcHeadline());
-    // Spot context if available
     if (spot && spotChgPct !== 0) {
       var absN = Math.abs(spotChgPct);
       var dirN = spotChgPct > 0 ? 'up' : 'down';
