@@ -292,20 +292,37 @@ async function startup() {
   // Daily reset
   ks.dailyReset();
 
-  // Login
+  // Login — retry every 2 min if failed, don't crash server
+  let loggedIn = false;
   try {
     await login();
+    loggedIn = true;
   } catch (e) {
-    console.error('❌ Login failed:', e.message);
-    process.exit(1);
+    console.error('❌ Login failed:', e.message, '— will retry in 2 min');
   }
 
-  // M0 — fetch today's events at startup (8 AM equivalent)
-  EVENT_FLAGS = await fetchTodayEvents();
+  // M0 — fetch today's events at startup
+  if (loggedIn) {
+    EVENT_FLAGS = await fetchTodayEvents();
+  }
 
   // Start scan loop — every 60 seconds
   await runScan();
   setInterval(runScan, 60 * 1000);
+
+  // Retry login every 2 min until success
+  if (!loggedIn) {
+    const retryLogin = setInterval(async () => {
+      try {
+        await login();
+        EVENT_FLAGS = await fetchTodayEvents();
+        console.log('✅ Login retry successful');
+        clearInterval(retryLogin);
+      } catch (e) {
+        console.error('❌ Login retry failed:', e.message);
+      }
+    }, 2 * 60 * 1000);
+  }
 
   // Daily reset at 9:00 AM
   setInterval(() => {
