@@ -37,7 +37,10 @@ async function login() {
       'X-PrivateKey': CONFIG.apiKey,
     }
   });
-  const d = res.data.data;
+  const d = res.data && res.data.data;
+  if (!d || !d.jwtToken) {
+    throw new Error(`Login API returned no token — message: ${res.data && res.data.message || 'unknown'}`);
+  }
   SESSION.jwtToken    = d.jwtToken;
   SESSION.refreshToken = d.refreshToken;
   SESSION.feedToken   = d.feedToken;
