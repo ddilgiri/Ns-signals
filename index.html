@@ -2584,15 +2584,14 @@ function buildTradeCardV4(tr) {
   var sigSrc = sig || tr; // use live signal if available, else trade data from localStorage
   if(sigSrc) {
   var sig = sigSrc; // alias so inner code works unchanged
-    var movePct = avg > 0 ? Math.min(100, Math.max(0, Math.round((prem - avg) / avg * 100))) : 0;
+    var fuelPct = v4FuelPct ? v4FuelPct(sig) : 50;
     var fuelCol = isPE ? &#39;var(--red)&#39; : &#39;var(--green)&#39;;
-    var moveSign = movePct >= 0 ? &#39;+&#39; : &#39;&#39;;
     html += &#39;&lt;div style=&#34;margin-bottom:8px&#34;&gt;&#39;;
     html += &#39;&lt;div style=&#34;display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:4px&#34;&gt;&#39;;
-    html += &#39;&lt;span&gt;📈 Premium Move&lt;/span&gt;&lt;span style=&#34;color:&#39;+(prem>=avg?&#39;var(--green)&#39;:&#39;var(--red)&#39;)+&#39;&#34;&gt;&#39;+moveSign+movePct+&#39;%&lt;/span&gt;&#39;;
+    html += &#39;&lt;span&gt;⛽ Signal Fuel&lt;/span&gt;&lt;span style=&#34;color:&#39;+fuelCol+&#39;&#34;&gt;&#39;+fuelPct+&#39;%&lt;/span&gt;&#39;;
     html += &#39;&lt;/div&gt;&#39;;
     html += &#39;&lt;div style=&#34;height:6px;background:var(--border2);border-radius:10px;overflow:hidden&#34;&gt;&#39;;
-    html += &#39;&lt;div style=&#34;height:100%;width:&#39;+Math.abs(movePct)+&#39;%;background:&#39;+(prem>=avg?&#39;var(--green)&#39;:&#39;var(--red)&#39;)+&#39;;border-radius:10px&#34;&gt;&lt;/div&gt;&#39;;
+    html += &#39;&lt;div style=&#34;height:100%;width:&#39;+fuelPct+&#39;%;background:&#39;+fuelCol+&#39;;border-radius:10px&#34;&gt;&lt;/div&gt;&#39;;
     html += &#39;&lt;/div&gt;&lt;/div&gt;&#39;;
 
     // Zone C capsules
