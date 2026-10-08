@@ -82,33 +82,135 @@ function scoreM1(futures, prevFuturesOI, chainData) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// M2 — PCR Put-Call Ratio (NISM Series VIII 5.5.2)
-// Contrarian indicator
+// M2 — Flow Score (AI-trader V8 weights — replaces PCR-only M2)
+// 5-component weighted composite:
+//   volume_ratio  0.40  — current vol vs avg vol (momentum confirmation)
+//   MFI           0.25  — Money Flow Index (buying/selling pressure)
+//   OBV slope     0.15  — On-Balance Volume direction (smart money)
+//   PCR bonus     0.12  — Put-Call Ratio (contrarian + hard gate)
+//   OI change     0.08  — OI delta (buildup vs unwinding)
 // Score: -2 to +2
+//
+// PCR hard gates (from vinay-v-7 logic):
+//   PCR > 1.5 → block PE buys (put-dominant = market supported)
+//   PCR < 0.6 → block CE buys (call-dominant = resistance overhead)
 // ─────────────────────────────────────────────────────────────────────────────
-function scoreM2(pcr) {
-  if (pcr == null) return { score: 0, label: 'M2: No PCR data' };
-
-  let score, label;
-
-  if (pcr > 1.5) {
-    // Extreme put buying = extreme fear = contrarian VERY BULLISH
-    score = 2; label = `PCR ${pcr.toFixed(2)} — Extreme fear, contrarian Bullish`;
-  } else if (pcr > 1.2) {
-    // High put buying = contrarian bullish
-    score = 1; label = `PCR ${pcr.toFixed(2)} — High puts, contrarian Bullish`;
-  } else if (pcr >= 0.8 && pcr <= 1.2) {
-    // Neutral zone
-    score = 0; label = `PCR ${pcr.toFixed(2)} — Neutral`;
-  } else if (pcr < 0.5) {
-    // Extreme call buying = extreme greed = contrarian VERY BEARISH
-    score = -2; label = `PCR ${pcr.toFixed(2)} — Extreme greed, contrarian Bearish`;
-  } else {
-    // Low PCR = contrarian bearish
-    score = -1; label = `PCR ${pcr.toFixed(2)} — Low puts, contrarian Bearish`;
+function scoreM2(flowData) {
+  // Legacy: if called with bare pcr number (backward compat)
+  if (typeof flowData === 'number' || flowData == null) {
+    const pcr = flowData;
+    if (pcr == null) return { score: 0, label: 'M2: No flow data', flowScore: 0, hardBlock: null };
+    // Simple PCR fallback — map to -2..+2
+    let s = pcr > 1.5 ? 2 : pcr > 1.2 ? 1 : pcr >= 0.8 ? 0 : pcr < 0.5 ? -2 : -1;
+    return { score: s, label: `M2(PCR fallback): ${pcr.toFixed(2)}`, flowScore: s / 2, pcr, hardBlock: null };
   }
 
-  return { score, label, pcr };
+  const {
+    volumeRatio,   // current candle vol / 20-period avg vol  (e.g. 1.8)
+    mfi,           // MFI 14 value  0-100
+    obvSlope,      // OBV slope: +1 rising, 0 flat, -1 falling
+    pcr,           // Put-Call Ratio (can be null)
+    oiChangePct,   // OI change % vs prev (e.g. +2.5 means +2.5%)
+    side = 'CE',   // trade side — for PCR hard gate
+  } = flowData;
+
+  // ── Component 1: Volume Ratio (weight 0.40) ───────────────────────────────
+  // >1.5x avg = strong flow; <0.7x = weak/drying up
+  let volScore = 0;
+  if (volumeRatio != null) {
+    if      (volumeRatio >= 2.0)  volScore =  1.0;
+    else if (volumeRatio >= 1.5)  volScore =  0.7;
+    else if (volumeRatio >= 1.2)  volScore =  0.4;
+    else if (volumeRatio >= 0.8)  volScore =  0.0;
+    else if (volumeRatio >= 0.5)  volScore = -0.4;
+    else                           volScore = -0.7;
+  }
+  const volContrib = volScore * 0.40;
+
+  // ── Component 2: MFI (weight 0.25) ───────────────────────────────────────
+  // >80 = overbought (bearish for CE), <20 = oversold (bullish for CE)
+  // 40-60 neutral, 60-80 bullish momentum
+  let mfiScore = 0;
+  if (mfi != null) {
+    if      (mfi >= 80)  mfiScore = -0.8;  // overbought = reversal risk
+    else if (mfi >= 60)  mfiScore =  0.8;  // strong bullish momentum
+    else if (mfi >= 40)  mfiScore =  0.2;  // mild bullish
+    else if (mfi >= 20)  mfiScore = -0.5;  // bearish momentum
+    else                  mfiScore =  0.5;  // oversold = reversal bounce
+  }
+  // Flip for PE side
+  if (side === 'PE') mfiScore = -mfiScore;
+  const mfiContrib = mfiScore * 0.25;
+
+  // ── Component 3: OBV Slope (weight 0.15) ─────────────────────────────────
+  // Smart money direction: +1 rising (accumulation), -1 falling (distribution)
+  let obvScore = 0;
+  if (obvSlope != null) {
+    obvScore = Math.max(-1, Math.min(1, obvSlope)); // clamp to -1..+1
+  }
+  if (side === 'PE') obvScore = -obvScore;
+  const obvContrib = obvScore * 0.15;
+
+  // ── Component 4: PCR bonus (weight 0.12) ─────────────────────────────────
+  // Contrarian: high PCR = fear = bullish; low PCR = greed = bearish
+  let pcrScore = 0;
+  let hardBlock = null;
+  if (pcr != null) {
+    if      (pcr > 1.5)                  pcrScore =  1.0;
+    else if (pcr > 1.2)                  pcrScore =  0.6;
+    else if (pcr >= 0.8 && pcr <= 1.2)   pcrScore =  0.0;
+    else if (pcr < 0.6)                   pcrScore = -1.0;
+    else                                  pcrScore = -0.5;
+
+    // Hard gate (vinay-v-7 logic) — PCR extreme blocks trade direction
+    if (pcr > 1.5 && side === 'PE') {
+      hardBlock = `PCR ${pcr.toFixed(2)} > 1.5 — Heavy put writing, market supported. PE buy BLOCKED.`;
+    } else if (pcr < 0.6 && side === 'CE') {
+      hardBlock = `PCR ${pcr.toFixed(2)} < 0.6 — Heavy call writing, resistance overhead. CE buy BLOCKED.`;
+    }
+  }
+  const pcrContrib = pcrScore * 0.12;
+
+  // ── Component 5: OI Change % (weight 0.08) ────────────────────────────────
+  // >2% buildup = strong signal; <-2% = unwinding
+  let oiScore = 0;
+  if (oiChangePct != null) {
+    if      (oiChangePct > 3)   oiScore =  1.0;
+    else if (oiChangePct > 1)   oiScore =  0.5;
+    else if (oiChangePct > -1)  oiScore =  0.0;
+    else if (oiChangePct > -3)  oiScore = -0.5;
+    else                         oiScore = -1.0;
+  }
+  const oiContrib = oiScore * 0.08;
+
+  // ── Composite flow score (-1 to +1) → scale to -2..+2 ────────────────────
+  const rawFlow = volContrib + mfiContrib + obvContrib + pcrContrib + oiContrib;
+  const score   = Math.round(rawFlow * 2 * 2) / 2; // scale -1..+1 → -2..+2, step 0.5
+  const clampedScore = Math.max(-2, Math.min(2, score));
+
+  const label = [
+    `M2 FlowScore ${clampedScore > 0 ? '+' : ''}${clampedScore}`,
+    volumeRatio != null ? `Vol×${volumeRatio.toFixed(1)}` : '',
+    mfi != null         ? `MFI ${mfi.toFixed(0)}` : '',
+    obvSlope != null    ? `OBV ${obvSlope > 0 ? '↑' : obvSlope < 0 ? '↓' : '→'}` : '',
+    pcr != null         ? `PCR ${pcr.toFixed(2)}` : '',
+    oiChangePct != null ? `OI${oiChangePct > 0 ? '+' : ''}${oiChangePct.toFixed(1)}%` : '',
+  ].filter(Boolean).join(' | ');
+
+  return {
+    score:     clampedScore,
+    label,
+    hardBlock,  // non-null = PCR hard gate triggered — decision.js should BLOCK
+    flowScore:  +rawFlow.toFixed(3),
+    breakdown: {
+      volContrib:  +volContrib.toFixed(3),
+      mfiContrib:  +mfiContrib.toFixed(3),
+      obvContrib:  +obvContrib.toFixed(3),
+      pcrContrib:  +pcrContrib.toFixed(3),
+      oiContrib:   +oiContrib.toFixed(3),
+    },
+    inputs: { volumeRatio, mfi, obvSlope, pcr, oiChangePct, side },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

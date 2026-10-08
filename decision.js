@@ -153,7 +153,8 @@ function decide(scoreResult, currentPremium, filterData = null) {
     !timeCheck.allowed ||
     !capitalCheck.canAfford ||
     m3.flag === 'AVOID' ||     // IV spike = never buy expensive options
-    !filterCheck.valid;        // optionsFilter hard block
+    !filterCheck.valid ||       // optionsFilter hard block
+    !!m2.hardBlock;             // PCR hard gate (CE blocked if PCR<0.6, PE blocked if PCR>1.5)
 
   // ── Final decision ─────────────────────────────────────────────────────────
   let decision, entryPremium, slPremium, targetPremium, tradeNote;
@@ -163,6 +164,7 @@ function decide(scoreResult, currentPremium, filterData = null) {
     tradeNote = !timeCheck.allowed      ? `⏰ ${timeCheck.reason}`
               : !capitalCheck.canAfford ? `💰 ${capitalCheck.capitalNote}`
               : !filterCheck.valid      ? `🚫 Filter: ${filterCheck.issues[0]}`
+              : m2.hardBlock            ? `🚫 PCR Gate: ${m2.hardBlock}`
               : `🔴 IV Spike — ${m3.label}`;
     entryPremium = slPremium = targetPremium = null;
 
@@ -188,7 +190,7 @@ function decide(scoreResult, currentPremium, filterData = null) {
   // ── Why summary — top 3 factors ───────────────────────────────────────────
   const factors = [
     { name: 'M1 OI',    score: m1.score,          label: m1.label },
-    { name: 'M2 PCR',   score: m2.score,          label: m2.label },
+    { name: 'M2 Flow',  score: m2.score,          label: m2.label },
     { name: 'M3 IV',    score: m3.penaltyScore,   label: m3.label },
     { name: 'M5 Trend', score: m5.score,          label: m5.label },
     { name: 'M6 MaxPain', score: m6.score,        label: m6.label },
