@@ -1608,9 +1608,12 @@ function buildCardV4(e){
   // Car dot
   // Offset for ENTRY/TARGET labels: track runs ~10% to 90% of row width
   var _carLeft=Math.round(10+carPct*0.8);
+  var _inLoss=_displayPremPct!==null&&_displayPremPct<0;
+  var _dotClass=hasRoadblock?'danger':(_inLoss?'pe':'ce');
+  var _dotEmoji=hasRoadblock?'🚧':(_inLoss?'🔴':'🟢');
   html+='<div class="v4-car" style="left:'+_carLeft+'%">';
-  html+='<div class="v4-car-dot '+(hasRoadblock?'danger':(isPE?'pe':'ce'))+'">'+(isPE?'🔴':'🟢')+'</div>';
-  html+='<span class="v4-car-arrow '+(isPE?'pe':'ce')+'">→</span>';
+  html+='<div class="v4-car-dot '+_dotClass+'">'+_dotEmoji+'</div>';
+  html+='<span class="v4-car-arrow '+_dotClass+'">→</span>';
   html+='</div>';
   if(hasRoadblock){
     // Roadblock between car and target
