@@ -1441,38 +1441,17 @@ function buildCardV4(e){
   var _targetNum=parseFloat(String(e.target1||e.suggestedTarget||0).replace(/[^0-9.]/g,''))||0;
   var _stopStr=String(e.suggestedStop||e.exitZone||'');
   var _stopNum=parseFloat(_stopStr.replace(/[^0-9.]/g,''))||0;
-  var carPct=fuelPct; // fallback
-  var _displayPremPct=null; // premium % gain from entry — shown in place of OI% in the label
-  if(_stopNum>0&&_targetNum>0&&spot>0){
-    var _spotPct=0;
-    if(isPE){
-      var _range=_stopNum-_targetNum;
-      if(_range>0) _spotPct=Math.min(100,Math.max(0,(_stopNum-spot)/_range*100));
-    } else {
-      var _range=_targetNum-_stopNum;
-      if(_range>0) _spotPct=Math.min(100,Math.max(0,(spot-_stopNum)/_range*100));
-    }
-    // Premium progress: entry→target, using live premium from cache
-    var _entryPrem=e.entryPremium||prem;
-    var _livePremKey=sym+'_'+e.strike+'_'+e.type;
-    var _livePrem=LIVE_PREMIUMS[_livePremKey]||prem;
-    var _premTarget=e.targetPremium||0;
-    var _premPct=0;
-    if(_entryPrem>0&&_premTarget>0&&_livePrem>0){
-      _premPct=Math.min(100,Math.max(0,(_livePrem-_entryPrem)/(_premTarget-_entryPrem)*100));
-    } else if(_entryPrem>0&&_livePrem>0){
-      // fallback: raw % gain from entry (can be negative if in loss)
-      _premPct=(_livePrem-_entryPrem)/_entryPrem*100;
-    }
-    // Store rounded premium % for display (1 decimal, allow negative)
-    if(_entryPrem>0&&_livePrem>0) _displayPremPct=Math.round(_premPct*10)/10;
-    // Car position = premium % from entry (0 at entry, grows right as profit grows)
-    if(_entryPrem>0&&_livePrem>0){
-      carPct=Math.min(95,Math.max(2,Math.abs(_premPct)));
-    } else {
-      var _combined=Math.round(_spotPct*0.7+Math.max(0,_premPct)*0.3);
-      carPct=Math.min(95,Math.max(2,_combined));
-    }
+  var carPct=0; // always starts at 0 (entry = left edge)
+  var _displayPremPct=null;
+  // Use entryPremium if stored, else use signal's own premium as entry reference
+  var _entryPrem=e.entryPremium||prem;
+  var _livePremKey=sym+'_'+e.strike+'_'+e.type;
+  var _livePrem=LIVE_PREMIUMS[_livePremKey]||prem;
+  if(_entryPrem>0&&_livePrem>0){
+    var _rawPremPct=(_livePrem-_entryPrem)/_entryPrem*100;
+    _displayPremPct=Math.round(_rawPremPct*10)/10;
+    // Bar width = abs(% move), capped at 95 so dot never hides at right edge
+    carPct=Math.min(95,Math.abs(_rawPremPct));
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
 
@@ -1617,10 +1596,11 @@ function buildCardV4(e){
   html+='<div class="v4-fuel-row1">';
   html+='<span></span>';
   html+='<span class="v4-fuel-icon">'+(hasRoadblock?'🚧':'⛽')+'</span>';
-  var _labelPct=_displayPremPct!==null?_displayPremPct:fuelPct;
+  var _labelPct=_displayPremPct!==null?_displayPremPct:0;
   var _labelSign=_displayPremPct!==null&&_displayPremPct>0?'+':'';
-  var _labelIcon=hasRoadblock?'⚠️':(_displayPremPct!==null?(_displayPremPct>=50?'🔥':_displayPremPct>=10?'⛽':_displayPremPct>0?'📈':'⏳'):(fuelPct>=80?'🔥':fuelPct>=50?'⛽':'⏳'));
-  html+='<span class="v4-fuel-pct" style="color:'+fuelCol+'">'+_labelSign+_labelPct+'% '+_labelIcon+'</span>';
+  var _labelIcon=hasRoadblock?'⚠️':(_displayPremPct===null?'⏳':_displayPremPct>=50?'🔥':_displayPremPct>=10?'⛽':_displayPremPct>0?'📈':_displayPremPct<0?'📉':'⏳');
+  var _labelCol=hasRoadblock?'#f59e0b':(_displayPremPct!==null&&_displayPremPct<0?'var(--red)':'var(--green)');
+  html+='<span class="v4-fuel-pct" style="color:'+_labelCol+'">'+_labelSign+_labelPct+'% '+_labelIcon+'</span>';
   html+='</div>';
   html+='<div class="v4-fuel-row2">';
   var _barClass=hasRoadblock?'danger':(_displayPremPct!==null?(_displayPremPct>=0?'ce':'danger'):fuelClass);
