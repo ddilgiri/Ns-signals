@@ -1466,8 +1466,13 @@ function buildCardV4(e){
     }
     // Store rounded premium % for display (1 decimal, allow negative)
     if(_entryPrem>0&&_livePrem>0) _displayPremPct=Math.round(_premPct*10)/10;
-    var _combined=Math.round(_spotPct*0.7+Math.max(0,_premPct)*0.3);
-    carPct=Math.min(95,Math.max(2,_combined));
+    // Car position = premium % from entry (0 at entry, grows right as profit grows)
+    if(_entryPrem>0&&_livePrem>0){
+      carPct=Math.min(95,Math.max(2,Math.abs(_premPct)));
+    } else {
+      var _combined=Math.round(_spotPct*0.7+Math.max(0,_premPct)*0.3);
+      carPct=Math.min(95,Math.max(2,_combined));
+    }
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
 
@@ -1618,7 +1623,8 @@ function buildCardV4(e){
   html+='<span class="v4-fuel-pct" style="color:'+fuelCol+'">'+_labelSign+_labelPct+'% '+_labelIcon+'</span>';
   html+='</div>';
   html+='<div class="v4-fuel-row2">';
-  html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+fuelClass+'" style="width:'+carPct+'%"></div></div>';
+  var _barClass=hasRoadblock?'danger':(_displayPremPct!==null?(_displayPremPct>=0?'ce':'danger'):fuelClass);
+  html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+_barClass+'" style="width:'+carPct+'%"></div></div>';
   // Car dot
   // Offset for ENTRY/TARGET labels: track runs ~10% to 90% of row width
   var _carLeft=Math.round(10+carPct*0.8);
