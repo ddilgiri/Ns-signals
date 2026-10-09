@@ -1442,6 +1442,7 @@ function buildCardV4(e){
   var _stopStr=String(e.suggestedStop||e.exitZone||'');
   var _stopNum=parseFloat(_stopStr.replace(/[^0-9.]/g,''))||0;
   var carPct=fuelPct; // fallback
+  var _displayPremPct=null; // premium % gain from entry — shown in place of OI% in the label
   if(_stopNum>0&&_targetNum>0&&spot>0){
     var _spotPct=0;
     if(isPE){
@@ -1459,11 +1460,13 @@ function buildCardV4(e){
     var _premPct=0;
     if(_entryPrem>0&&_premTarget>0&&_livePrem>0){
       _premPct=Math.min(100,Math.max(0,(_livePrem-_entryPrem)/(_premTarget-_entryPrem)*100));
-    } else if(_entryPrem>0&&_livePrem>_entryPrem){
-      // fallback: % gain from entry (cap at 100%)
-      _premPct=Math.min(100,(_livePrem-_entryPrem)/_entryPrem*100);
+    } else if(_entryPrem>0&&_livePrem>0){
+      // fallback: raw % gain from entry (can be negative if in loss)
+      _premPct=(_livePrem-_entryPrem)/_entryPrem*100;
     }
-    var _combined=Math.round(_spotPct*0.7+_premPct*0.3);
+    // Store rounded premium % for display (1 decimal, allow negative)
+    if(_entryPrem>0&&_livePrem>0) _displayPremPct=Math.round(_premPct*10)/10;
+    var _combined=Math.round(_spotPct*0.7+Math.max(0,_premPct)*0.3);
     carPct=Math.min(95,Math.max(2,_combined));
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
@@ -1609,7 +1612,10 @@ function buildCardV4(e){
   html+='<div class="v4-fuel-row1">';
   html+='<span></span>';
   html+='<span class="v4-fuel-icon">'+(hasRoadblock?'🚧':'⛽')+'</span>';
-  html+='<span class="v4-fuel-pct" style="color:'+fuelCol+'">'+fuelPct+'% '+(hasRoadblock?'⚠️':fuelPct>=80?'🔥':fuelPct>=50?'⛽':'⏳')+'</span>';
+  var _labelPct=_displayPremPct!==null?_displayPremPct:fuelPct;
+  var _labelSign=_displayPremPct!==null&&_displayPremPct>0?'+':'';
+  var _labelIcon=hasRoadblock?'⚠️':(_displayPremPct!==null?(_displayPremPct>=50?'🔥':_displayPremPct>=10?'⛽':_displayPremPct>0?'📈':'⏳'):(fuelPct>=80?'🔥':fuelPct>=50?'⛽':'⏳'));
+  html+='<span class="v4-fuel-pct" style="color:'+fuelCol+'">'+_labelSign+_labelPct+'% '+_labelIcon+'</span>';
   html+='</div>';
   html+='<div class="v4-fuel-row2">';
   html+='<div class="v4-fuel-track"><div class="v4-fuel-fill '+fuelClass+'" style="width:'+carPct+'%"></div></div>';
