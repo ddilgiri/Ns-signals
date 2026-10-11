@@ -26,7 +26,7 @@
 <button class="btn-primary" onclick="addMonitorPosition()" style="padding:10px;font-size:13px">📌 Add &amp; Start Monitoring</button>
 </div></div>
 <div id="monitorList" style="display:flex;flex-direction:column;gap:10px"></div>
-</div></div></div><script>const S={connected:!1,scanning:!1,scanInt:null,signals:[],filterMode:"all",genFilter:"all",scannedCount:0,paperTrades:[],closedPaperTrades:[],divSwingCache:{}};
+</div></div></div><script>const S={connected:!1,scanning:!1,scanInt:null,divSwingInt:null,signals:[],filterMode:"all",genFilter:"all",scannedCount:0,paperTrades:[],closedPaperTrades:[],divSwingCache:{}};
 // ── NOTIFICATION SYSTEM ──────────────────────────────────
 var _notifGranted=false,_zoneAlerted={};
 (function(){try{if("Notification"in window&&Notification.permission!=="denied"){Notification.requestPermission().then(function(p){_notifGranted=p==="granted";if(_notifGranted)setupPushSubscription();});}}catch(e){}})();
@@ -556,7 +556,29 @@ async function loadFnoStockList(forceRefresh){
   }catch(e){
     addLog("⚠️ F&O list auto-derive failed — using fallback list: "+e.message,"warn");
   }
-}async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanning)return clearInterval(S.scanInt),S.scanInt=null,S.scanning=!1,e.textContent="▶ SCAN",e.className="scan-btn go",void addLog("Scanner stopped","warn");if(S.connected){if(!getMarketStatus().nseOpen)return toast("⏰ NSE Market is closed"),void addLog("Scan blocked — NSE closed","warn");S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(runScan,25e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
+}async function checkDivSwing(){
+  // Runs once per hour (not every 25s scan) — RSI divergence is a swing signal, not intraday.
+  // Only checks symbols with actual open paper/manual trades that exist in NSE_STOCKS with a token.
+  try{
+    var syms=[...new Set(S.paperTrades.map(function(pt){return pt.sym;}))];
+    if(!syms.length)return;
+    var checked=0;
+    await Promise.all(syms.map(async function(sym){
+      try{
+        var stk=NSE_STOCKS.find(function(s){return s.sym===sym;})||IDX_LIST.find(function(s){return s.sym===sym;});
+        if(!stk||!stk.token)return;
+        var res=await fetch(getServer()+"/market-bias?sym="+sym+"&token="+stk.token);
+        var d=await res.json();
+        if(d&&d.rsiDivergence){
+          S.divSwingCache[sym]={bullish:!!d.rsiDivergence.bullish,bearish:!!d.rsiDivergence.bearish,note:d.rsiDivergence.note||""};
+          checked++;
+        }
+      }catch(e){}
+    }));
+    if(checked)renderTrades();
+    addLog("📐 DIV SWING check done — "+checked+"/"+syms.length+" trades updated","");
+  }catch(e){}
+}async function toggleScan(){var e=document.getElementById("scanBtn");if(S.scanning)return clearInterval(S.scanInt),S.scanInt=null,clearInterval(S.divSwingInt),S.divSwingInt=null,S.scanning=!1,e.textContent="▶ SCAN",e.className="scan-btn go",void addLog("Scanner stopped","warn");if(S.connected){if(!getMarketStatus().nseOpen)return toast("⏰ NSE Market is closed"),void addLog("Scan blocked — NSE closed","warn");S.scanning=!0,e.textContent="⏹ STOP",e.className="scan-btn stop",addLog("Scanner started — NSE F&O stocks + indices","ok"),runScan(),S.scanInt=setInterval(runScan,25e3),checkDivSwing(),S.divSwingInt=setInterval(checkDivSwing,60*60*1e3)}else toast("⚠️ Login first in Setup tab")}async function runScan(){
   if(!S.scanning)return;
   if(!getMarketStatus().nseOpen)return clearInterval(S.scanInt),S.scanning=!1,document.getElementById("scanBtn").textContent="▶ SCAN",document.getElementById("scanBtn").className="scan-btn go",void addLog("NSE closed — scanner stopped","warn");
   addLog("Scanning cycle...","");
@@ -728,25 +750,6 @@ async function loadFnoStockList(forceRefresh){
     });
     if(_nanaSignals.length)renderSignals(); // re-render so sector-confirmed badges show
   }catch(sectorErr){ /* non-fatal — sector pass is additive, never blocks the scan */ }
-  // DIV SWING: re-check RSI divergence only for symbols with active open paper trades.
-  // "Don't make for all stocks.. Some are not real.. So check twice and do in logic."
-  try{
-    var _activeTradeSyms=[...new Set(S.paperTrades.map(function(pt){return pt.sym;}))];
-    if(_activeTradeSyms.length){
-      await Promise.all(_activeTradeSyms.map(async function(sym){
-        try{
-          var _stk=NSE_STOCKS.find(function(s){return s.sym===sym;})||IDX_LIST.find(function(s){return s.sym===sym;});
-          if(!_stk||!_stk.token)return; // skip non-real / manually added entries
-          var _res=await fetch(getServer()+"/market-bias?sym="+sym+"&token="+_stk.token);
-          var _d=await _res.json();
-          if(_d&&_d.rsiDivergence){
-            S.divSwingCache[sym]={bullish:!!_d.rsiDivergence.bullish,bearish:!!_d.rsiDivergence.bearish,note:_d.rsiDivergence.note||""};
-          }
-        }catch(e){/* best-effort, don't block */}
-      }));
-      renderTrades(); // refresh trade cards with updated divergence tags
-    }
-  }catch(e){/* non-fatal */}
   if(renderSignals(),updateAnalytics(),S.signals.length>0&&"all"!==S.filterMode)
     if(!S.signals.filter(function(e){return"stocks"===S.filterMode?!e.isCommodity:"strong"===S.filterMode?"STRONG"===e.verdict:"moderate"!==S.filterMode||"MODERATE"===e.verdict}).length){
       S.filterMode="all";
