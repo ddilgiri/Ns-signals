@@ -691,6 +691,49 @@ function calcADX(e,t=14){
   for(let i=t;i<dx.length;i++)adx=(adx*(t-1)+dx[i])/t;
   return parseFloat(adx.toFixed(2));
 }
+// 2026-10-12: RSI divergence detector — compares last 2 price swing lows (for CE) or
+// highs (for PE) vs RSI at those same points. Bullish divergence = price lower low but
+// RSI higher low = hidden buying. Zero new API calls — uses same candles + closes arrays
+// already computed above.
+function calcRSIDivergence(candles, closes){
+  try {
+    if(!candles||candles.length<20||!closes||closes.length<20) return {bullish:false,bearish:false,note:"insufficient data"};
+    // Find last 3 swing lows and highs using a 3-candle pivot (prev > curr < next)
+    const lows=[], highs=[];
+    for(let i=2;i<closes.length-2;i++){
+      const c=closes[i],p=closes[i-1],n=closes[i+1],pp=closes[i-2],nn=closes[i+2];
+      if(c<p&&c<n&&c<=pp&&c<=nn) lows.push({idx:i,price:c});
+      if(c>p&&c>n&&c>=pp&&c>=nn) highs.push({idx:i,price:c});
+    }
+    if(lows.length<2&&highs.length<2) return {bullish:false,bearish:false,note:"not enough pivots"};
+    // Compute RSI at each pivot using a 14-period window ending at that candle
+    function rsiAt(idx){
+      const slice=closes.slice(Math.max(0,idx-28),idx+1);
+      return calcRSI14(slice);
+    }
+    let bullish=false, bearish=false, note="no divergence";
+    // Bullish: last 2 price lows: lower low, but RSI: higher low
+    if(lows.length>=2){
+      const l1=lows[lows.length-2], l2=lows[lows.length-1];
+      const rsi1=rsiAt(l1.idx), rsi2=rsiAt(l2.idx);
+      if(l2.price < l1.price && rsi2 > rsi1+2){
+        bullish=true;
+        note=`Bullish divergence: price ${l1.price.toFixed(0)}→${l2.price.toFixed(0)} (lower low), RSI ${rsi1.toFixed(1)}→${rsi2.toFixed(1)} (higher low)`;
+      }
+    }
+    // Bearish: last 2 price highs: higher high, but RSI: lower high
+    if(highs.length>=2){
+      const h1=highs[highs.length-2], h2=highs[highs.length-1];
+      const rsi1=rsiAt(h1.idx), rsi2=rsiAt(h2.idx);
+      if(h2.price > h1.price && rsi2 < rsi1-2){
+        bearish=true;
+        note=`Bearish divergence: price ${h1.price.toFixed(0)}→${h2.price.toFixed(0)} (higher high), RSI ${rsi1.toFixed(1)}→${rsi2.toFixed(1)} (lower high)`;
+      }
+    }
+    return {bullish, bearish, note};
+  } catch(e){ return {bullish:false,bearish:false,note:"error"}; }
+}
+
 // Real feature (2026-09-05, Stage 1): regime classification via ADX percentile against
 // the stock's OWN recent ADX history (not a fixed cutoff like "ADX>25=trending", which
 // is a generic rule that doesn't adapt per stock). Top 30% of recent ADX readings =
@@ -748,7 +791,7 @@ app.post("/market-bias",async(e,t)=>{
   if(!a)return t.status(400).json({status:!1,message:"symbolToken required"});
   const n=BIAS_CACHE[a];
   if(n&&Date.now()-n.fetchTime<BIAS_TTL)return t.json(n.data);
-  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),IMI_val=calcIMI(g),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g),ADX_val=calcADX(g),REGIME=classifyRegime(a,ADX_val),RSI_Z=rsiZScore(a,D);
+  try{const e=new Date,n=new Date(e.toLocaleString("en-US",{timeZone:"Asia/Kolkata"})),o=n.toISOString().slice(0,10),r=new Date(n);let i=1;1===r.getDay()?i=3:0===r.getDay()&&(i=2),r.setDate(r.getDate()-i);const l=r.toISOString().slice(0,10),c=new Date(n);c.setDate(c.getDate()-10);const u=c.toISOString().slice(0,10)+" 09:15",p=o+" 15:30";let d;try{d=await throttledCandleRequest({exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p},s)}catch(e){const t=e.response?.status;if(403!==t&&429!==t)throw e;log(`Candle 403/429 for ${a} — waiting 2s then retrying`,"WARN"),await new Promise(e=>setTimeout(e,2e3)),_lastCandleCall=Date.now(),d=await angelRequest("POST",`${ANGEL_API}/rest/secure/angelbroking/historical/v1/getCandleData`,{exchange:s,symboltoken:a,interval:"FIFTEEN_MINUTE",fromdate:u,todate:p})}const g=d.data?.data||[];if(g.length<10){const e={status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,macd:null,atr:null,supertrend:null,isExpiryDay:!1,atrStopLong:null,atrStopShort:null,candleCount:g.length,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1};return BIAS_CACHE[a]={data:e,fetchTime:Date.now()},t.json(e)}const m=g.map(e=>parseFloat(e[4]));(g.map(e=>parseFloat(e[5])));const h=calcEMA(m,20),S=calcEMA(m,50),E=m[m.length-1];let f="NEUTRAL";h&&S?E>h&&h>S?f="BULLISH":E<h&&h<S&&(f="BEARISH"):h&&(f=E>h?"BULLISH":"BEARISH");const I=g.filter(e=>e[0].slice(0,10)===l),N=I.length?Math.max(...I.map(e=>parseFloat(e[2]))):null,A=I.length?Math.min(...I.map(e=>parseFloat(e[3]))):null,k=g.filter(e=>e[0].slice(0,10)===o),C=k.slice(0,2),O=C.length?Math.max(...C.map(e=>parseFloat(e[2]))):null,T=C.length?Math.min(...C.map(e=>parseFloat(e[3]))):null,y=k.reduce((e,t)=>e+parseFloat(t[5]),0),w=g.filter(e=>e[0].slice(0,10)!==o),b={};w.forEach(e=>{const t=e[0].slice(0,10);b[t]=(b[t]||0)+parseFloat(e[5])});const _=Object.values(b),F=_.length?_.reduce((e,t)=>e+t,0)/_.length:0,R=26,x=Math.min(k.length/R,1),P=F*Math.max(x,.15),L=P>0?parseFloat((y/P).toFixed(2)):1,D=calcRSI14(m),IMI_val=calcIMI(g),$=calcMACD(m),M=calcATR(g),U=calcSupertrend(g),ADX_val=calcADX(g),REGIME=classifyRegime(a,ADX_val),RSI_Z=rsiZScore(a,D),RSI_DIV=calcRSIDivergence(g,m);
   const PRICE_Z=priceZScore(m);
   const ABSORPTION=detectAbsorption(g);
   const KAMA_now=calcKAMA(m),KAMA_prev=m.length>1?calcKAMA(m.slice(0,-1)):null;
@@ -774,7 +817,7 @@ app.post("/market-bias",async(e,t)=>{
 const recentCandles=k.slice(-3);const volUp=recentCandles.reduce((s,c)=>s+parseFloat(c[5]),0)/Math.max(recentCandles.length,1);const priceUp=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])>parseFloat(recentCandles[0][4]);const priceDown=recentCandles.length>=2&&parseFloat(recentCandles[recentCandles.length-1][4])<parseFloat(recentCandles[0][4]);const volMatch=L>=1.2&&((f==="BULLISH"&&priceUp)||(f==="BEARISH"&&priceDown));const volFake=L>=1.2&&((f==="BULLISH"&&priceDown)||(f==="BEARISH"&&priceUp));
 // Volume dry up: last 3 candles all below 0.5x avg
 const last3Vols=k.slice(-3).map(c=>parseFloat(c[5]));const avgVolPerCandle=P>0?P/Math.max(R,1):1;const volDryUp=last3Vols.length===3&&last3Vols.every(v=>v<0.5*avgVolPerCandle);
-const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,candleProjection:CANDLE_PROJECTION,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now(),todayCandles:k,ema20:h,ema50:S,vwap:H,atr:M,volRatio:L,macdHist:$?.histogram??$?.hist??null},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
+const V={status:!0,bias:f,ltp:E,ema20:h,ema50:S,rsi:D,rsiZ:RSI_Z.zscore,imi:IMI_val,kama:KAMA_now,kamaSlope:KAMA_slope,priceZ:PRICE_Z.zscore,absorptionDetected:ABSORPTION.detected,absorptionVolRatio:ABSORPTION.volRatio,adx:ADX_val,regime:REGIME.regime,regimePercentile:REGIME.percentile,rsiDivergence:RSI_DIV,vwap:H,aboveVwap:H?E>H:null,pdh:N,pdl:A,orb_high:O,orb_low:T,volRatio:L,volPriceDir:volMatch?"MATCH":volFake?"FAKE":"NEUTRAL",volDryUp,macd:$||null,atr:M||null,supertrend:U||null,isExpiryDay:expiryInfo.isNSEExpiryDay,isExpiryWeek:expiryInfo.isNSEExpiryWeek,gammaWarning:expiryInfo.gammaWarning,daysToExpiry:expiryInfo.daysToNSEExpiry,atrStopLong:M&&E?parseFloat((E-1.5*M).toFixed(2)):null,atrStopShort:M&&E?parseFloat((E+1.5*M).toFixed(2)):null,candleCount:g.length,candleConfluence:CANDLE_CONFLUENCE,candleProjection:CANDLE_PROJECTION,fromCache:!1};BIAS_CACHE[a]={data:{...V,fromCache:!0},fetchTime:Date.now(),todayCandles:k,ema20:h,ema50:S,vwap:H,atr:M,volRatio:L,macdHist:$?.histogram??$?.hist??null},log(`Bias ${a}: ${f} RSI=${D} IMI=${IMI_val} EMA20=${h} bars=${g.length} expWk=${expiryInfo.isNSEExpiryWeek}`,"INFO"),t.json(V)}catch(e){const s=e.response?.status,o=e.response?.data?.message||e.message;if(log(`market-bias error [${s||"?"}] token=${a}: ${o}`,"WARN"),n)return log(`Serving stale bias cache for ${a}`,"INFO"),t.json({...n.data,fromCache:!0,stale:!0});t.json({status:!0,bias:"NEUTRAL",ltp:null,ema20:null,ema50:null,rsi:50,imi:50,vwap:null,aboveVwap:null,pdh:null,pdl:null,orb_high:null,orb_low:null,volRatio:1,candleCount:0,candleConfluence:{score:null,earned:0,max:64,breakdown:{},gate:"INSUFFICIENT_DATA"},candleProjection:{projected:null,bias:"NEUTRAL",confidence:0,gate:"INSUFFICIENT_DATA"},fromCache:!1,error:o})}})
 
 const FII_DII_CACHE={data:null,fetchTime:0};
 let NSE_COOKIE="";
@@ -985,7 +1028,7 @@ app.post("/candle-projection-session",(e,t)=>{
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
+const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12,rsiDivergence:8,adxTrendStrength:8},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
 function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
 // Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
 // "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
@@ -1295,6 +1338,24 @@ if(oiWrongDir){
   const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
   if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
 }
+// 2026-10-12: ADX Trend Strength — bonus points when trend is strong, zero when ranging.
+// Soft scoring only (never blocks signal). Uses adx value from market-bias candle calc.
+{const tw=SIGNAL_WEIGHTS.adxTrendStrength,adxVal=e.adx;let adxEarned=0,adxNote="";
+if(adxVal==null){adxEarned=Math.round(tw*0.4);adxNote="ADX unavailable — neutral";}
+else if(adxVal>=30){adxEarned=tw;adxNote=`ADX ${adxVal} — strong trend, signal reliable ✓✓`;}
+else if(adxVal>=25){adxEarned=Math.round(tw*0.8);adxNote=`ADX ${adxVal} — good trend strength ✓`;}
+else if(adxVal>=20){adxEarned=Math.round(tw*0.5);adxNote=`ADX ${adxVal} — moderate trend`;}
+else if(adxVal>=15){adxEarned=Math.round(tw*0.2);adxNote=`ADX ${adxVal} — weak trend, choppy`;}
+else{adxEarned=0;adxNote=`ADX ${adxVal} — ranging market, signal weaker`;}
+s.adxTrendStrength={earned:adxEarned,max:tw,pass:adxVal>=20,note:adxNote};}
+// 2026-10-12: RSI Divergence — bonus points for hidden buying (CE) or selling (PE).
+// Bonus only — never penalizes if no divergence. PDF 6 Ch.05 validation.
+{const tw=SIGNAL_WEIGHTS.rsiDivergence,div=e.rsiDivergence;let divEarned=0,divNote="";
+if(!div){divEarned=0;divNote="RSI divergence: no data";}
+else if(a&&div.bullish){divEarned=tw;divNote=`🔺 ${div.note} — hidden buying, CE boost ✓`;}
+else if(!a&&div.bearish){divEarned=tw;divNote=`🔻 ${div.note} — hidden selling, PE boost ✓`;}
+else{divEarned=0;divNote=div.note||"No divergence present";}
+s.rsiDivergence={earned:divEarned,max:tw,pass:divEarned>0,note:divNote};}
 return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
 app.post("/signal-analysis",async(e,t)=>{
