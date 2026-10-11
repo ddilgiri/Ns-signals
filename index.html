@@ -1450,8 +1450,9 @@ function buildCardV4(e){
   if(_entryPrem>0&&_livePrem>0){
     var _rawPremPct=(_livePrem-_entryPrem)/_entryPrem*100;
     _displayPremPct=Math.round(_rawPremPct*10)/10;
-    // Bar width = abs(% move), capped at 95 so dot never hides at right edge
-    carPct=Math.min(95,Math.abs(_rawPremPct));
+    // Bar width scaled: 50% premium move = full bar (×2), capped at 95
+    // This makes small moves (e.g. 5%) visible (~10% bar) rather than nearly empty
+    carPct=Math.min(95,Math.abs(_rawPremPct)*2);
   }
   var fuelCol=hasRoadblock?'#f59e0b':(isPE?'var(--red)':'var(--green)');
 
