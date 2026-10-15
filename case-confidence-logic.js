@@ -97,7 +97,9 @@ function computeConfidence(chain, strikeIdx, side, spotPrice) {
   const otherOiPct = pctChange(otherOi, otherPrevOI);
   const otherLtpPct = pctChange(otherLtp, otherPrevClose);
   const otherCase = classifyCase(otherOiPct, otherLtpPct, otherSide);
-  const caseBias = { 1: 'bear', 2: 'bull', 3: 'neutral', 4: 'bull', 5: 'bull', 6: 'bear', 7: 'neutral', 8: 'bear' };
+  // CE: 1=writing(bear), 2=fresh-long(bull), 3=unwind(neutral), 4=short-cover(bull/squeeze)
+  // PE: 5=put-writing(bull=floor), 6=fresh-put-buy(bear), 7=put-unwind(neutral), 8=put-short-cover(bull=bears-covering)
+  const caseBias = { 1: 'bear', 2: 'bull', 3: 'neutral', 4: 'bull', 5: 'bull', 6: 'bear', 7: 'neutral', 8: 'bull' };
   const crossSideScore = (caseBias[caseNum] === caseBias[otherCase]) ? 10 : 0;
 
   let subtotal = magnitudeScore + breadthScore + distanceScore + crossSideScore;
