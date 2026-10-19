@@ -527,8 +527,9 @@ let MIN_CONFIDENCE = 60;
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
 const TG_CHAT  = process.env.CHAT_ID;
 const TG_SENT  = new Map(); // sym+type → {ts, verdict}, debounce 5 min
+let TG_ENABLED = true; // toggled by /set-tg-enabled from app UI
 async function sendTelegram(text) {
-  if (!TG_TOKEN || !TG_CHAT) return;
+  if (!TG_TOKEN || !TG_CHAT || !TG_ENABLED) return;
   try {
     await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,
       { chat_id: TG_CHAT, text, parse_mode: "HTML" }, { timeout: 8000 });
@@ -622,6 +623,15 @@ app.post("/set-min-confidence", (req, res) => {
   MIN_CONFIDENCE = v;
   log(`Min confidence set to ${v}% (from app settings)`, "INFO");
   res.json({status:true, minConfidence: MIN_CONFIDENCE});
+});
+app.post("/set-tg-enabled", (req, res) => {
+  const enabled = req.body?.enabled;
+  TG_ENABLED = enabled !== false && enabled !== 0;
+  log(`Telegram alerts ${TG_ENABLED ? "ENABLED" : "DISABLED"} (from app settings)`, "INFO");
+  res.json({status:true, tgEnabled: TG_ENABLED});
+});
+app.get("/tg-status", (req, res) => {
+  res.json({status:true, tgEnabled: TG_ENABLED});
 });
 app.get("/health",(e,t)=>{const a=Object.keys(BIAS_CACHE).length,s=Object.values(BIAS_CACHE).filter(e=>Date.now()-e.fetchTime<BIAS_TTL).length;const ms=marketStatus();t.json({status:"ok",authenticated:isAuthenticated(),client:SESSION.clientCode||null,tokenExpiry:SESSION.expiresAt?new Date(SESSION.expiresAt).toLocaleTimeString("en-IN"):null,market:ms,biasCache:{total:a,fresh:s},oiHistorySymbols:Object.keys(OI_HISTORY).length,signalLogCount:SIGNAL_LOG.length})})
 app.post("/clear-cache",(e,t)=>{const a=Object.keys(BIAS_CACHE).length;Object.keys(BIAS_CACHE).forEach(e=>delete BIAS_CACHE[e]),log(`Bias cache cleared (${a} entries removed)`,"INFO"),t.json({status:!0,message:`Cleared ${a} cache entries`})})
