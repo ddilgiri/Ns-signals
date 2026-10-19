@@ -559,10 +559,35 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const suresh  = g?.peSignal?.signal || null;
   const dilipNote = g?.dilipFormulaNote || "";
   const oiScore   = g?.oiScore || 0;
+  const bias      = g?.bias || null;
+  const rsi       = g?.rsi ? parseFloat(g.rsi).toFixed(1) : null;
+  const vix       = g?.vixValue ? parseFloat(g.vixValue).toFixed(1) : null;
+  const vixReg    = g?.vixRegime || null;
+  const putTrap   = g?.putTrapRisk || false;
+  const callTrap  = g?.callTrapRisk || false;
+  const nearMP    = g?.nearMaxPain || false;
+  const gammaBlast = g?.gammaBlast?.isGammaBlast || false;
+
+  // dynamic narration map
+  const rameshNarr = {
+    SHORT_BUILDUP:  "adding CE — ceiling building 🔴",
+    LONG_BUILDUP:   "both sides adding — wait ⏳",
+    SHORT_COVERING: "CE writers exiting — CE rally likely 🚀",
+    LONG_UNWINDING: "CE longs booking out ⬇️",
+    NEUTRAL:        "no clear move"
+  };
+  const sureshNarr = {
+    LONG_BUILDUP:   "adding PE — floor building 🟢",
+    PUT_TRAP:       "collecting premium — PUT TRAP ⚠️",
+    LONG_UNWINDING: "PE longs booking out ⬆️",
+    PUT_COVERING:   "PE writers exiting — PE fall likely 🔻",
+    NEUTRAL:        "no clear move"
+  };
 
   let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
   msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
   if (atm) msg += ` | ATM: ${atm}`;
+  if (bias) msg += ` | Bias: ${bias}`;
   msg += `\n`;
   if (atm) msg += `🎯 Buy: ${atm} ${type}${optLtp ? ` @ ₹${optLtp}` : ""}\n`;
   if (stop && tgt) msg += `🛑 Stop: ₹${stop} | 🎯 Target: ₹${tgt}\n`;
@@ -570,13 +595,20 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   msg += `📊 OI Score: ${oiScore}`;
   if (pcr) msg += ` | PCR: ${pcr}`;
   if (mp)  msg += ` | MaxPain: ${mp}`;
+  if (rsi) msg += ` | RSI: ${rsi}`;
   msg += `\n`;
+  if (vix) msg += `🌡️ VIX: ${vix}${vixReg ? ` (${vixReg})` : ""}\n`;
   if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
   if (peFloor) msg += ` | PE Floor: ${peFloor}`;
   if (ceWall || peFloor) msg += `\n`;
-  if (ramesh) msg += `⚡ Ramesh: ${ramesh}`;
-  if (suresh) msg += ` | Suresh: ${suresh}`;
+  if (ramesh) msg += `⚡ Ramesh: ${rameshNarr[ramesh] || ramesh}`;
+  if (suresh) msg += `\n💧 Suresh: ${sureshNarr[suresh] || suresh}`;
   if (ramesh || suresh) msg += `\n`;
+  // warnings
+  if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
+  if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
+  if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
+  if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
   if (dilipNote) msg += `📌 ${dilipNote}\n`;
   msg += `\n📱 <i>NS-Signals by Dilip</i>`;
 
