@@ -1724,7 +1724,7 @@ async function runServerScan() {
           // worthChecking pre-filter, and later the /telegram-alert endpoint) has been
           // removed per explicit user decision. This loop now only feeds
           // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
-          if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
+          if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP" && g.verdict !== "BLOCKED") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
             tgAlert(stk.sym, typ, g.score, g.verdict, spot, g);
           }
