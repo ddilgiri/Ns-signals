@@ -585,12 +585,20 @@ function tgAlert(sym, type, score, verdict, spot, g) {
     NEUTRAL:        "no clear PE signal"
   };
 
+  const lot = g?.lot || g?.lotSize || "";
+  const capital = (optLtp && lot) ? `₹${Math.round(optLtp * lot).toLocaleString("en-IN")}` : null;
+
   let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
   msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
   if (atm) msg += ` | ATM: ${atm}`;
-  if (bias) msg += ` | Bias: ${bias}`;
+  if (bias) msg += ` | Bias: <b>${bias}</b>`;
   msg += `\n`;
-  if (atm) msg += `🎯 Buy: ${atm} ${type}${optLtp ? ` @ ₹${optLtp}` : ""}\n`;
+  if (atm) {
+    msg += `🎯 Buy: ${atm} ${type}`;
+    if (optLtp) msg += ` @ <b>₹${optLtp}</b>`;
+    if (lot && capital) msg += ` | Lot: ${lot} = <b>${capital}</b>`;
+    msg += `\n`;
+  }
   if (stop && tgt) msg += `🛑 Stop: ₹${stop} | 🎯 Target: ₹${tgt}\n`;
   msg += `\n`;
   msg += `📊 OI Score: ${oiScore}`;
@@ -598,20 +606,20 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (mp)  msg += ` | MaxPain: ${mp}`;
   if (rsi) msg += ` | RSI: ${rsi}`;
   msg += `\n`;
-  if (vix) msg += `🌡️ VIX: ${vix}${vixReg ? ` (${vixReg})` : ""}\n`;
+  if (vix) msg += `🌡️ VIX: <b>${vix}${vixReg ? ` (${vixReg})` : ""}</b>\n`;
   if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
   if (peFloor) msg += ` | PE Floor: ${peFloor}`;
   if (ceWall || peFloor) msg += `\n`;
-  if (ramesh) msg += `⚡ Ramesh: ${rameshNarr[ramesh] || ramesh}`;
-  if (suresh) msg += `\n💧 Suresh: ${sureshNarr[suresh] || suresh}`;
+  if (ramesh) msg += `⚡ Ramesh: <b>${rameshNarr[ramesh] || ramesh}</b>`;
+  if (suresh) msg += `\n💧 Suresh: <b>${sureshNarr[suresh] || suresh}</b>`;
   if (ramesh || suresh) msg += `\n`;
   // warnings
   if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
   if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
   if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
   if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
-  if (dilipNote) msg += `📌 ${dilipNote}\n`;
-  msg += `\n📱 <i>NS-Signals by Dilip</i>`;
+  if (dilipNote)  msg += `📌 ${dilipNote}\n`;
+  msg += `\n――――――――――――――――――\n<b>DiLiP's Research Lab 🔬</b>`;
 
   sendTelegram(msg).catch(() => {});
 }
