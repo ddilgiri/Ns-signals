@@ -610,8 +610,8 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
   if (peFloor) msg += ` | PE Floor: ${peFloor}`;
   if (ceWall || peFloor) msg += `\n`;
-  if (ramesh) msg += `⚡ Ramesh: <b>${rameshNarr[ramesh] || ramesh}</b>`;
-  if (suresh) msg += `\n💧 Suresh: <b>${sureshNarr[suresh] || suresh}</b>`;
+  if (ramesh) msg += `⚡ Ramesh: ${rameshNarr[ramesh] || ramesh}`;
+  if (suresh) msg += `\n💧 Suresh: ${sureshNarr[suresh] || suresh}`;
   if (ramesh || suresh) msg += `\n`;
   // warnings
   if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
