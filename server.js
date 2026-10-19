@@ -1709,6 +1709,13 @@ async function runServerScan() {
   try {
     const stockList = await getAutoscanStockList();
     const allSyms = [...AUTOSCAN_IDX, ...stockList].filter(s => s.isIndex || !isLotTooExpensive(s));
+    // shuffle each full pass so scan order is market-driven, not alphabetical
+    if (serverScanCount % allSyms.length === 0) {
+      for (let i = allSyms.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allSyms[i], allSyms[j]] = [allSyms[j], allSyms[i]];
+      }
+    }
     const batch = allSyms.slice(serverScanCount % allSyms.length, (serverScanCount % allSyms.length) + 15);
     serverScanCount += 15;
     const results = [];
