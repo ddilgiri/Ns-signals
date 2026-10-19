@@ -609,13 +609,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
   if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
   if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
-  // soften "avoid" note when verdict is actually tradeable (WEAK/MODERATE/STRONG)
-  const tradeableVerdicts = ["STRONG","MODERATE","WEAK"];
-  let noteText = dilipNote;
-  if (noteText && tradeableVerdicts.includes(verdict)) {
-    noteText = noteText.replace(/\bavoid\b/gi, "trade with caution");
-  }
-  if (noteText) msg += `📌 ${noteText}\n`;
+  if (dilipNote) msg += `📌 ${dilipNote}\n`;
   msg += `\n📱 <i>NS-Signals by Dilip</i>`;
 
   sendTelegram(msg).catch(() => {});
@@ -1256,13 +1250,13 @@ if(oiH&&oiH.trend!=="INSUFFICIENT_DATA"){
     if(tr==="BULLISH_MOMENTUM"){omEarned=t;omNote=`OI momentum BULLISH — ${oiH.sureshTrend} ✓✓`;}
     else if(tr==="BOTH_RUNNING_UNCERTAIN"){omEarned=Math.round(t*0.6);omNote="Both sides unwinding — uncertain but CE possible";}
     else if(tr==="BEARISH_MOMENTUM"){omEarned=0;omNote=`OI momentum BEARISH — ${oiH.rameshTrend} blocks CE`;}
-    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, avoid CE";}
+    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, no OI edge for CE";}
     else{omEarned=Math.round(t*0.4);omNote="OI trend mixed — partial CE";}
   }else{
     if(tr==="BEARISH_MOMENTUM"){omEarned=t;omNote=`OI momentum BEARISH — ${oiH.rameshTrend} ✓✓`;}
     else if(tr==="BOTH_RUNNING_UNCERTAIN"){omEarned=Math.round(t*0.6);omNote="Both sides unwinding — uncertain but PE possible";}
     else if(tr==="BULLISH_MOMENTUM"){omEarned=0;omNote=`OI momentum BULLISH — ${oiH.sureshTrend} blocks PE`;}
-    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, avoid PE";}
+    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, no OI edge for PE";}
     else{omEarned=Math.round(t*0.4);omNote="OI trend mixed — partial PE";}
   }
   // OI velocity: compare last 2 snaps vs first 2 snaps
