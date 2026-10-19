@@ -1440,11 +1440,8 @@ app.post("/signal-analysis",async(e,t)=>{
   // already available on h (the oi-analysis result fetched above in the same Promise.allSettled)
   // -- zero extra OI calls. Candle fetch is a genuinely new call (weekly S/R needs daily bars
   // oi-analysis doesn't provide), kept non-fatal so a candle-fetch failure never blocks scoring.
-  try{
-    const _oiCaseForSide="CE"===i?(h?.callOiCase??null):(h?.putOiCase??null);
-    const _nanaResp=await axios.post(`http://localhost:${PORT}/nana-setup`,{symbolToken:a,exchange:n,spotPrice:r,oiCase:_oiCaseForSide,atr14:p.atr||null},{headers:{"Content-Type":"application/json"}});
-    if(_nanaResp.data?.status)S.nanaSetup=_nanaResp.data;
-  }catch(nanaErr){ /* non-fatal -- NanaLogic is additive, never blocks scoring on failure */ }
+  // NanaLogic disabled (always 403, not needed)
+  S.nanaSetup = null;
   const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
   // Real fix (2026-09-05, #11): OI category minimum gate, per explicit user request --
   // "main category minimum pass marks... else all dummy signals". Confirmed live and
