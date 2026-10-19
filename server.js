@@ -1784,7 +1784,7 @@ async function runServerScan() {
           // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP" && g.verdict !== "BLOCKED") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
-            tgAlert(stk.sym, typ, g.score, g.verdict, spot, g);
+            tgAlert(stk.sym, typ, g.score, g.verdict, spot, {...g, lot: stk.lot});
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
