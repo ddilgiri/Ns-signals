@@ -1741,13 +1741,13 @@ async function runServerScan() {
   try {
     const stockList = await getAutoscanStockList();
     const allSyms = [...AUTOSCAN_IDX, ...stockList].filter(s => s.isIndex || !isLotTooExpensive(s));
-    // shuffle each full pass so scan order is market-driven, not alphabetical
-    if (serverScanCount % allSyms.length === 0) {
-      for (let i = allSyms.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allSyms[i], allSyms[j]] = [allSyms[j], allSyms[i]];
-      }
-    }
+    // sort by lot size descending = high-liquidity stocks (SBIN, RELIANCE, HDFCBANK) scan first
+    // add small random jitter so order varies each pass, not fixed every time
+    allSyms.sort((a, b) => {
+      const la = (b.lot || 0) + Math.random() * 50;
+      const lb = (a.lot || 0) + Math.random() * 50;
+      return la - lb;
+    });
     const batch = allSyms.slice(serverScanCount % allSyms.length, (serverScanCount % allSyms.length) + 15);
     serverScanCount += 15;
     const results = [];
