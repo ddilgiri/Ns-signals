@@ -522,6 +522,34 @@ app.post("/signal-outcome",(req,res)=>{
 // Defaults to 60 to match cfgMinConf's own default until the app sends its real
 // value (right after load, and on every change).
 let MIN_CONFIDENCE = 60;
+
+// ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
+const TG_TOKEN = process.env.TELEGRAM_TOKEN;
+const TG_CHAT  = process.env.CHAT_ID;
+const TG_SENT  = new Map(); // sym+type → last-alert ts, debounce 15 min
+async function sendTelegram(text) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  try {
+    await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,
+      { chat_id: TG_CHAT, text, parse_mode: "HTML" }, { timeout: 8000 });
+  } catch(e) { log(`Telegram error: ${e.message}`, "WARN"); }
+}
+function tgAlert(sym, type, score, verdict, spot, actionNote) {
+  const key = `${sym}_${type}`;
+  const now = Date.now();
+  if (TG_SENT.has(key) && now - TG_SENT.get(key) < 15 * 60 * 1000) return; // 15-min debounce
+  TG_SENT.set(key, now);
+  const icon = verdict === "STRONG" ? (type === "CE" ? "🟢" : "🔴") : "🟡";
+  const msg =
+    `${icon} <b>${sym} ${type}</b> — ${verdict}\n` +
+    `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n` +
+    `Score: ${score}%\n` +
+    `${actionNote || ""}\n` +
+    `📱 <i>NS-Signals by Dilip</i>`;
+  sendTelegram(msg).catch(() => {});
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.post("/set-min-confidence", (req, res) => {
   const v = parseInt(req.body?.value);
   if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({status:false, message:"value must be 0-100"});
@@ -1667,6 +1695,9 @@ async function runServerScan() {
           // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
+            if (g.verdict === "STRONG" || g.verdict === "MODERATE") {
+              tgAlert(stk.sym, typ, g.score, g.verdict, spot, g.actionNote);
+            }
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
