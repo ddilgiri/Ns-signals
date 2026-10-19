@@ -1672,7 +1672,7 @@ app.get("/fno-stock-list",async(req,res)=>{
       const name=(inst.name||"").toUpperCase();
       if(name&&inst.lotsize&&!lotMap[name])lotMap[name]=parseInt(inst.lotsize)||1;
     });
-    const stocks=Array.from(fnoSet).sort().map(sym=>({
+    const stocks=Array.from(fnoSet).map(sym=>({
       sym,
       token:nseTokenMap[sym]||null,
       lot:lotMap[sym]||1
@@ -1741,12 +1741,13 @@ async function runServerScan() {
   try {
     const stockList = await getAutoscanStockList();
     const allSyms = [...AUTOSCAN_IDX, ...stockList].filter(s => s.isIndex || !isLotTooExpensive(s));
-    // sort by lot size descending = high-liquidity stocks (SBIN, RELIANCE, HDFCBANK) scan first
-    // add small random jitter so order varies each pass, not fixed every time
+    // sort by last known score (hot stocks first), with jitter for variety
+    const lastScore = {};
+    SERVER_SIGNALS.forEach(s => { if (!lastScore[s.sym] || s.score > lastScore[s.sym]) lastScore[s.sym] = s.score; });
     allSyms.sort((a, b) => {
-      const la = (b.lot || 0) + Math.random() * 50;
-      const lb = (a.lot || 0) + Math.random() * 50;
-      return la - lb;
+      const sa = (lastScore[a.sym] || 0) + Math.random() * 10;
+      const sb = (lastScore[b.sym] || 0) + Math.random() * 10;
+      return sb - sa;
     });
     const batch = allSyms.slice(serverScanCount % allSyms.length, (serverScanCount % allSyms.length) + 15);
     serverScanCount += 15;
