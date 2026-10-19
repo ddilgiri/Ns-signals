@@ -537,7 +537,7 @@ async function sendTelegram(text) {
 function tgAlert(sym, type, score, verdict, spot, g) {
   const key = `${sym}_${type}`;
   const now = Date.now();
-  if (TG_SENT.has(key) && now - TG_SENT.get(key) < 15 * 60 * 1000) return; // 15-min debounce
+  if (TG_SENT.has(key) && now - TG_SENT.get(key) < 5 * 60 * 1000) return; // 5-min debounce
   TG_SENT.set(key, now);
   const isCE = type === "CE";
   const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
