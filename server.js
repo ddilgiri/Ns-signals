@@ -571,18 +571,18 @@ function tgAlert(sym, type, score, verdict, spot, g) {
 
   // dynamic narration map
   const rameshNarr = {
-    SHORT_BUILDUP:  "adding CE — ceiling building 🔴",
-    LONG_BUILDUP:   "both sides adding — wait ⏳",
-    SHORT_COVERING: "CE writers exiting — CE rally likely 🚀",
-    LONG_UNWINDING: "CE longs booking out ⬇️",
-    NEUTRAL:        "no clear move"
+    SHORT_BUILDUP:  "CE writers adding — resistance forming, bearish 🔴",
+    LONG_BUILDUP:   "CE buyers adding — wait for confirmation ⏳",
+    SHORT_COVERING: "CE sellers closing — bullish, CE price can spike 🚀",
+    LONG_UNWINDING: "CE buyers exiting — bullish momentum weakening ⬇️",
+    NEUTRAL:        "no clear CE signal"
   };
   const sureshNarr = {
-    LONG_BUILDUP:   "adding PE — floor building 🟢",
-    PUT_TRAP:       "collecting premium — PUT TRAP ⚠️",
-    LONG_UNWINDING: "PE longs booking out ⬆️",
-    PUT_COVERING:   "PE writers exiting — PE fall likely 🔻",
-    NEUTRAL:        "no clear move"
+    LONG_BUILDUP:   "PE buyers adding — support forming, bearish 🟢",
+    PUT_TRAP:       "PE writers collecting — trap for PE buyers ⚠️",
+    LONG_UNWINDING: "PE buyers exiting — bearish momentum weakening ⬆️",
+    PUT_COVERING:   "PE sellers closing — bearish, PE price can spike 🔻",
+    NEUTRAL:        "no clear PE signal"
   };
 
   let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
