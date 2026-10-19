@@ -606,7 +606,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (mp)  msg += ` | MaxPain: ${mp}`;
   if (rsi) msg += ` | RSI: ${rsi}`;
   msg += `\n`;
-  if (vix) msg += `🌡️ VIX: <b>${vix}${vixReg ? ` (${vixReg})` : ""}</b>\n`;
+  if (vix) msg += `🌡️ VIX: ${vix}${vixReg ? ` (${vixReg})` : ""}\n`;
   if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
   if (peFloor) msg += ` | PE Floor: ${peFloor}`;
   if (ceWall || peFloor) msg += `\n`;
