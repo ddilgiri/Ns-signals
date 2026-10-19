@@ -546,7 +546,6 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const isCE = type === "CE";
   const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
   const atm   = g?.atmStrike || "";
-  const ltp   = g?.ltp || null;
   const stop  = g?.suggestedStop || null;
   const tgt   = g?.suggestedTarget || null;
   const pcr   = g?.pcr || null;
@@ -562,7 +561,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
   if (atm) msg += ` | ATM: ${atm}`;
   msg += `\n`;
-  if (ltp)  msg += `🎯 Buy: ${atm} ${type} @ ₹${ltp}\n`;
+  if (atm) msg += `🎯 Buy: ${atm} ${type} (check option chain for premium)\n`;
   if (stop && tgt) msg += `🛑 Stop: ₹${stop} | 🎯 Target: ₹${tgt}\n`;
   msg += `\n`;
   msg += `📊 OI Score: ${oiScore}`;
