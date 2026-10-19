@@ -557,7 +557,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
   const atm   = g?.atmStrike || "";
   // ATM option LTP from oiChain (already fetched, no extra API call)
-  const atmRow = g?.oiChain?.find(r => r.strike === atm || r.isATM);
+  const atmRow = g?.oiChain?.find(r => r.isATM) || g?.oiChain?.find(r => Number(r.strike) === Number(atm));
   const optLtp = type === "CE" ? (atmRow?.CE_ltp || null) : (atmRow?.PE_ltp || null);
   const stop  = g?.suggestedStop || null;
   const tgt   = g?.suggestedTarget || null;
@@ -602,7 +602,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
     NEUTRAL:        "no clear PE signal"
   };
 
-  const lot = g?.lot || g?.lotSize || "";
+  const lot = (g?.lot > 1 ? g.lot : null) || (g?.lotSize > 1 ? g.lotSize : null) || "";
   const capital = (optLtp && lot) ? `₹${Math.round(optLtp * lot).toLocaleString("en-IN")}` : null;
 
   let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
