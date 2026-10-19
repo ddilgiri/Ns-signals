@@ -526,7 +526,7 @@ let MIN_CONFIDENCE = 60;
 // ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
 const TG_CHAT  = process.env.CHAT_ID;
-const TG_SENT  = new Map(); // sym+type → last-alert ts, debounce 15 min
+const TG_SENT  = new Map(); // sym+type → {ts, verdict}, debounce 5 min
 async function sendTelegram(text) {
   if (!TG_TOKEN || !TG_CHAT) return;
   try {
@@ -537,8 +537,12 @@ async function sendTelegram(text) {
 function tgAlert(sym, type, score, verdict, spot, g) {
   const key = `${sym}_${type}`;
   const now = Date.now();
-  if (TG_SENT.has(key) && now - TG_SENT.get(key) < 5 * 60 * 1000) return; // 5-min debounce
-  TG_SENT.set(key, now);
+  const prev = TG_SENT.get(key);
+  // fire immediately if verdict improved (WEAK→MODERATE, MODERATE→STRONG, etc.)
+  const rank = {STRONG: 3, MODERATE: 2, WEAK: 1, AVOID: 0, TRAP: 0};
+  const upgraded = prev && (rank[verdict] || 0) > (rank[prev.verdict] || 0);
+  if (prev && !upgraded && now - prev.ts < 5 * 60 * 1000) return; // 5-min debounce
+  TG_SENT.set(key, {ts: now, verdict});
   const isCE = type === "CE";
   const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
   const atm   = g?.atmStrike || "";
