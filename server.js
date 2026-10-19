@@ -534,18 +534,46 @@ async function sendTelegram(text) {
       { chat_id: TG_CHAT, text, parse_mode: "HTML" }, { timeout: 8000 });
   } catch(e) { log(`Telegram error: ${e.message}`, "WARN"); }
 }
-function tgAlert(sym, type, score, verdict, spot, actionNote) {
+function tgAlert(sym, type, score, verdict, spot, g) {
   const key = `${sym}_${type}`;
   const now = Date.now();
   if (TG_SENT.has(key) && now - TG_SENT.get(key) < 15 * 60 * 1000) return; // 15-min debounce
   TG_SENT.set(key, now);
-  const icon = verdict === "STRONG" ? (type === "CE" ? "🟢" : "🔴") : "🟡";
-  const msg =
-    `${icon} <b>${sym} ${type}</b> — ${verdict}\n` +
-    `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n` +
-    `Score: ${score}%\n` +
-    `${actionNote || ""}\n` +
-    `📱 <i>NS-Signals by Dilip</i>`;
+  const isCE = type === "CE";
+  const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
+  const atm   = g?.atmStrike || "";
+  const ltp   = g?.ltp || null;
+  const stop  = g?.suggestedStop || null;
+  const tgt   = g?.suggestedTarget || null;
+  const pcr   = g?.pcr || null;
+  const mp    = g?.maxPain || null;
+  const ceWall  = g?.ceWalls?.[0]?.strike || null;
+  const peFloor = g?.peFloors?.[0]?.strike || null;
+  const ramesh  = g?.ceSignal?.signal || null;
+  const suresh  = g?.peSignal?.signal || null;
+  const dilipNote = g?.dilipFormulaNote || "";
+  const oiScore   = g?.oiScore || 0;
+
+  let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
+  msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
+  if (atm) msg += ` | ATM: ${atm}`;
+  msg += `\n`;
+  if (ltp)  msg += `🎯 Buy: ${atm} ${type} @ ₹${ltp}\n`;
+  if (stop && tgt) msg += `🛑 Stop: ₹${stop} | 🎯 Target: ₹${tgt}\n`;
+  msg += `\n`;
+  msg += `📊 OI Score: ${oiScore}`;
+  if (pcr) msg += ` | PCR: ${pcr}`;
+  if (mp)  msg += ` | MaxPain: ${mp}`;
+  msg += `\n`;
+  if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
+  if (peFloor) msg += ` | PE Floor: ${peFloor}`;
+  if (ceWall || peFloor) msg += `\n`;
+  if (ramesh) msg += `⚡ Ramesh: ${ramesh}`;
+  if (suresh) msg += ` | Suresh: ${suresh}`;
+  if (ramesh || suresh) msg += `\n`;
+  if (dilipNote) msg += `📌 ${dilipNote}\n`;
+  msg += `\n📱 <i>NS-Signals by Dilip</i>`;
+
   sendTelegram(msg).catch(() => {});
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1695,7 +1723,7 @@ async function runServerScan() {
           // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
-            tgAlert(stk.sym, typ, g.score, g.verdict, spot, g.actionNote);
+            tgAlert(stk.sym, typ, g.score, g.verdict, spot, g);
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
