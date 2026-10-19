@@ -570,18 +570,26 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const gammaBlast = g?.gammaBlast?.isGammaBlast || false;
 
   // dynamic narration map
+  // Ramesh = CE OI side. CE writers adding (SHORT_BUILDUP) = cap/resistance = bearish.
+  // CE writers exiting (SHORT_COVERING) = wall crumbling = bullish.
+  // CE buyers adding (LONG_BUILDUP) = premium demand rising, wait for confirmation.
+  // CE buyers exiting (LONG_UNWINDING) = CE holders closing = bearish for CE.
   const rameshNarr = {
-    SHORT_BUILDUP:  "CE writers adding — resistance forming, bearish 🔴",
-    LONG_BUILDUP:   "CE buyers adding — wait for confirmation ⏳",
-    SHORT_COVERING: "CE sellers closing — bullish, CE price can spike 🚀",
-    LONG_UNWINDING: "CE buyers exiting — bullish momentum weakening ⬇️",
+    SHORT_BUILDUP:  "CE writers adding — hard cap forming 🧱 bearish",
+    LONG_BUILDUP:   "CE buyers loading — premium rising, wait confirm ⏳",
+    SHORT_COVERING: "CE writers exiting — wall crumbling, bullish 🚀",
+    LONG_UNWINDING: "CE buyers closing — CE momentum fading ⬇️",
     NEUTRAL:        "no clear CE signal"
   };
+  // Suresh = PE OI side. PE writers adding (PUT_COVERING/floor build) = floor = bullish.
+  // PE writers exiting (PUT_TRAP/PUT_COVERING unwinding) = floor collapsing = bearish.
+  // PE buyers adding (LONG_BUILDUP) = put demand rising = bearish momentum.
+  // PE buyers exiting (LONG_UNWINDING) = bearish momentum weakening = bullish signal.
   const sureshNarr = {
-    LONG_BUILDUP:   "PE buyers adding — support forming, bearish 🟢",
-    PUT_TRAP:       "PE writers collecting — trap for PE buyers ⚠️",
-    LONG_UNWINDING: "PE buyers exiting — bearish momentum weakening ⬆️",
-    PUT_COVERING:   "PE sellers closing — bearish, PE price can spike 🔻",
+    LONG_BUILDUP:   "PE buyers loading — bearish momentum building 🔻",
+    PUT_TRAP:       "PE writers collecting — floor building, bullish 🟢",
+    LONG_UNWINDING: "PE buyers closing — bearish momentum fading ⬆️",
+    PUT_COVERING:   "PE writers exiting — floor collapsing, bearish 🔻",
     NEUTRAL:        "no clear PE signal"
   };
 
@@ -612,13 +620,25 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (ceWall || peFloor) msg += `\n`;
   if (ramesh) msg += `⚡ Ramesh: ${rameshNarr[ramesh] || ramesh}`;
   if (suresh) msg += `\n💧 Suresh: ${sureshNarr[suresh] || suresh}`;
-  if (ramesh || suresh) msg += `\n`;
+  if (ramesh || suresh) {
+    // Conclusion line: check if Ramesh+Suresh agree on direction
+    const ceAction = ramesh === "SHORT_BUILDUP" || ramesh === "LONG_UNWINDING" ? "BEARISH" :
+                     ramesh === "SHORT_COVERING" || ramesh === "LONG_BUILDUP" ? "BULLISH" : "NEUTRAL";
+    const peAction = suresh === "LONG_BUILDUP" || suresh === "PUT_COVERING" ? "BEARISH" :
+                     suresh === "PUT_TRAP" || suresh === "LONG_UNWINDING" ? "BULLISH" : "NEUTRAL";
+    if (ceAction !== "NEUTRAL" && peAction !== "NEUTRAL" && ceAction === peAction) {
+      msg += `\n📌 Both sides confirm ${ceAction} — strong trade ✅`;
+    } else if (ceAction !== "NEUTRAL" && peAction !== "NEUTRAL" && ceAction !== peAction) {
+      msg += `\n📌 Mixed signals — price trapped, avoid ⚠️`;
+    }
+    msg += `\n`;
+  }
   // warnings
   if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
   if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
   if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
   if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
-  if (dilipNote)  msg += `📌 ${dilipNote}\n`;
+  if (dilipNote && !dilipNote.includes("Both sides strong"))  msg += `📌 ${dilipNote}\n`;
   msg += `\n――――――――――――――――――\n<b>DiLiP's Research Lab 🔬</b>`;
 
   sendTelegram(msg).catch(() => {});
