@@ -1695,9 +1695,7 @@ async function runServerScan() {
           // SERVER_SIGNALS/auto-scan-status, nothing pushes to Telegram anymore.
           if (g && g.status && g.score >= MIN_CONFIDENCE && g.verdict !== "AVOID" && g.verdict !== "TRAP") {
             results.push({sym:stk.sym,type:typ,score:g.score,verdict:g.verdict,spotPrice:spot,ts:Date.now()});
-            if (g.verdict === "STRONG" || g.verdict === "MODERATE") {
-              tgAlert(stk.sym, typ, g.score, g.verdict, spot, g.actionNote);
-            }
+            tgAlert(stk.sym, typ, g.score, g.verdict, spot, g.actionNote);
           }
         }
       } catch(e) { /* skip symbol on error, continue loop */ }
