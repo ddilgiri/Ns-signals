@@ -1767,8 +1767,8 @@ async function runServerScan() {
       const sb = (lastScore[b.sym] || 0) + Math.random() * 10;
       return sb - sa;
     });
-    const batch = allSyms.slice(serverScanCount % allSyms.length, (serverScanCount % allSyms.length) + 15);
-    serverScanCount += 15;
+    const batch = allSyms.slice(serverScanCount % allSyms.length, (serverScanCount % allSyms.length) + 20);
+    serverScanCount += 20;
     const results = [];
     for (const stk of batch) {
       try {
@@ -1800,7 +1800,7 @@ async function runServerScan() {
   }
 }
 
-setInterval(runServerScan, 25000);
+setInterval(runServerScan, 20000);
 
 app.get("/auto-scan-status", (req, res) => {
   res.json({status:true, authenticated:isAuthenticated(), signals:SERVER_SIGNALS, count:SERVER_SIGNALS.length});
