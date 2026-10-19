@@ -609,7 +609,13 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
   if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
   if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
-  if (dilipNote) msg += `📌 ${dilipNote}\n`;
+  // soften "avoid" note when verdict is actually tradeable (WEAK/MODERATE/STRONG)
+  const tradeableVerdicts = ["STRONG","MODERATE","WEAK"];
+  let noteText = dilipNote;
+  if (noteText && tradeableVerdicts.includes(verdict)) {
+    noteText = noteText.replace(/\bavoid\b/gi, "trade with caution");
+  }
+  if (noteText) msg += `📌 ${noteText}\n`;
   msg += `\n📱 <i>NS-Signals by Dilip</i>`;
 
   sendTelegram(msg).catch(() => {});
