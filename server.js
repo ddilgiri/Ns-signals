@@ -42,25 +42,36 @@ async function ensureInstruments(reason) {
         }
       } catch(diskErr) { /* cache missing/corrupt — fall through to network */ }
 
-      // 2. Download fresh — stream to disk directly so Render timeout doesn't abort in-memory parse
-      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
-      const writer = fs.createWriteStream(INSTR_CACHE_FILE);
-      const resp = await axios({ method:"get", url:"https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", responseType:"stream", timeout:120000 });
-      await new Promise((resolve, reject) => {
-        resp.data.pipe(writer);
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-        resp.data.on("error", reject);
-      });
-      const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
-      SESSION._instruments = data;
-      SESSION._instrFetchTime = Date.now();
-      log(`Instrument master downloaded and cached: ${data.length} records`, "OK");
-      return SESSION._instruments;
-    } catch(err) {
-      // Clean up partial file on error so next call retries network instead of reading corrupt cache
-      try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
-      throw err;
+      // 2. Download fresh — stream to disk, retry up to 3 times with backoff
+      const SCRIP_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+      let lastErr;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          log(`Downloading NFO instrument master${reason ? " for " + reason : ""} (attempt ${attempt}/3)...`, "INFO");
+          const writer = fs.createWriteStream(INSTR_CACHE_FILE);
+          const resp = await axios({ method:"get", url:SCRIP_URL, responseType:"stream", timeout:180000 });
+          await new Promise((resolve, reject) => {
+            resp.data.pipe(writer);
+            writer.on("finish", resolve);
+            writer.on("error", reject);
+            resp.data.on("error", reject);
+          });
+          const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
+          if (!Array.isArray(data) || data.length < 1000) throw new Error("Scrip master too small");
+          SESSION._instruments = data;
+          SESSION._instrFetchTime = Date.now();
+          log(`Instrument master downloaded and cached: ${data.length} records`, "OK");
+          return SESSION._instruments;
+        } catch(e) {
+          lastErr = e;
+          try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
+          if (attempt < 3) {
+            log(`Instrument master download attempt ${attempt} failed (${e.message}) — retrying in 10s...`, "WARN");
+            await new Promise(r => setTimeout(r, 10000));
+          }
+        }
+      }
+      throw lastErr;
     } finally {
       _instrLoadPromise = null;
     }
