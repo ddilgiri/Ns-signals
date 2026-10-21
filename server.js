@@ -42,36 +42,33 @@ async function ensureInstruments(reason) {
         }
       } catch(diskErr) { /* cache missing/corrupt — fall through to network */ }
 
-      // 2. Download fresh — stream to disk, retry up to 3 times with backoff
-      const SCRIP_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
-      let lastErr;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          log(`Downloading NFO instrument master${reason ? " for " + reason : ""} (attempt ${attempt}/3)...`, "INFO");
-          const writer = fs.createWriteStream(INSTR_CACHE_FILE);
-          const resp = await axios({ method:"get", url:SCRIP_URL, responseType:"stream", timeout:180000 });
-          await new Promise((resolve, reject) => {
-            resp.data.pipe(writer);
-            writer.on("finish", resolve);
-            writer.on("error", reject);
-            resp.data.on("error", reject);
-          });
-          const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
-          if (!Array.isArray(data) || data.length < 1000) throw new Error("Scrip master too small");
-          SESSION._instruments = data;
-          SESSION._instrFetchTime = Date.now();
-          log(`Instrument master downloaded and cached: ${data.length} records`, "OK");
-          return SESSION._instruments;
-        } catch(e) {
-          lastErr = e;
-          try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
-          if (attempt < 3) {
-            log(`Instrument master download attempt ${attempt} failed (${e.message}) — retrying in 10s...`, "WARN");
-            await new Promise(r => setTimeout(r, 10000));
-          }
-        }
-      }
-      throw lastErr;
+      // 2. Download via authenticated SmartAPI endpoint (CDN URL blocks Render IPs)
+      //    Falls back to public CDN if SmartAPI also fails.
+      if (!isAuthenticated()) throw new Error("Not authenticated — cannot fetch instruments");
+      log(`Downloading NFO instrument master${reason ? " for " + reason : ""} via SmartAPI...`, "INFO");
+      const apiResp = await axios.get("https://apiconnect.angelbroking.com/rest/secure/angelbroking/master/v1/getAllInstrument", {
+        headers: {
+          "Authorization": `Bearer ${SESSION.jwtToken}`,
+          "X-ClientLocalIP": "127.0.0.1",
+          "X-ClientPublicIP": "127.0.0.1",
+          "X-MACAddress": "00:00:00:00:00:00",
+          "X-PrivateKey": SESSION.apiKey,
+          "X-UserType": "USER",
+          "X-SourceID": "WEB",
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        timeout: 60000
+      });
+      let data = apiResp.data;
+      // SmartAPI returns {status,message,data:[...]} or raw array
+      if (data && data.data && Array.isArray(data.data)) data = data.data;
+      if (!Array.isArray(data) || data.length < 1000) throw new Error(`SmartAPI instruments too small: ${JSON.stringify(data).slice(0,200)}`);
+      fs.writeFileSync(INSTR_CACHE_FILE, JSON.stringify(data));
+      SESSION._instruments = data;
+      SESSION._instrFetchTime = Date.now();
+      log(`Instrument master loaded via SmartAPI: ${data.length} records`, "OK");
+      return SESSION._instruments;
     } finally {
       _instrLoadPromise = null;
     }
