@@ -526,6 +526,7 @@ let MIN_CONFIDENCE = 60;
 // ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
 const TG_CHAT  = process.env.CHAT_ID;
+const TG_GROUP = "-1003821078489"; // DiLiPs Research Lab group
 const TG_SENT  = new Map(); // sym+type → {ts, verdict}, debounce 5 min
 let TG_ENABLED = true; // toggled by /set-tg-enabled from app UI
 const TG_LOG   = []; // recent TG activity, capped at 50 entries
@@ -534,15 +535,19 @@ function tgLogPush(entry) {
   if (TG_LOG.length > 50) TG_LOG.length = 50;
 }
 async function sendTelegram(text, meta = {}) {
-  if (!TG_TOKEN || !TG_CHAT || !TG_ENABLED) return;
-  try {
-    await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,
-      { chat_id: TG_CHAT, text, parse_mode: "HTML" }, { timeout: 8000 });
-    tgLogPush({ ok: true, ...meta });
-  } catch(e) {
-    log(`Telegram error: ${e.message}`, "WARN");
-    tgLogPush({ ok: false, error: e.message, ...meta });
+  if (!TG_TOKEN || !TG_ENABLED) return;
+  const targets = [TG_CHAT, TG_GROUP].filter(Boolean);
+  let ok = true, lastErr;
+  for (const chat_id of targets) {
+    try {
+      await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`,
+        { chat_id, text, parse_mode: "HTML" }, { timeout: 8000 });
+    } catch(e) {
+      log(`Telegram error (${chat_id}): ${e.message}`, "WARN");
+      ok = false; lastErr = e.message;
+    }
   }
+  tgLogPush(ok ? { ok: true, ...meta } : { ok: false, error: lastErr, ...meta });
 }
 function tgAlert(sym, type, score, verdict, spot, g) {
   const key = `${sym}_${type}`;
