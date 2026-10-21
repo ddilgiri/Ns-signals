@@ -12,9 +12,15 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // check-then-download, causing many redundant simultaneous downloads when several
 // requests arrived at once with a cold/stale cache. This lock ensures only one
 // download happens at a time — concurrent callers wait for the same in-flight request.
+//
+// DISK CACHE: scrip master (~50MB) saved to /tmp/scrip-master.json, valid 24h.
+// Render kills slow HTTP responses before the full file downloads (stream abort).
+// Disk read is instant once cached; avoids the abort loop on every cold start.
+const INSTR_CACHE_FILE = "/tmp/scrip-master.json";
+const INSTR_CACHE_TTL  = 24 * 60 * 60 * 1000; // 24 hours
 let _instrLoadPromise = null;
 async function ensureInstruments(reason) {
-  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
+  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= INSTR_CACHE_TTL) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
@@ -22,11 +28,39 @@ async function ensureInstruments(reason) {
   }
   _instrLoadPromise = (async () => {
     try {
+      // 1. Try disk cache — instant, no network
+      try {
+        const stat = fs.statSync(INSTR_CACHE_FILE);
+        if (Date.now() - stat.mtimeMs < INSTR_CACHE_TTL) {
+          const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
+          if (Array.isArray(data) && data.length > 1000) {
+            SESSION._instruments = data;
+            SESSION._instrFetchTime = stat.mtimeMs;
+            log(`Instrument master loaded from disk cache: ${data.length} records`, "OK");
+            return SESSION._instruments;
+          }
+        }
+      } catch(diskErr) { /* cache missing/corrupt — fall through to network */ }
+
+      // 2. Download fresh — stream to disk directly so Render timeout doesn't abort in-memory parse
       log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
-      const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:30000});
-      SESSION._instruments = r.data;
+      const writer = fs.createWriteStream(INSTR_CACHE_FILE);
+      const resp = await axios({ method:"get", url:"https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", responseType:"stream", timeout:120000 });
+      await new Promise((resolve, reject) => {
+        resp.data.pipe(writer);
+        writer.on("finish", resolve);
+        writer.on("error", reject);
+        resp.data.on("error", reject);
+      });
+      const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
+      SESSION._instruments = data;
       SESSION._instrFetchTime = Date.now();
+      log(`Instrument master downloaded and cached: ${data.length} records`, "OK");
       return SESSION._instruments;
+    } catch(err) {
+      // Clean up partial file on error so next call retries network instead of reading corrupt cache
+      try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
+      throw err;
     } finally {
       _instrLoadPromise = null;
     }
