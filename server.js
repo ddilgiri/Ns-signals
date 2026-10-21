@@ -12,9 +12,14 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // check-then-download, causing many redundant simultaneous downloads when several
 // requests arrived at once with a cold/stale cache. This lock ensures only one
 // download happens at a time — concurrent callers wait for the same in-flight request.
+// DISK CACHE: scrip master saved to disk, valid for 24h. On Render, a fresh deploy
+// starts cold with no in-memory cache; reading from disk avoids a slow network download
+// on every cold start or container restart.
+const INSTR_CACHE_FILE = path.join(__dirname, ".scrip-master-cache.json");
+const INSTR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 let _instrLoadPromise = null;
 async function ensureInstruments(reason) {
-  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
+  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= INSTR_CACHE_TTL) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
@@ -22,10 +27,32 @@ async function ensureInstruments(reason) {
   }
   _instrLoadPromise = (async () => {
     try {
+      // 1. Try disk cache first (fast — no network)
+      try {
+        const stat = fs.statSync(INSTR_CACHE_FILE);
+        if (Date.now() - stat.mtimeMs < INSTR_CACHE_TTL) {
+          log(`Loading instrument master from disk cache${reason ? " for " + reason : ""}...`, "INFO");
+          const raw = fs.readFileSync(INSTR_CACHE_FILE, "utf8");
+          const data = JSON.parse(raw);
+          if (Array.isArray(data) && data.length > 1000) {
+            SESSION._instruments = data;
+            SESSION._instrFetchTime = stat.mtimeMs;
+            log(`Instrument master loaded from disk cache: ${data.length} records`, "OK");
+            return SESSION._instruments;
+          }
+        }
+      } catch(diskErr) { /* cache missing or corrupt — fall through to network */ }
+
+      // 2. Download fresh from Angel One
       log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
-      const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:30000});
+      const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:60000});
       SESSION._instruments = r.data;
       SESSION._instrFetchTime = Date.now();
+      // Save to disk cache (async, non-blocking)
+      try {
+        fs.writeFileSync(INSTR_CACHE_FILE, JSON.stringify(r.data));
+        log(`Instrument master cached to disk: ${r.data.length} records`, "OK");
+      } catch(saveErr) { log(`Disk cache save failed (non-fatal): ${saveErr.message}`, "WARN"); }
       return SESSION._instruments;
     } finally {
       _instrLoadPromise = null;
