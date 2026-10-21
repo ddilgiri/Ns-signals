@@ -18,13 +18,19 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // Disk read is instant once cached; avoids the abort loop on every cold start.
 const INSTR_CACHE_FILE = "/tmp/scrip-master.json";
 const INSTR_CACHE_TTL  = 24 * 60 * 60 * 1000; // 24 hours
+const INSTR_RETRY_COOLDOWN = 5 * 60 * 1000;    // don't retry download more than once per 5 min
 let _instrLoadPromise = null;
+let _instrLastFailTime = 0;
 async function ensureInstruments(reason) {
   if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= INSTR_CACHE_TTL) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
     return _instrLoadPromise; // another call is already downloading — wait for it
+  }
+  // If last download attempt failed recently, don't hammer the server
+  if (Date.now() - _instrLastFailTime < INSTR_RETRY_COOLDOWN) {
+    throw new Error("Instrument master unavailable — next retry in " + Math.ceil((INSTR_RETRY_COOLDOWN - (Date.now() - _instrLastFailTime)) / 1000) + "s");
   }
   _instrLoadPromise = (async () => {
     try {
@@ -63,12 +69,19 @@ async function ensureInstruments(reason) {
       let data = apiResp.data;
       // SmartAPI returns {status,message,data:[...]} or raw array
       if (data && data.data && Array.isArray(data.data)) data = data.data;
-      if (!Array.isArray(data) || data.length < 1000) throw new Error(`SmartAPI instruments too small: ${JSON.stringify(data).slice(0,200)}`);
+      if (!Array.isArray(data) || data.length < 1000) {
+        _instrLastFailTime = Date.now();
+        throw new Error(`SmartAPI instruments too small: ${JSON.stringify(data).slice(0,200)}`);
+      }
       fs.writeFileSync(INSTR_CACHE_FILE, JSON.stringify(data));
       SESSION._instruments = data;
       SESSION._instrFetchTime = Date.now();
       log(`Instrument master loaded via SmartAPI: ${data.length} records`, "OK");
       return SESSION._instruments;
+    } catch(err) {
+      _instrLastFailTime = Date.now();
+      try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
+      throw err;
     } finally {
       _instrLoadPromise = null;
     }
