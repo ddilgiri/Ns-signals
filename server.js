@@ -12,76 +12,21 @@ function log(e,t="INFO"){const a=(new Date).toLocaleTimeString("en-IN",{hour:"2-
 // check-then-download, causing many redundant simultaneous downloads when several
 // requests arrived at once with a cold/stale cache. This lock ensures only one
 // download happens at a time — concurrent callers wait for the same in-flight request.
-//
-// DISK CACHE: scrip master (~50MB) saved to /tmp/scrip-master.json, valid 24h.
-// Render kills slow HTTP responses before the full file downloads (stream abort).
-// Disk read is instant once cached; avoids the abort loop on every cold start.
-const INSTR_CACHE_FILE = "/tmp/scrip-master.json";
-const INSTR_CACHE_TTL  = 24 * 60 * 60 * 1000; // 24 hours
-const INSTR_RETRY_COOLDOWN = 5 * 60 * 1000;    // don't retry download more than once per 5 min
 let _instrLoadPromise = null;
-let _instrLastFailTime = 0;
 async function ensureInstruments(reason) {
-  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= INSTR_CACHE_TTL) {
+  if (SESSION._instruments && Date.now() - (SESSION._instrFetchTime || 0) <= 14400000) {
     return SESSION._instruments;
   }
   if (_instrLoadPromise) {
     return _instrLoadPromise; // another call is already downloading — wait for it
   }
-  // If last download attempt failed recently, don't hammer the server
-  if (Date.now() - _instrLastFailTime < INSTR_RETRY_COOLDOWN) {
-    throw new Error("Instrument master unavailable — next retry in " + Math.ceil((INSTR_RETRY_COOLDOWN - (Date.now() - _instrLastFailTime)) / 1000) + "s");
-  }
   _instrLoadPromise = (async () => {
     try {
-      // 1. Try disk cache — instant, no network
-      try {
-        const stat = fs.statSync(INSTR_CACHE_FILE);
-        if (Date.now() - stat.mtimeMs < INSTR_CACHE_TTL) {
-          const data = JSON.parse(fs.readFileSync(INSTR_CACHE_FILE, "utf8"));
-          if (Array.isArray(data) && data.length > 1000) {
-            SESSION._instruments = data;
-            SESSION._instrFetchTime = stat.mtimeMs;
-            log(`Instrument master loaded from disk cache: ${data.length} records`, "OK");
-            return SESSION._instruments;
-          }
-        }
-      } catch(diskErr) { /* cache missing/corrupt — fall through to network */ }
-
-      // 2. Download via authenticated SmartAPI endpoint (CDN URL blocks Render IPs)
-      //    Falls back to public CDN if SmartAPI also fails.
-      if (!isAuthenticated()) throw new Error("Not authenticated — cannot fetch instruments");
-      log(`Downloading NFO instrument master${reason ? " for " + reason : ""} via SmartAPI...`, "INFO");
-      const apiResp = await axios.get("https://apiconnect.angelbroking.com/rest/secure/angelbroking/master/v1/getAllInstrument", {
-        headers: {
-          "Authorization": `Bearer ${SESSION.jwtToken}`,
-          "X-ClientLocalIP": "127.0.0.1",
-          "X-ClientPublicIP": "127.0.0.1",
-          "X-MACAddress": "00:00:00:00:00:00",
-          "X-PrivateKey": SESSION.apiKey,
-          "X-UserType": "USER",
-          "X-SourceID": "WEB",
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        timeout: 60000
-      });
-      let data = apiResp.data;
-      // SmartAPI returns {status,message,data:[...]} or raw array
-      if (data && data.data && Array.isArray(data.data)) data = data.data;
-      if (!Array.isArray(data) || data.length < 1000) {
-        _instrLastFailTime = Date.now();
-        throw new Error(`SmartAPI instruments too small: ${JSON.stringify(data).slice(0,200)}`);
-      }
-      fs.writeFileSync(INSTR_CACHE_FILE, JSON.stringify(data));
-      SESSION._instruments = data;
+      log(`Downloading NFO instrument master${reason ? " for " + reason : ""}...`, "INFO");
+      const r = await axios.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", {timeout:30000});
+      SESSION._instruments = r.data;
       SESSION._instrFetchTime = Date.now();
-      log(`Instrument master loaded via SmartAPI: ${data.length} records`, "OK");
       return SESSION._instruments;
-    } catch(err) {
-      _instrLastFailTime = Date.now();
-      try { fs.unlinkSync(INSTR_CACHE_FILE); } catch(_) {}
-      throw err;
     } finally {
       _instrLoadPromise = null;
     }
