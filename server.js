@@ -526,7 +526,7 @@ let MIN_CONFIDENCE = 60;
 // ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
 const TG_CHAT  = process.env.CHAT_ID;
-const TG_GROUP = "-1003821078489"; // DiLiPs Research Lab group
+const TG_GROUP = process.env.TG_GROUP; // DiLiPs Research Lab group — set in Render env
 const TG_SENT  = new Map(); // sym+type → {ts, verdict}, debounce 5 min
 let TG_ENABLED = true; // toggled by /set-tg-enabled from app UI
 const TG_LOG   = []; // recent TG activity, capped at 50 entries
