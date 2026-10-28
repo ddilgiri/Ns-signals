@@ -605,11 +605,10 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   // Size guide
   const sizeGuide = verdict==="STRONG" ? "Full size" : verdict==="MODERATE" ? "Half size" : "Small size / watch";
 
-  let msg = `${icon} <b>${sym} — ${isCE?"BUY CALL":"BUY PUT"}</b>\n`;
+  let msg = `${icon} <b>${sym}</b> — 📌 Strike: <b>${atm}${type}</b>\n`;
   msg += `🕐 ${timeStr} IST  |  Score: ${score}/100 (${verdict})\n\n`;
-  msg += `📌 Strike: ${atm} ${type}\n`;
   msg += `📊 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n`;
-  if (optLtp) msg += `💵 Option price: <b>₹${optLtp}</b>${lot && capital ? ` × ${lot} = ${capital}` : ""}\n`;
+  if (optLtp) msg += `💵 Option price: ₹${optLtp}${lot && capital ? ` × ${lot} = ${capital}` : ""}\n`;
   if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
   if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
   msg += `\n——————————————\n<b>DiLiP's Research Lab 🔬</b>`;
