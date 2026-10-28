@@ -558,93 +558,81 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const key = `${sym}_${type}`;
   const now = Date.now();
   const prev = TG_SENT.get(key);
-  // fire immediately if verdict improved (WEAK→MODERATE, MODERATE→STRONG, etc.)
+  // fire immediately if verdict improved (WEAK→MODERATE, MODERATE→STRONG)
   const rank = {STRONG: 3, MODERATE: 2, WEAK: 1, AVOID: 0, TRAP: 0};
   const upgraded = prev && (rank[verdict] || 0) > (rank[prev.verdict] || 0);
   if (prev && !upgraded && now - prev.ts < 5 * 60 * 1000) return; // 5-min debounce
   TG_SENT.set(key, {ts: now, verdict});
+
   const isCE = type === "CE";
   const icon = verdict === "STRONG" ? (isCE ? "🟢" : "🔴") : "🟡";
-  const atm   = g?.atmStrike || "";
-  // ATM option LTP from oiChain (already fetched, no extra API call)
-  const atmRow = g?.oiChain?.find(r => r.isATM) || g?.oiChain?.find(r => Number(r.strike) === Number(atm));
-  const optLtp = type === "CE" ? (atmRow?.CE_ltp || null) : (atmRow?.PE_ltp || null);
-  const stop  = g?.suggestedStop || null;
-  const tgt   = g?.suggestedTarget || null;
-  const pcr   = g?.pcr || null;
-  const mp    = g?.maxPain || null;
+  const atm     = g?.atmStrike || "";
+  const atmRow  = g?.oiChain?.find(r => r.isATM) || g?.oiChain?.find(r => Number(r.strike) === Number(atm));
+  const optLtp  = isCE ? (atmRow?.CE_ltp || null) : (atmRow?.PE_ltp || null);
+  const lot     = (g?.lot > 1 ? g.lot : null) || (g?.lotSize > 1 ? g.lotSize : null) || "";
+  const capital = (optLtp && lot) ? `₹${Math.round(optLtp * lot).toLocaleString("en-IN")}` : null;
+  const stop    = g?.suggestedStop || null;
+  const tgt     = g?.suggestedTarget || null;
+  const pcr     = g?.pcr || null;
+  const mp      = g?.maxPain || null;
   const ceWall  = g?.ceWalls?.[0]?.strike || null;
   const peFloor = g?.peFloors?.[0]?.strike || null;
-  const ramesh  = g?.ceSignal?.signal || null;
-  const suresh  = g?.peSignal?.signal || null;
-  const dilipNote = g?.dilipFormulaNote || "";
-  const oiScore   = g?.oiScore || 0;
-  const bias      = g?.bias || null;
-  const rsi       = g?.rsi ? parseFloat(g.rsi).toFixed(1) : null;
-  const vix       = g?.vixValue ? parseFloat(g.vixValue).toFixed(1) : null;
-  const vixReg    = g?.vixRegime || null;
-  const putTrap   = g?.putTrapRisk || false;
-  const callTrap  = g?.callTrapRisk || false;
-  const nearMP    = g?.nearMaxPain || false;
-  const gammaBlast = g?.gammaBlast?.isGammaBlast || false;
 
-  // dynamic narration map
-  // Ramesh = CE OI side. CE writers adding (SHORT_BUILDUP) = cap/resistance = bearish.
-  // CE writers exiting (SHORT_COVERING) = wall crumbling = bullish.
-  // CE buyers adding (LONG_BUILDUP) = premium demand rising, wait for confirmation.
-  // CE buyers exiting (LONG_UNWINDING) = CE holders closing = bearish for CE.
-  const rameshNarr = {
-    SHORT_BUILDUP:  "CE writers adding — hard cap forming 🧱 bearish",
-    LONG_BUILDUP:   "CE buyers loading — premium rising, wait confirm ⏳",
-    SHORT_COVERING: "CE writers exiting — wall crumbling, bullish 🚀",
-    LONG_UNWINDING: "CE buyers closing — CE momentum fading ⬇️",
-    NEUTRAL:        "no clear CE signal"
-  };
-  // Suresh = PE OI side. PE writers adding (PUT_COVERING/floor build) = floor = bullish.
-  // PE writers exiting (PUT_TRAP/PUT_COVERING unwinding) = floor collapsing = bearish.
-  // PE buyers adding (LONG_BUILDUP) = put demand rising = bearish momentum.
-  // PE buyers exiting (LONG_UNWINDING) = bearish momentum weakening = bullish signal.
-  const sureshNarr = {
-    LONG_BUILDUP:   "PE buyers loading — bearish momentum building 🔻",
-    PUT_TRAP:       "PE writers collecting — floor building, bullish 🟢",
-    LONG_UNWINDING: "PE buyers closing — bearish momentum fading ⬆️",
-    PUT_COVERING:   "PE writers exiting — floor collapsing, bearish 🔻",
-    NEUTRAL:        "no clear PE signal"
-  };
+  // 11-signal breakdown fields
+  const bd       = g?.breakdown || {};
+  const vixVal   = g?.vixValue ? parseFloat(g.vixValue).toFixed(1) : null;
+  const vixReg   = g?.vixRegime || null;
+  const cprPos   = g?.cpr?.position || null;
+  const fbBias   = g?.futuresBasis?.basis != null ? `₹${g.futuresBasis.basis}(${g.futuresBasis.bias})` : null;
+  const cvdBias  = g?.pseudoCvd?.bias || null;
+  const chochDet = g?.choch?.detected || false;
+  const chochDir = g?.choch?.direction || null;
+  const aboveVwap= g?.aboveVwap;
+  const rvol     = g?.volRatio ? parseFloat(g.volRatio).toFixed(1) : null;
+  const orbNote  = bd?.orbSignal?.note || null;
 
-  const lot = (g?.lot > 1 ? g.lot : null) || (g?.lotSize > 1 ? g.lotSize : null) || "";
-  const capital = (optLtp && lot) ? `₹${Math.round(optLtp * lot).toLocaleString("en-IN")}` : null;
+  // Pre-market category total (35 max)
+  const preMktEarned = (bd?.oiWalls?.earned||0)+(bd?.pcr?.earned||0)+(bd?.vixSignal?.earned||0)+(bd?.cprSignal?.earned||0)+(bd?.futuresBasisSignal?.earned||0);
+  // Live category total (50 max)
+  const liveEarned = (bd?.vwapSignal?.earned||0)+(bd?.volumeRvol?.earned||0)+(bd?.chochSignal?.earned||0)+(bd?.oiChangeSignal?.earned||0)+(bd?.cvdSignal?.earned||0);
 
-  let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}%)\n\n`;
+  let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}/100)\n`;
   msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
   if (atm) msg += ` | ATM: ${atm}`;
-  if (bias) msg += ` | Bias: <b>${bias}</b>`;
   msg += `\n`;
+
   if (atm) {
-    msg += `🎯 Buy: ${atm} ${type}`;
-    if (optLtp) msg += ` @ <b>₹${optLtp}</b>`;
-    if (lot && capital) msg += ` | Lot: ${lot} = <b>${capital}</b>`;
+    msg += `🎯 Buy: <b>${atm} ${type}</b>`;
+    if (optLtp) msg += ` @ ₹${optLtp}`;
+    if (lot && capital) msg += ` | Lot:${lot}=${capital}`;
     msg += `\n`;
   }
-  if (stop && tgt) msg += `🛑 Stop: ₹${stop} | 🎯 Target: ₹${tgt}\n`;
-  msg += `\n`;
-  msg += `📊 OI Score: ${oiScore}`;
-  if (pcr) msg += ` | PCR: ${pcr}`;
-  if (mp)  msg += ` | MaxPain: ${mp}`;
-  if (rsi) msg += ` | RSI: ${rsi}`;
-  msg += `\n`;
-  if (vix) msg += `🌡️ VIX: ${vix}${vixReg ? ` (${vixReg})` : ""}\n`;
-  if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
-  if (peFloor) msg += ` | PE Floor: ${peFloor}`;
-  if (ceWall || peFloor) msg += `\n`;
-  // warnings
-  if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
-  if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
-  if (callTrap)   msg += `⚠️ CALL TRAP risk — don't chase CE\n`;
-  if (nearMP)     msg += `📍 Near MaxPain — expiry magnet zone\n`;
-  if (dilipNote && !dilipNote.includes("Both sides strong"))  msg += `📌 ${dilipNote}\n`;
-  msg += `\n――――――――――――――――――\n<b>DiLiP's Research Lab 🔬</b>`;
+  if (stop && tgt) msg += `🛑 SL: ₹${stop} | 🎯 Tgt: ₹${tgt}\n`;
 
+  msg += `\n<b>📊 Score breakdown</b>\n`;
+  msg += `Pre-market: ${preMktEarned}/35`;
+  if (vixVal) msg += ` | VIX:${vixVal}(${vixReg||"?"})`;
+  if (cprPos) msg += ` | CPR:${cprPos}`;
+  if (fbBias) msg += ` | Fut:${fbBias}`;
+  msg += `\n`;
+  msg += `Live: ${liveEarned}/50`;
+  if (aboveVwap != null) msg += ` | VWAP:${aboveVwap?"ABOVE":"BELOW"}`;
+  if (rvol) msg += ` | RVOL:${rvol}x`;
+  if (chochDet) msg += ` | CHOCH:${chochDir||"✓"}`;
+  if (cvdBias) msg += ` | CVD:${cvdBias}`;
+  msg += `\n`;
+  if (orbNote) msg += `⏰ ORB: ${orbNote}\n`;
+
+  if (pcr || mp || ceWall || peFloor) {
+    msg += `\n`;
+    if (pcr) msg += `PCR:${pcr}`;
+    if (mp)  msg += ` | MaxPain:${mp}`;
+    if (ceWall)  msg += ` | CE Wall:${ceWall}`;
+    if (peFloor) msg += ` | PE Floor:${peFloor}`;
+    msg += `\n`;
+  }
+
+  msg += `\n――――――――――――――――――\n<b>DiLiP's Research Lab 🔬</b>`;
   sendTelegram(msg, { sym, type, verdict, score }).catch(() => {});
 }
 // ─────────────────────────────────────────────────────────────────────────────
