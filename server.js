@@ -632,21 +632,6 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (ceWall)  msg += `🧱 CE Wall: ${ceWall}`;
   if (peFloor) msg += ` | PE Floor: ${peFloor}`;
   if (ceWall || peFloor) msg += `\n`;
-  if (ramesh) msg += `⚡ Ramesh: ${rameshNarr[ramesh] || ramesh}`;
-  if (suresh) msg += `\n💧 Suresh: ${sureshNarr[suresh] || suresh}`;
-  if (ramesh || suresh) {
-    // Conclusion line: check if Ramesh+Suresh agree on direction
-    const ceAction = ramesh === "SHORT_BUILDUP" || ramesh === "LONG_UNWINDING" ? "BEARISH" :
-                     ramesh === "SHORT_COVERING" || ramesh === "LONG_BUILDUP" ? "BULLISH" : "NEUTRAL";
-    const peAction = suresh === "LONG_BUILDUP" || suresh === "PUT_COVERING" ? "BEARISH" :
-                     suresh === "PUT_TRAP" || suresh === "LONG_UNWINDING" ? "BULLISH" : "NEUTRAL";
-    if (ceAction !== "NEUTRAL" && peAction !== "NEUTRAL" && ceAction === peAction) {
-      msg += `\n📌 Both sides confirm ${ceAction} — strong trade ✅`;
-    } else if (ceAction !== "NEUTRAL" && peAction !== "NEUTRAL" && ceAction !== peAction) {
-      msg += `\n📌 Mixed signals — price trapped, avoid ⚠️`;
-    }
-    msg += `\n`;
-  }
   // warnings
   if (gammaBlast) msg += `⚡ GAMMA BLAST — premium can spike fast!\n`;
   if (putTrap)    msg += `⚠️ PUT TRAP risk — don't chase PE\n`;
