@@ -617,18 +617,6 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   msg += `📊 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n`;
   if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
   if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
-  msg += `📐 Size: ${sizeGuide}\n`;
-
-  // 2-line plain-English reason (top passing signals)
-  const topSignals = [];
-  if (aboveVwap != null) topSignals.push(aboveVwap === isCE ? "price on right side of VWAP" : null);
-  if (chochDet && chochDir) topSignals.push(`structure break ${chochDir==="BULLISH"?"up":"down"}`);
-  if (cvdBias && cvdBias!=="NEUTRAL") topSignals.push(`${cvdBias==="BUYING"?"buying":"selling"} pressure building`);
-  if (g?.cpr?.position) topSignals.push(`price ${g.cpr.position.toLowerCase()} CPR`);
-  if (g?.futuresBasis?.bias==="PREMIUM" && isCE) topSignals.push("futures showing premium");
-  if (g?.futuresBasis?.bias==="DISCOUNT" && !isCE) topSignals.push("futures in discount");
-  const reasons = topSignals.filter(Boolean).slice(0,3);
-  if (reasons.length) msg += `✅ ${reasons.join(", ")}\n`;
 
   if (mp) msg += `\n📍 Max Pain: ${mp}`;
   if (pcr) msg += `  |  PCR: ${pcr}`;
