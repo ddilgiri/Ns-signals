@@ -526,7 +526,7 @@ app.post("/signal-outcome",(req,res)=>{
 // both use whatever the user has actually set there, not a hardcoded number.
 // Defaults to 60 to match cfgMinConf's own default until the app sends its real
 // value (right after load, and on every change).
-let MIN_CONFIDENCE = 60;
+let MIN_CONFIDENCE = 65; // 11-signal system entry gate: ≥65/100 at 9:40 AM = valid trade (2026-10-28)
 
 // ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
@@ -1226,335 +1226,283 @@ app.post("/candle-projection-session",(e,t)=>{
 // was 34/189, 18%), risking a clean-trend stock inflating its score on redundant
 // confirmation rather than genuinely independent signals. Reduced combined weight of
 // the two original factors to make room for KAMA without overweighting trend overall.
-const SIGNAL_WEIGHTS={marketBias:14,supertrend:8,rsi:10,rsiZ:5,imi:8,bidAskImbalance:6,kama:6,priceZ:5,macd:5,aboveVwap:10,orbBreakout:7,volumeConfirm:12,instFlow:3,pcrBias:5,pcrDelta:8,vixRegime:3,newsSentiment:0,geoRisk:0,expiryRisk:6,oiMomentum:22,gammaBlast:15,dilipOIFormula:25,nanaConfirm:12,rsiDivergence:8,adxTrendStrength:8},MAX_SCORE=Object.values(SIGNAL_WEIGHTS).reduce((e,t)=>e+t,0);
-function scoreSignal(e,t){const a="CE"===t,s={};let n=!1,o="";null!==e.vixValue&&e.vixValue>=30&&(n=!0,o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`);{const t=SIGNAL_WEIGHTS.marketBias;let n=0,o="";a?"BULLISH"===e.bias?(n=t,o="EMA bullish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bearish — against CE"):"BEARISH"===e.bias?(n=t,o="EMA bearish trend ✓"):"NEUTRAL"===e.bias?(n=.5*t,o="EMA neutral — partial"):(n=0,o="EMA bullish — against PE"),s.marketBias={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.supertrend;if(e.supertrend){const n="UP"===e.supertrend.trend,o=e.supertrend.signal===(a?"BUY":"SELL");let r=0,i="";a?n&&o?(r=t,i="Supertrend UP + fresh BUY signal ✓✓"):n?(r=.7*t,i="Supertrend UP ✓"):(r=0,i="Supertrend DOWN — against CE"):!n&&o?(r=t,i="Supertrend DOWN + fresh SELL signal ✓✓"):n?(r=0,i="Supertrend UP — against PE"):(r=.7*t,i="Supertrend DOWN ✓"),s.supertrend={earned:r,max:t,pass:r>0,note:i}}else s.supertrend={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const t=SIGNAL_WEIGHTS.rsi,n=e.rsi||50;let o=0,r="";a?n<35?(o=t,r=`RSI ${n} — oversold, strong CE`):n<45?(o=.8*t,r=`RSI ${n} — below midline`):n<60?(o=.6*t,r=`RSI ${n} — neutral`):n<70?(o=.3*t,r=`RSI ${n} — elevated, caution`):(o=0,r=`RSI ${n} — overbought`):n>65?(o=t,r=`RSI ${n} — overbought, strong PE`):n>55?(o=.8*t,r=`RSI ${n} — above midline`):n>40?(o=.6*t,r=`RSI ${n} — neutral`):n>30?(o=.3*t,r=`RSI ${n} — low, caution`):(o=0,r=`RSI ${n} — oversold`),s.rsi={earned:o,max:t,pass:o>=.4*t,note:r}}{
-// Real feature (2026-09-05, Stage 2): RSI z-score confirmation -- per the framework,
-// "momentum shift" is when z-score crosses 0 (RSI moving from below-its-own-normal to
-// above, or vice versa), a genuinely different signal than RSI's absolute level (which
-// the existing block above already scores). This is a SEPARATE, small confirmation
-// factor, not a replacement -- keeps the proven fixed-threshold RSI scoring intact
-// while adding the adaptive layer as its own modest-weight bonus.
-const t2=SIGNAL_WEIGHTS.rsiZ,z=e.rsiZ||0;let o2=0,r2="";
-a?z>0.5?(o2=t2,r2=`RSI z-score ${z} — momentum shifting up vs own recent range ✓`):z>-0.5?(o2=.5*t2,r2=`RSI z-score ${z} — neutral momentum`):(o2=0,r2=`RSI z-score ${z} — momentum shifting down, against CE`):z<-0.5?(o2=t2,r2=`RSI z-score ${z} — momentum shifting down vs own recent range ✓`):z<0.5?(o2=.5*t2,r2=`RSI z-score ${z} — neutral momentum`):(o2=0,r2=`RSI z-score ${z} — momentum shifting up, against PE`),
-s.rsiZ={earned:o2,max:t2,pass:o2>=.4*t2,note:r2}}{
-// Real feature (2026-09-05, Stage 3): bid-ask imbalance scoring. Per the framework:
-// imbalance>1.3 = buyers stacking top-5 depth (bullish), <0.7 = sellers stacking
-// (bearish). Data arrives via bidAskImbalance param, sourced from the frontend's
-// already-existing batched price fetch (mode:FULL depth, zero new API calls). Null
-// when data isn't available yet (e.g. very first scan before any batch has run) --
-// treated as neutral, never penalized for missing data.
-const t3=SIGNAL_WEIGHTS.bidAskImbalance,imbVal=e.bidAskImbalance;let o3=0,r3="";
-if(imbVal==null){o3=.5*t3;r3="No depth data yet — neutral";}
-else{
-  a?imbVal>1.3?(o3=t3,r3=`Bid-ask imbalance ${imbVal} — buyers stacking, favors CE ✓`):imbVal>1.0?(o3=.6*t3,r3=`Imbalance ${imbVal} — mild buy pressure`):imbVal>0.7?(o3=.3*t3,r3=`Imbalance ${imbVal} — mild sell pressure`):(o3=0,r3=`Imbalance ${imbVal} — sellers stacking, against CE`):
-  imbVal<0.7?(o3=t3,r3=`Bid-ask imbalance ${imbVal} — sellers stacking, favors PE ✓`):imbVal<1.0?(o3=.6*t3,r3=`Imbalance ${imbVal} — mild sell pressure`):imbVal<1.3?(o3=.3*t3,r3=`Imbalance ${imbVal} — mild buy pressure`):(o3=0,r3=`Imbalance ${imbVal} — buyers stacking, against PE`);
+// ══════════════════════════════════════════════════════════════════════════════
+// 11-SIGNAL INSTITUTIONAL WIND SCORING SYSTEM — 100 marks total (2026-10-28)
+// Replaces legacy 23-factor SIGNAL_WEIGHTS (~290 max) with a clean institutional
+// framework. Entry gate: ≥65/100 at 9:40 AM = valid trade.
+//
+// PRE-MARKET (35 marks):  OI Walls 10 | PCR 8 | VIX 7 | CPR 6 | Futures Basis 4
+// OPENING   (15 marks):   ORB 15 (9:40)→6 (10:00)→0 (>10:30) + decay → OI Change
+// LIVE      (50 marks):   VWAP 10 | Volume/RVOL 10 | CHOCH 10 | OI Change 15* | CVD 5
+// * OI Change absorbs ORB decay: 15 base + up to 8 redistributed from ORB decay
+//   = max 23 when ORB fully decays after 10:30; 15 at 9:40 when ORB is worth 15
+// ══════════════════════════════════════════════════════════════════════════════
+const SIGNAL_WEIGHTS={
+  // pre-market
+  oiWalls:10, pcr:8, vixSignal:7, cprSignal:6, futuresBasisSignal:4,
+  // opening (time-decaying)
+  orbSignal:15,
+  // live
+  vwapSignal:10, volumeRvol:10, chochSignal:10, oiChangeSignal:15, cvdSignal:5
+};
+const MAX_SCORE=100; // fixed — this system always scores out of 100
+function scoreSignal(e,t){
+const a="CE"===t,s={};let n=!1,o="";
+// Hard block: extreme VIX
+if(null!==e.vixValue&&e.vixValue>=30){n=true;o=`India VIX at ${e.vixValue} — extreme panic, avoid directional trades`;}
+
+// ── ORB time-decay: compute effective ORB max FIRST (needed for OI Change max) ──
+const _now=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+const _h=_now.getHours(),_m=_now.getMinutes();
+const _minSince930=Math.max(0,(_h-9)*60+(_m-30));
+// ORB marks: 15 at 9:40, 6 at 10:00, 0 after 10:30 (linear within windows)
+let orbMax=0;
+if(_minSince930<=10){orbMax=15;}              // 9:30–9:40 → 15 pts
+else if(_minSince930<=30){                    // 9:40–10:00 → 15→6
+  orbMax=Math.round(15-((_minSince930-10)/20)*9);
+}else if(_minSince930<=60){                   // 10:00–10:30 → 6→0
+  orbMax=Math.round(6-((_minSince930-30)/30)*6);
+}else{orbMax=0;}                              // after 10:30 → 0
+// OI Change absorbs the decay (max 15 base + up to 8 redistributed)
+const oiChangeMax=Math.min(23,15+(15-orbMax<=8?15-orbMax:8));
+
+// ── SIGNAL 1: OI Walls (10 pts) ──────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.oiWalls;let earned=0,note="";
+const ceWalls=e.ceWalls||[],peFloors=e.peFloors||[];
+const nearRes=e.nearResistance||false,nearSup=e.nearSupport||false;
+const oiRec=e.oiRecommendation||"NEUTRAL";
+if(a){// CE: want price near support (PE floor), away from heavy CE wall resistance
+  if(nearSup&&peFloors.length>0){earned=mx;note=`Strong PE floor support, OI walls favor CE ✓`;}
+  else if(oiRec==="CE"||oiRec==="BULLISH"){earned=Math.round(mx*0.8);note=`OI walls lean bullish ✓`;}
+  else if(oiRec==="NEUTRAL"){earned=Math.round(mx*0.5);note="OI walls neutral";}
+  else if(nearRes&&ceWalls.length>0){earned=Math.round(mx*0.2);note="CE wall resistance overhead — caution";}
+  else{earned=Math.round(mx*0.4);note="OI walls — no strong directional signal";}
+}else{// PE: want price near resistance (CE wall), away from heavy PE floor support
+  if(nearRes&&ceWalls.length>0){earned=mx;note=`Strong CE wall resistance, OI walls favor PE ✓`;}
+  else if(oiRec==="PE"||oiRec==="BEARISH"){earned=Math.round(mx*0.8);note=`OI walls lean bearish ✓`;}
+  else if(oiRec==="NEUTRAL"){earned=Math.round(mx*0.5);note="OI walls neutral";}
+  else if(nearSup&&peFloors.length>0){earned=Math.round(mx*0.2);note="PE floor support below — caution";}
+  else{earned=Math.round(mx*0.4);note="OI walls — no strong directional signal";}
 }
-s.bidAskImbalance={earned:o3,max:t3,pass:o3>=.4*t3,note:r3}}{
-// Real feature (2026-09-05, #5): KAMA scoring -- price above/below KAMA + slope
-// direction, same confirmation logic style as Supertrend. KAMA adapts its own speed
-// to volatility, so this genuinely differs from the fixed EMA20/50 already in
-// marketBias -- can catch trend confirmation EMA misses in choppy-then-trending stocks.
-const t4=SIGNAL_WEIGHTS.kama,kamaVal=e.kama,kamaSl=e.kamaSlope,ltpNow=e.ltp;let o4=0,r4="";
-if(kamaVal==null||ltpNow==null){o4=.5*t4;r4="KAMA data unavailable — neutral";}
-else{
-  const above=ltpNow>kamaVal;
-  a?above&&"UP"===kamaSl?(o4=t4,r4=`Price above rising KAMA ✓✓`):above?(o4=.6*t4,r4=`Price above KAMA, slope ${kamaSl}`):(o4=0,r4=`Price below KAMA — against CE`):
-  !above&&"DOWN"===kamaSl?(o4=t4,r4=`Price below falling KAMA ✓✓`):!above?(o4=.6*t4,r4=`Price below KAMA, slope ${kamaSl}`):(o4=0,r4=`Price above KAMA — against PE`);
-}
-s.kama={earned:o4,max:t4,pass:o4>=.4*t4,note:r4}}{
-// Real feature (2026-09-05, #7): price z-score mean-reversion scoring. Per the
-// framework's own Step 6 (Range regime, mean reversion): price z-score < -2 =
-// statistically stretched down = favors CE (bounce expected); > +2 = stretched up =
-// favors PE. This is DELIBERATELY a mean-reversion signal, opposite in spirit to
-// trend-following factors like KAMA/Supertrend above -- most useful specifically when
-// regime=RANGE (Stage 1), less relevant in a genuine TREND. Not gated on regime here
-// (keeping it a scored factor, not a hard rule) but the note flags this for transparency.
-const t5=SIGNAL_WEIGHTS.priceZ,pz=e.priceZ||0;let o5=0,r5="";
-a?pz<-2?(o5=t5,r5=`Price z-score ${pz} — stretched down, bounce favors CE ✓`):pz<-1?(o5=.6*t5,r5=`Price z-score ${pz} — mildly stretched down`):pz<1?(o5=.5*t5,r5=`Price z-score ${pz} — normal range`):(o5=.2*t5,r5=`Price z-score ${pz} — stretched up, against CE mean-reversion`):
-pz>2?(o5=t5,r5=`Price z-score ${pz} — stretched up, pullback favors PE ✓`):pz>1?(o5=.6*t5,r5=`Price z-score ${pz} — mildly stretched up`):pz>-1?(o5=.5*t5,r5=`Price z-score ${pz} — normal range`):(o5=.2*t5,r5=`Price z-score ${pz} — stretched down, against PE mean-reversion`);
-s.priceZ={earned:o5,max:t5,pass:o5>=.4*t5,note:r5}}{
-// Real feature (2026-09-05): IMI scoring block, mirrors RSI's exact pattern/thresholds
-// (Chande's own IMI reading convention matches RSI: >70 overbought, <30 oversold) --
-// but computed from close-vs-OPEN per candle (today's real intraday momentum), not
-// close-vs-prevclose across days like RSI. Genuinely independent signal, not a duplicate.
-const t=SIGNAL_WEIGHTS.imi,n=e.imi!=null?e.imi:50;let o=0,r="";
-a?n<35?(o=t,r=`IMI ${n} — oversold, strong intraday CE momentum`):n<45?(o=.8*t,r=`IMI ${n} — below midline`):n<60?(o=.6*t,r=`IMI ${n} — neutral`):n<70?(o=.3*t,r=`IMI ${n} — elevated, caution`):(o=0,r=`IMI ${n} — overbought`):n>65?(o=t,r=`IMI ${n} — overbought, strong intraday PE momentum`):n>55?(o=.8*t,r=`IMI ${n} — above midline`):n>40?(o=.6*t,r=`IMI ${n} — neutral`):n>30?(o=.3*t,r=`IMI ${n} — low, caution`):(o=0,r=`IMI ${n} — oversold`),
-s.imi={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.macd;if(e.macd){let n=0,o="";const r=e.macd.aboveSignal,i=e.macd.crossover;a?"BULLISH"===i?(n=t,o="MACD fresh bullish crossover ✓✓"):r?(n=.6*t,o="MACD above signal ✓"):"BEARISH"===i?(n=0,o="MACD fresh bearish cross — bad"):(n=.2*t,o="MACD below signal, weak"):"BEARISH"===i?(n=t,o="MACD fresh bearish crossover ✓✓"):r?"BULLISH"===i?(n=0,o="MACD fresh bullish cross — bad"):(n=.2*t,o="MACD above signal, weak"):(n=.6*t,o="MACD below signal ✓"),s.macd={earned:n,max:t,pass:n>=.5*t,note:o}}else s.macd={earned:.5*t,max:t,pass:null,note:"No data — neutral"}}{const n=SIGNAL_WEIGHTS.aboveVwap;if(null===e.aboveVwap)s.aboveVwap={earned:.5*n,max:n,pass:null,note:"VWAP data unavailable"};else{const o=a?e.aboveVwap:!e.aboveVwap;s.aboveVwap={earned:o?n:0,max:n,pass:o,note:o?`Price ${a?"above":"below"} VWAP ✓`:`Price ${a?"below":"above"} VWAP — against ${t}`}}}{const t=SIGNAL_WEIGHTS.orbBreakout,n=a?e.orb_high:e.orb_low;const _orbNow=new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
-const orbHour=_orbNow.getHours(),orbMin=_orbNow.getMinutes();
-const preORB=(orbHour<9)||(orbHour===9&&orbMin<30); // before 9:30 AM
-const orbNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
-if(null===n){
-  if(preORB){s.orbBreakout={earned:0,max:t,pass:null,note:"Pre 9:30 AM — ORB not set yet (0 pts)"};}
-  else{s.orbBreakout={earned:orbNextMonth?Math.round(.5*t):Math.round(.3*t),max:t,pass:null,note:orbNextMonth?"ORB neutral — next month contract":"ORB not confirmed"};}
-}else{const o=a?e.ltp>n:e.ltp<n,r=a?e.ltp>.997*n&&e.ltp<=n:e.ltp<1.003*n&&e.ltp>=n;let i=o?t:r?.4*t:0;s.orbBreakout={earned:i,max:t,pass:o,note:o?`ORB ${a?"breakout":"breakdown"} confirmed ✓`:r?"Approaching ORB level — watch":"No ORB "+(a?"breakout":"breakdown")}}}{const t=SIGNAL_WEIGHTS.volumeConfirm,a=e.volRatio||1;let n=0,o="";
-// On expiry day scanning next-month contracts, volume is naturally thin — give neutral
-const isNextMonth=typeof e.daysToExpiry==="number"&&e.daysToExpiry>5;
-if(isNextMonth&&a<0.8){n=Math.round(.5*t);o=`Volume ${a}x — low but next-month contract (expiry day) — neutral`;s.volumeConfirm={earned:n,max:t,pass:null,note:o};}
-else{
-  // Base score from volRatio
-  let base=0,baseNote="";
-  a>=2?(base=t*0.5,baseNote=`Vol ${a}x surge ✓✓`):a>=1.5?(base=t*0.4,baseNote=`Vol ${a}x strong ✓`):a>=1.2?(base=t*0.3,baseNote=`Vol ${a}x above avg`):a>=0.8?(base=t*0.15,baseNote=`Vol ${a}x average`):(base=0,baseNote=`Vol ${a}x low`);
-  // Bonus: Vol + Price direction MATCH
-  const vpDir=e.volPriceDir||"NEUTRAL";
-  let dirBonus=0,dirNote="";
-  if(vpDir==="MATCH"){dirBonus=t*0.35;dirNote=" + price direction match ✓✓";}
-  else if(vpDir==="FAKE"){dirBonus=-(t*0.2);dirNote=" ⚠️ vol/price mismatch — fake move";}
-  else{dirBonus=0;dirNote="";}
-  // Penalty: Volume dry up
-  const dryUp=e.volDryUp||false;
-  let dryPenalty=0,dryNote="";
-  if(dryUp){dryPenalty=-(t*0.3);dryNote=" ⚠️ Vol dry up — reversal risk";}
-  // Bonus: OI buildup + volume surge (real OI)
-  let oiVolBonus=0,oiVolNote="";
-  if(a>=1.5&&e.oiVerdict&&e.oiVerdict!=="WEAK"){oiVolBonus=t*0.15;oiVolNote=" + OI+Vol confirmed ✓";}
-  n=Math.min(Math.max(Math.round(base+dirBonus+dryPenalty+oiVolBonus),0),t);
-  o=baseNote+dirNote+dryNote+oiVolNote;
-  s.volumeConfirm={earned:n,max:t,pass:n>=t*0.4,note:o};
-}}{const t=SIGNAL_WEIGHTS.instFlow;let n=0,o="";a?"BULLISH"===e.instBias?(n=t,o=`FII/DII bullish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bearish ₹${e.fiiNet}Cr`):"BEARISH"===e.instBias?(n=t,o=`FII/DII bearish ₹${e.fiiNet}Cr ✓`):"NEUTRAL"===e.instBias?(n=.5*t,o="FII/DII neutral"):(n=0,o=`FII/DII bullish ₹${e.fiiNet}Cr`),s.instFlow={earned:n,max:t,pass:n>=.5*t,note:o}}{const t=SIGNAL_WEIGHTS.pcrBias;if(e.pcr){let n=0,o="";a?"BULLISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bullish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bearish`):"BEARISH"===e.pcrBias?(n=t,o=`PCR ${e.pcr} — bearish ✓`):"NEUTRAL"===e.pcrBias?(n=.5*t,o=`PCR ${e.pcr} — neutral`):(n=0,o=`PCR ${e.pcr} — bullish`),s.pcrBias={earned:n,max:t,pass:n>=.5*t,note:o}}else s.pcrBias={earned:.5*t,max:t,pass:null,note:"PCR unavailable"}}{const t=SIGNAL_WEIGHTS.vixRegime,a=e.vixRegime||"UNKNOWN",n=e.vixValue;let o=0,r="";"VERY_LOW"===a?(o=t,r=`VIX ${n} — very low, cheap options ✓✓`):"LOW"===a?(o=t,r=`VIX ${n} — low, good conditions ✓`):"NORMAL"===a?(o=.7*t,r=`VIX ${n} — normal`):"ELEVATED"===a?(o=.4*t,r=`VIX ${n} — elevated, options pricey`):"HIGH"===a?(o=.1*t,r=`VIX ${n} — high, reduce size`):"EXTREME"===a?(o=0,r=`VIX ${n} — extreme, hard block`):(o=.5*t,r="VIX unknown — neutral"),s.vixRegime={earned:o,max:t,pass:o>=.4*t,note:r}}{const t=SIGNAL_WEIGHTS.newsSentiment,n=e.newsSentimentScore||50;let o=0,r="";a?n>=60?(o=t,r=`News bullish (${n}%) ✓`):n>=40?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bearish (${n}%)`):n<=40?(o=t,r=`News bearish (${n}%) ✓`):n<=60?(o=.5*t,r=`News neutral (${n}%)`):(o=0,r=`News bullish (${n}%)`),s.newsSentiment={earned:o,max:t,pass:o>=.5*t,note:r}}{const t=SIGNAL_WEIGHTS.geoRisk,a=e.newsGeoRisk||0;let n=0,o="";0===a?(n=t,o="No geopolitical risk ✓"):a<=3?(n=.7*t,o=`Low geo risk (${a})`):a<=6?(n=.3*t,o=`Moderate geo risk (${a})`):(n=0,o=`High geo risk (${a}) — caution`),s.geoRisk={earned:n,max:t,pass:a<=6,note:o}}{
-// EXPIRY RISK scoring (replaces old expiryDay)
-const t=SIGNAL_WEIGHTS.expiryRisk;
-let exEarned=t,exNote="";
-const dte=e.daysToExpiry;
-// Use OI-analysis daysToExpiry (which reflects actual contract being scanned — next month on expiry day)
-// NOT isExpiryDay which always refers to current month expiry
-// dte = days to expiry of the CONTRACT being scanned
-// >5 = safe (normal trading), 1-5 = expiry week (caution), <=0 = expiry day (avoid)
-const tradingCurrentExpiry = typeof dte==="number" && dte <= 0;
-const inExpiryWeek = typeof dte==="number" && dte > 0 && dte <= 5;
-const safeContract = typeof dte!=="number" || dte > 5;
-if(tradingCurrentExpiry){
-  exEarned=0;exNote="⚠️ Expiry day contract — avoid, switch to next";
-} else if(inExpiryWeek){
-  exEarned=Math.round(t*0.3);exNote=`⚠️ Expiry week (${dte}d left) — gamma elevated, reduce size`;
-} else {
-  exEarned=t;exNote=`Safe contract (${typeof dte==="number"?dte+"d":"?"} to expiry) ✓`;
-}
-s.expiryRisk={earned:exEarned,max:t,pass:exEarned>=t*0.5,note:exNote};}
-// ── ATM DISTANCE scoring (bonus factor, not in weights — adjusts score quality)
-// Adds up to 5 bonus points if spot is close to strike (ATM signal = higher probability)
-{const spotPrice=e.ltp||0;const strikePrice=e.atmStrike||e.strike||0;
-if(spotPrice>0&&strikePrice>0){
-  const dist=Math.abs(spotPrice-strikePrice)/spotPrice*100;
-  let atmBonus=0,atmNote="";
-  if(dist<=0.5){atmBonus=5;atmNote=`ATM signal (${dist.toFixed(1)}% from strike) ✓✓`;}
-  else if(dist<=1.5){atmBonus=3;atmNote=`Near ATM (${dist.toFixed(1)}% from strike) ✓`;}
-  else if(dist<=3){atmBonus=1;atmNote=`Slightly OTM/ITM (${dist.toFixed(1)}% from strike)`;}
-  else{atmBonus=0;atmNote=`Far from ATM (${dist.toFixed(1)}% from strike) — lower probability`;}
-  s.atmDistance={earned:atmBonus,max:5,pass:dist<=2,note:atmNote};
-}}
-{
-// OI MOMENTUM scoring — Ramesh/Suresh trend from OI history
-const t=SIGNAL_WEIGHTS.oiMomentum;
-const isCE=a;
-const oiH=e.oiTrendData||null;
-let omEarned=t*0.5,omNote="OI trend: no history yet — neutral";
-if(oiH&&oiH.trend!=="INSUFFICIENT_DATA"){
-  const tr=oiH.trend;
-  if(isCE){
-    if(tr==="BULLISH_MOMENTUM"){omEarned=t;omNote=`OI momentum BULLISH — ${oiH.sureshTrend} ✓✓`;}
-    else if(tr==="BOTH_RUNNING_UNCERTAIN"){omEarned=Math.round(t*0.6);omNote="Both sides unwinding — uncertain but CE possible";}
-    else if(tr==="BEARISH_MOMENTUM"){omEarned=0;omNote=`OI momentum BEARISH — ${oiH.rameshTrend} blocks CE`;}
-    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, no OI edge for CE";}
-    else{omEarned=Math.round(t*0.4);omNote="OI trend mixed — partial CE";}
-  }else{
-    if(tr==="BEARISH_MOMENTUM"){omEarned=t;omNote=`OI momentum BEARISH — ${oiH.rameshTrend} ✓✓`;}
-    else if(tr==="BOTH_RUNNING_UNCERTAIN"){omEarned=Math.round(t*0.6);omNote="Both sides unwinding — uncertain but PE possible";}
-    else if(tr==="BULLISH_MOMENTUM"){omEarned=0;omNote=`OI momentum BULLISH — ${oiH.sureshTrend} blocks PE`;}
-    else if(tr==="BOTH_ADDING_TRAPPED"){omEarned=0;omNote="Both adding OI — price trapped, no OI edge for PE";}
-    else{omEarned=Math.round(t*0.4);omNote="OI trend mixed — partial PE";}
-  }
-  // OI velocity: compare last 2 snaps vs first 2 snaps
-let velNote="";
-let velBonus=0;
-try{if(oiH.history&&oiH.history.length>=3){
-  const last=oiH.history[oiH.history.length-1];
-  const prev=oiH.history[oiH.history.length-2];
-  if(last&&prev){
-    const ceVel=prev.ceOI>0?Math.round((last.ceOI-prev.ceOI)/prev.ceOI*100):0;
-    const peVel=prev.peOI>0?Math.round((last.peOI-prev.peOI)/prev.peOI*100):0;
-    if(Math.abs(ceVel)>5||Math.abs(peVel)>5){
-      velNote=` | CE:${ceVel>0?"+":""}${ceVel}% PE:${peVel>0?"+":""}${peVel}% (velocity)`;
-      // Velocity bonus: fast unwinding in the right direction = +3 to score
-      if(isCE&&ceVel<=-10){velBonus=3;velNote+=` ⚡fast CE unwind +${velBonus}pts`;}
-      else if(!isCE&&peVel<=-10){velBonus=3;velNote+=` ⚡fast PE unwind +${velBonus}pts`;}
-      // Velocity penalty: fast buildup against direction
-      else if(isCE&&ceVel>=15){velBonus=-2;velNote+=` ⚠️ fast CE buildup ${velBonus}pts`;}
-      else if(!isCE&&peVel>=15){velBonus=-2;velNote+=` ⚠️ fast PE buildup ${velBonus}pts`;}
-    }
-  }
-}}catch(velErr){}
-omEarned=Math.min(t,Math.max(0,omEarned+velBonus));
-omNote+=` (${oiH.snapCount} snaps, ${oiH.firstSnap}→${oiH.lastSnap}${velNote})`;
-}
-s.oiMomentum={earned:omEarned,max:t,pass:omEarned>=t*0.5,note:omNote};
-}{
-// PCR DELTA SCORING — sudden PCR shift between scans
-// Uses oiTrendData.history PCR values (already available)
-const PCR_DELTA_MAX=SIGNAL_WEIGHTS.pcrDelta||8;
-let pcrDeltaEarned=0,pcrDeltaNote="No PCR history — neutral";
-try{
-  const hist=e.oiTrendData?.history;
-  if(hist&&hist.length>=2){
-    const latestPCR=hist[hist.length-1]?.pcr||0;
-    const prevPCR=hist[hist.length-2]?.pcr||0;
-    if(prevPCR>0){
-      const pcrShift=((latestPCR-prevPCR)/prevPCR)*100; // % change
-      if(a){// CE signal — rising PCR = Suresh arriving = bullish
-        if(pcrShift>=20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR spike +${pcrShift.toFixed(1)}% — Suresh army arriving ✓✓`;}
-        else if(pcrShift>=10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift ✓`;}
-        else if(pcrShift<=-15){pcrDeltaEarned=0;pcrDeltaNote=`PCR dropping ${pcrShift.toFixed(1)}% — bearish shift, CE caution`;}
-        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
-      }else{// PE signal — falling PCR = Ramesh arriving = bearish
-        if(pcrShift<=-20){pcrDeltaEarned=PCR_DELTA_MAX;pcrDeltaNote=`PCR drop ${pcrShift.toFixed(1)}% — Ramesh army arriving ✓✓`;}
-        else if(pcrShift<=-10){pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.6);pcrDeltaNote=`PCR falling ${pcrShift.toFixed(1)}% — bearish shift ✓`;}
-        else if(pcrShift>=15){pcrDeltaEarned=0;pcrDeltaNote=`PCR rising +${pcrShift.toFixed(1)}% — bullish shift, PE caution`;}
-        else{pcrDeltaEarned=Math.round(PCR_DELTA_MAX*0.3);pcrDeltaNote=`PCR stable (${pcrShift.toFixed(1)}%) — neutral`;}
-      }
-    }
-  }
-}catch(pcrErr){}
-s.pcrDelta={earned:pcrDeltaEarned,max:PCR_DELTA_MAX,pass:pcrDeltaEarned>=PCR_DELTA_MAX*0.4,note:pcrDeltaNote};
-}{
-// GAMMA BLAST scoring
-const t=SIGNAL_WEIGHTS.gammaBlast||15;
-const gb=e.gammaBlast||null;
-if(!gb||!gb.isGammaBlast){
-  // Not a gamma blast setup — neutral score
-  s.gammaBlast={earned:0,max:t,pass:false,note:"No gamma blast conditions"};
+s.oiWalls={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 2: PCR (8 pts) ─────────────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.pcr;let earned=0,note="";
+const pcr=e.pcr,pcrBias=e.pcrBias||"NEUTRAL";
+if(pcr==null){earned=Math.round(mx*0.5);note="PCR unavailable — neutral";}
+else if(a){
+  "BULLISH"===pcrBias?(earned=mx,note=`PCR ${pcr} — bullish (put writers dominate) ✓`):
+  "NEUTRAL"===pcrBias?(earned=Math.round(mx*0.5),note=`PCR ${pcr} — neutral`):
+  (earned=0,note=`PCR ${pcr} — bearish, against CE`);
 }else{
-  const isCE=a;
-  const dirMatch=(isCE&&(gb.direction==="CE"||gb.direction==="BOTH"))||
-                 (!isCE&&(gb.direction==="PE"||gb.direction==="BOTH"));
-  const earned=dirMatch?t:Math.round(t*0.3);
-  s.gammaBlast={
-    earned,max:t,pass:dirMatch,
-    note:gb.badge+(dirMatch?" — direction match ✓":" — direction mismatch")+
-         " | DTE="+gb.dte+" | "+gb.warning
-  };
-}}
-{const t=SIGNAL_WEIGHTS.dilipOIFormula||25;let n=0,o="",r=!1;const i=e.dilipFormula||"NEUTRAL",l=e.putTrapRisk||!1,c=e.callTrapRisk||!1;
-// Compute true OI signal from OI history + price — never trust Angel label alone
-let u="",p="";
-try{
-  const oiH=e.oiTrendData;
-  const hist=oiH?.history;
-  if(hist&&hist.length>=2){
-    const latest=hist[hist.length-1];
-    const prev=hist[hist.length-2];
-    const ceOIDelta=latest.ceOI-prev.ceOI;
-    const peOIDelta=latest.peOI-prev.peOI;
-    // Price direction from OI history PCR shift as proxy (ltp may not be in history)
-    // Use live ltp vs OI snapshot price context
-    const ltp=e.ltp||0;
-    const prevPCR=prev.pcr||0;
-    const latestPCR=latest.pcr||0;
-    // CE signal: OI falling + price rising = SHORT COVERING (confirmed)
-    //            OI falling + price falling = LONG UNWINDING (bearish, not CE opportunity)
-    //            OI rising  + price rising = LONG BUILDUP
-    //            OI rising  + price falling = SHORT BUILDUP (bearish)
-    const priceUp=latestPCR<prevPCR; // PCR falling = CE pressure = price likely rising
-    if(ceOIDelta<0&&priceUp)u="SHORT_COVERING";
-    else if(ceOIDelta<0&&!priceUp)u="LONG_UNWINDING";
-    else if(ceOIDelta>0&&priceUp)u="LONG_BUILDUP";
-    else if(ceOIDelta>0&&!priceUp)u="SHORT_BUILDUP";
-    // PE signal: OI falling + price falling = PUT COVERING (confirmed)
-    //            OI falling + price rising = LONG UNWINDING (bullish, not PE opportunity)
-    //            OI rising  + price falling = SHORT BUILDUP
-    //            OI rising  + price rising = LONG BUILDUP (bullish)
-    const priceDown=latestPCR>prevPCR; // PCR rising = PE pressure = price likely falling
-    if(peOIDelta<0&&priceDown)p="PUT_COVERING";
-    else if(peOIDelta<0&&!priceDown)p="LONG_UNWINDING";
-    else if(peOIDelta>0&&priceDown)p="SHORT_BUILDUP";
-    else if(peOIDelta>0&&!priceDown)p="LONG_BUILDUP";
+  "BEARISH"===pcrBias?(earned=mx,note=`PCR ${pcr} — bearish (call writers dominate) ✓`):
+  "NEUTRAL"===pcrBias?(earned=Math.round(mx*0.5),note=`PCR ${pcr} — neutral`):
+  (earned=0,note=`PCR ${pcr} — bullish, against PE`);
+}
+s.pcr={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 3: VIX (7 pts) ─────────────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.vixSignal;let earned=0,note="";
+const vr=e.vixRegime||"UNKNOWN",vv=e.vixValue;
+"VERY_LOW"===vr?(earned=mx,note=`VIX ${vv} — very low, cheap options ✓✓`):
+"LOW"===vr?(earned=mx,note=`VIX ${vv} — low, good conditions ✓`):
+"NORMAL"===vr?(earned=Math.round(mx*0.7),note=`VIX ${vv} — normal`):
+"ELEVATED"===vr?(earned=Math.round(mx*0.4),note=`VIX ${vv} — elevated, options pricey`):
+"HIGH"===vr?(earned=Math.round(mx*0.1),note=`VIX ${vv} — high, reduce size`):
+"EXTREME"===vr?(earned=0,note=`VIX ${vv} — extreme, hard block (see above)`):
+(earned=Math.round(mx*0.5),note="VIX unknown — neutral");
+s.vixSignal={earned,max:mx,pass:earned>=mx*0.4,note};}
+
+// ── SIGNAL 4: CPR (6 pts) ─────────────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.cprSignal;let earned=0,note="";
+const cpr=e.cpr||null;
+if(!cpr||!cpr.pivot){earned=Math.round(mx*0.5);note="CPR unavailable — neutral";}
+else{
+  const pos=cpr.position||"UNKNOWN";
+  const narrow=cpr.narrow||false;
+  if(a){// CE: want price ABOVE CPR, narrow CPR = trending day
+    "ABOVE"===pos&&narrow?(earned=mx,note=`Price above narrow CPR (${cpr.top}) — trending day favors CE ✓✓`):
+    "ABOVE"===pos?(earned=Math.round(mx*0.8),note=`Price above CPR (${cpr.top}) ✓`):
+    "INSIDE"===pos?(earned=Math.round(mx*0.4),note=`Price inside CPR — consolidating`):
+    (earned=0,note=`Price below CPR (${cpr.bot}) — against CE`);
+  }else{// PE: want price BELOW CPR
+    "BELOW"===pos&&narrow?(earned=mx,note=`Price below narrow CPR (${cpr.bot}) — trending day favors PE ✓✓`):
+    "BELOW"===pos?(earned=Math.round(mx*0.8),note=`Price below CPR (${cpr.bot}) ✓`):
+    "INSIDE"===pos?(earned=Math.round(mx*0.4),note=`Price inside CPR — consolidating`):
+    (earned=0,note=`Price above CPR (${cpr.top}) — against PE`);
+  }
+}
+s.cprSignal={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 5: Futures Basis (4 pts) ──────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.futuresBasisSignal;let earned=0,note="";
+const fb=e.futuresBasis||null;
+if(!fb){earned=Math.round(mx*0.5);note="Futures basis unavailable — neutral";}
+else{
+  const bias=fb.bias||"FLAT";
+  if(a){// CE: premium = bullish institutional positioning
+    "PREMIUM"===bias?(earned=mx,note=`Futures premium ₹${fb.basis} (${fb.basisPct}%) — institutions bullish ✓`):
+    "FLAT"===bias?(earned=Math.round(mx*0.5),note=`Futures flat basis — neutral`):
+    (earned=0,note=`Futures discount ₹${fb.basis} — institutions bearish, against CE`);
+  }else{// PE: discount = bearish institutional positioning
+    "DISCOUNT"===bias?(earned=mx,note=`Futures discount ₹${fb.basis} (${fb.basisPct}%) — institutions bearish ✓`):
+    "FLAT"===bias?(earned=Math.round(mx*0.5),note=`Futures flat basis — neutral`):
+    (earned=0,note=`Futures premium ₹${fb.basis} — institutions bullish, against PE`);
+  }
+}
+s.futuresBasisSignal={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 6: ORB (time-decaying, max orbMax pts) ─────────────────────────────
+{const mx=orbMax;let earned=0,note="";
+if(mx===0){
+  note="ORB window closed (>10:30 AM) — 0 pts, weight shifted to OI Change";
+  s.orbSignal={earned:0,max:15,pass:null,note,decayedMax:0};
+}else{
+  const orbH=a?e.orb_high:null,orbL=!a?e.orb_low:null;
+  const orbBreak=a?e.orb_high:e.orb_low;
+  const ltp=e.ltp||0;
+  if(!orbBreak){
+    earned=Math.round(mx*0.3);note=`ORB not confirmed yet (worth up to ${mx}pts now)`;
   }else{
-    // Fallback to Angel label only when no OI history available
-    u=e.ceSignal?.signal||"";
-    p=e.peSignal?.signal||"";
+    const broke=a?ltp>orbBreak:ltp<orbBreak;
+    const near=a?(ltp>.997*orbBreak&&ltp<=orbBreak):(ltp<1.003*orbBreak&&ltp>=orbBreak);
+    broke?(earned=mx,note=`ORB ${a?"breakout":"breakdown"} ✓ (${mx}pts now)`):
+    near?(earned=Math.round(mx*0.4),note=`Approaching ORB level (${mx}pts max now)`):
+    (earned=0,note=`No ORB ${a?"breakout":"breakdown"}`);
   }
-}catch(sigErr){u=e.ceSignal?.signal||"";p=e.peSignal?.signal||"";}
-a&&l?(n=0,o="⚠️ PUT TRAP risk — blocks CE",r=!1):!a&&c?(n=0,o="⚠️ CALL TRAP risk — blocks PE",r=!1):a&&"CE"===i?(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0):a||"PE"!==i?"AVOID"===i?(n=0,o="Both sides strong = price trapped",r=!1):a&&"SHORT_COVERING"===u?(n=.8*t,o="Ramesh running — CE opportunity",r=!0):a||"PUT_COVERING"!==p?a&&"LONG_BUILDUP"===u?(n=.4*t,o="Long buildup — CE with caution",r=null):a||"LONG_BUILDUP"!==p?(n=0,o=`OI formula ${i} does not match ${a?"CE":"PE"} direction`,r=!1):(n=.4*t,o="Long buildup — PE with caution",r=null):(n=.8*t,o="Suresh running — PE opportunity",r=!0):(n=t,o=`Dilip formula: ${e.dilipFormulaNote}`,r=!0),a&&e.rameshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Ramesh trapped bonus"),!a&&e.sureshTrapped&&r&&(n=Math.min(t,n+5),o+=" + Suresh trapped bonus"),s.dilipOIFormula={earned:Math.round(n),max:t,pass:r,note:o}}// ATM distance is a bonus — include in earned but NOT possible (can only help)
-const atmBonus=s.atmDistance?.earned||0;
-const baseEarned=Object.values(s).reduce((e,t)=>e+(t===s.atmDistance?0:t.earned),0);
-const r=baseEarned+atmBonus;
-const gbFired=s.gammaBlast&&s.gammaBlast.earned>0;
-const i=Object.values(s).reduce((e,t,idx,arr)=>{
-  if(arr[idx]===s.gammaBlast&&!gbFired)return e;
-  if(arr[idx]===s.atmDistance)return e; // exclude from possible
-  return e+t.max;
-},0);
-// ── OI GATE: Dilip OI Formula is the anchor ──────────────────
-{const t=SIGNAL_WEIGHTS.nanaConfirm||12;let n=0,o="";const ns=e.nanaSetup;if(!ns){n=.5*t,o="NanaLogic not available — neutral"}else if(!ns.valid){n=.4*t,o="NanaLogic: "+(ns.reason||"no weekly zone/trigger confirmation")}else if(a&&"CE"===ns.direction||!a&&"PE"===ns.direction){n=t,o="NanaLogic: weekly zone + daily trigger + OI Case confirmed "+ns.direction+" — SL "+ns.spotSL}else{n=0,o="NanaLogic confirms opposite side ("+ns.direction+") — against "+(a?"CE":"PE")}s.nanaConfirm={earned:n,max:t,pass:n>=.5*t,note:o}}
-const oiEarned=s.dilipOIFormula?.earned||0;
-const oiMax=s.dilipOIFormula?.max||25;
-const oiFormula=e.dilipFormula||"NEUTRAL";
-const oiPass=s.dilipOIFormula?.pass;
+  s.orbSignal={earned,max:mx,pass:earned>=mx*0.5,note,decayedMax:mx};
+}}
 
-// Compute raw score FIRST so hard-block logic below can reference it
-let finalScore=Math.round(r/i*100);
-// Real feature (2026-09-05, #10): absorption bonus -- deliberately NOT a standalone
-// weighted factor, since absorption alone doesn't indicate direction (it just means
-// "something's building"). Instead, a small confidence bonus (+3, capped at 100) is
-// applied only when absorption is detected AND the score already leans in a real
-// direction (>=50) -- rewards genuine confirmation, never manufactures a signal from
-// absorption alone on a weak/failing setup.
-if(e.absorptionDetected && finalScore>=50){
-  finalScore=Math.min(100,finalScore+3);
+// ── SIGNAL 7: VWAP (10 pts) ───────────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.vwapSignal;let earned=0,note="";
+if(e.aboveVwap==null){earned=Math.round(mx*0.5);note="VWAP data unavailable — neutral";}
+else{
+  const onSide=a?e.aboveVwap:!e.aboveVwap;
+  onSide?(earned=mx,note=`Price ${a?"above":"below"} VWAP ✓`):
+  (earned=0,note=`Price ${a?"below":"above"} VWAP — against ${t}`);
+}
+s.vwapSignal={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 8: Volume/RVOL (10 pts) ────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.volumeRvol;let earned=0,note="";
+const vr=e.volRatio||1,vpDir=e.volPriceDir||"NEUTRAL",dryUp=e.volDryUp||false;
+// Base from RVOL
+let base=0;
+vr>=2?(base=mx*0.5,note=`RVOL ${vr}x surge ✓✓`):
+vr>=1.5?(base=mx*0.4,note=`RVOL ${vr}x strong ✓`):
+vr>=1.2?(base=mx*0.3,note=`RVOL ${vr}x above avg`):
+vr>=0.8?(base=mx*0.15,note=`RVOL ${vr}x average`):
+(base=0,note=`RVOL ${vr}x — thin volume`);
+// Direction match bonus
+let dirBonus=0;
+"MATCH"===vpDir?(dirBonus=mx*0.35,note+=` + price direction confirmed ✓✓`):
+"FAKE"===vpDir?(dirBonus=-(mx*0.2),note+=` ⚠️ vol/price mismatch`):0;
+// Dry-up penalty
+if(dryUp){dirBonus-=mx*0.3;note+=` ⚠️ vol drying up`;}
+earned=Math.min(Math.max(Math.round(base+dirBonus),0),mx);
+s.volumeRvol={earned,max:mx,pass:earned>=mx*0.4,note};}
+
+// ── SIGNAL 9: CHOCH (10 pts) ──────────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.chochSignal;let earned=0,note="";
+const choch=e.choch||null;
+if(!choch||!choch.detected){
+  earned=0;note=choch?.note||"No structure break (CHOCH not detected)";
+}else{
+  const dirMatch=a?"BULLISH"===choch.direction:"BEARISH"===choch.direction;
+  dirMatch?(earned=mx,note=`CHOCH ${choch.direction} at ${choch.breakLevel} ✓✓`):
+  (earned=0,note=`CHOCH ${choch.direction} — structure break against ${t}`);
+}
+s.chochSignal={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── SIGNAL 10: OI Change (15 base + up to 8 redistributed from ORB) ──────────
+{const mx=oiChangeMax;let earned=0,note="";
+// Use OI trend history + OI momentum from oi-analysis
+const oiH=e.oiTrendData;
+const hist=oiH?.history;
+let oiDir="NEUTRAL";
+try{if(hist&&hist.length>=2){
+  const latest=hist[hist.length-1],prev=hist[hist.length-2];
+  const ceOIDelta=latest.ceOI-prev.ceOI,peOIDelta=latest.peOI-prev.peOI;
+  const latestPCR=latest.pcr||0,prevPCR=prev.pcr||0;
+  const priceUp=latestPCR<prevPCR;
+  if(a){ceOIDelta<0&&priceUp?oiDir="SHORT_COVERING":ceOIDelta>0&&priceUp?oiDir="LONG_BUILDUP":ceOIDelta<0&&!priceUp?oiDir="LONG_UNWINDING":oiDir="SHORT_BUILDUP";}
+  else{peOIDelta<0&&!priceUp?oiDir="PUT_COVERING":peOIDelta>0&&!priceUp?oiDir="SHORT_BUILDUP":peOIDelta<0&&priceUp?oiDir="LONG_UNWINDING":oiDir="LONG_BUILDUP";}
+}}catch(oe){}
+// Also use dilipFormula from OI analysis as confirmation
+const df=e.dilipFormula||"NEUTRAL";
+const trapped=a?e.putTrapRisk:e.callTrapRisk;
+if(trapped){earned=0;note=`⚠️ ${a?"PUT":"CALL"} TRAP risk — OI Change 0`;}
+else if(a){
+  "SHORT_COVERING"===oiDir||"CE"===df?
+    (earned=mx,note=`Short covering + ${df} OI formula ✓✓`):
+  "LONG_BUILDUP"===oiDir?
+    (earned=Math.round(mx*0.7),note=`Long buildup in CE ✓`):
+  "NEUTRAL"===oiDir||"NEUTRAL"===df?
+    (earned=Math.round(mx*0.4),note="OI neutral — partial"):
+  "LONG_UNWINDING"===oiDir||"BEARISH"===df?
+    (earned=0,note="Long unwinding — bearish OI"):
+    (earned=Math.round(mx*0.2),note=`OI direction uncertain (${oiDir})`);
+}else{
+  "PUT_COVERING"===oiDir||"PE"===df?
+    (earned=mx,note=`Put covering + ${df} OI formula ✓✓`):
+  "SHORT_BUILDUP"===oiDir?
+    (earned=Math.round(mx*0.7),note=`Short buildup in PE ✓`):
+  "NEUTRAL"===oiDir||"NEUTRAL"===df?
+    (earned=Math.round(mx*0.4),note="OI neutral — partial"):
+  "LONG_BUILDUP"===oiDir||"BULLISH"===df?
+    (earned=0,note="Long buildup — bullish OI against PE"):
+    (earned=Math.round(mx*0.2),note=`OI direction uncertain (${oiDir})`);
+}
+const redistNote=mx>15?` [+${mx-15} from ORB decay]`:"";
+s.oiChangeSignal={earned,max:mx,pass:earned>=mx*0.4,note:note+redistNote};}
+
+// ── SIGNAL 11: Pseudo-CVD (5 pts) ─────────────────────────────────────────────
+{const mx=SIGNAL_WEIGHTS.cvdSignal;let earned=0,note="";
+const cvd=e.pseudoCvd||null;
+if(!cvd||cvd.cycleCount<2){
+  earned=Math.round(mx*0.5);note=`CVD not ready (${cvd?.cycleCount||0} cycles) — neutral`;
+}else{
+  const onSide=a?"BUYING"===cvd.bias:"SELLING"===cvd.bias;
+  const neutral="NEUTRAL"===cvd.bias;
+  onSide?(earned=mx,note=`CVD ${cvd.bias} (cumulative: ${cvd.cumulative>0?"+":""}${cvd.cumulative}, ${cvd.cycleCount} cycles) ✓`):
+  neutral?(earned=Math.round(mx*0.5),note=`CVD neutral (${cvd.cycleCount} cycles)`):
+  (earned=0,note=`CVD ${cvd.bias} — against ${t}`);
+}
+s.cvdSignal={earned,max:mx,pass:earned>=mx*0.5,note};}
+
+// ── COMPUTE FINAL SCORE ───────────────────────────────────────────────────────
+// Total possible = sum of actual maxes (orbSignal uses decayedMax, oiChangeSignal uses dynamic max)
+const totalPossible=
+  s.oiWalls.max+s.pcr.max+s.vixSignal.max+s.cprSignal.max+s.futuresBasisSignal.max+
+  (s.orbSignal.decayedMax||0)+
+  s.vwapSignal.max+s.volumeRvol.max+s.chochSignal.max+s.oiChangeSignal.max+s.cvdSignal.max;
+const totalEarned=Object.values(s).reduce((acc,v)=>acc+v.earned,0);
+// Always score out of 100 (totalPossible = 100 at 9:40; shifts during day as ORB decays)
+let finalScore=totalPossible>0?Math.round(totalEarned/totalPossible*100):0;
+
+// ── CAPS & GATES ──────────────────────────────────────────────────────────────
+// OI floor gate: OI Walls + OI Change must reach ≥35% of their combined max
+// (prevents purely technical signals with no OI backing from reaching STRONG/MODERATE)
+const _oiCatMax=(s.oiWalls?.max||0)+(s.oiChangeSignal?.max||0);
+const _oiCatEarned=(s.oiWalls?.earned||0)+(s.oiChangeSignal?.earned||0);
+const oiFloorPass=_oiCatMax>0?(_oiCatEarned/_oiCatMax*100)>=35:true;
+
+// Absorption bonus (non-directional, only amplifies confirmed setups)
+if(e.absorptionDetected&&finalScore>=50){finalScore=Math.min(100,finalScore+3);}
+
+// Regime cap: TRANSITION → cap at WEAK
+if("TRANSITION"===e.regime&&!n&&finalScore>=65){
+  finalScore=Math.min(finalScore,64);
+}
+// Candle confluence cap
+if(e.candleConfluence&&"WEAK_CAP"===e.candleConfluence.gate&&!n&&finalScore>=65){
+  finalScore=Math.min(finalScore,64);
 }
 
-// HARD BLOCK rules:
-// PUT TRAP / CALL TRAP → block ONLY if score < 65 (strong technicals can override trap on non-expiry days)
-// AVOID (both sides strong) → block ONLY if stock is in its OWN expiry week
-// NEUTRAL → never block
-if(!n&&oiPass===false){
-  const isPutCallTrap=e.putTrapRisk||e.callTrapRisk;
-  const isAvoid=oiFormula==="AVOID";
-  const stockInOwnExpiry=e.isExpiryDay||e.isExpiryWeek;
-  // Only hardBlock if there is meaningful OI data (oiEarned>0)
-  // On first day of new series, OI is thin → oiEarned=0 → skip trap block
-  const hasOIData=oiEarned>0||(e.atmCeOI>0||e.atmPeOI>0);
-  if(hasOIData){
-    if(isPutCallTrap){
-      if(stockInOwnExpiry||finalScore<65){
-        n=true;o=s.dilipOIFormula?.note||"OI trap detected — signal blocked";
-      }
-    } else if(isAvoid&&stockInOwnExpiry){
-      n=true;o=s.dilipOIFormula?.note||"Both sides trapped — stock expiry week";
-    }
-  }
-  // No OI data (new series day) → skip hard block, let score decide
-}
+const totalEarnedRounded=parseFloat(totalEarned.toFixed(1));
+// Return same shape as old scoreSignal — callers destructure these fields
+return{score:finalScore,totalEarned:totalEarnedRounded,totalPossible,breakdown:s,hardBlock:n,hardBlockReason:o,oiFloorPass};}
 
-// SCORE CAP: only when OI explicitly says WRONG DIRECTION (not NEUTRAL)
-// NEUTRAL = insufficient data → allow signal through, no cap
-// Wrong direction = OI says PE but scanning CE (or vice versa) → cap at 59
-// Only cap score if there IS meaningful OI data pointing wrong direction
-// If oiEarned=0 AND no ATM OI data → new series / thin data → don't cap
-const hasOIData2=(e.atmCeOI>0||e.atmPeOI>0);
-const oiWrongDir=oiEarned===0&&oiPass===false&&!n&&hasOIData2;
-if(oiWrongDir){
-  finalScore=Math.min(finalScore,59);
-  const capReason=oiFormula==="AVOID"?" ⚠️ [Both trapped — capped, not blocked]":" ⚠️ [OI direction mismatch — capped]";
-  if(s.dilipOIFormula)s.dilipOIFormula.note+=capReason;
-}
-// 2026-10-12: ADX Trend Strength — bonus points when trend is strong, zero when ranging.
-// Soft scoring only (never blocks signal). Uses adx value from market-bias candle calc.
-{const tw=SIGNAL_WEIGHTS.adxTrendStrength,adxVal=e.adx;let adxEarned=0,adxNote="";
-if(adxVal==null){adxEarned=Math.round(tw*0.4);adxNote="ADX unavailable — neutral";}
-else if(adxVal>=30){adxEarned=tw;adxNote=`ADX ${adxVal} — strong trend, signal reliable ✓✓`;}
-else if(adxVal>=25){adxEarned=Math.round(tw*0.8);adxNote=`ADX ${adxVal} — good trend strength ✓`;}
-else if(adxVal>=20){adxEarned=Math.round(tw*0.5);adxNote=`ADX ${adxVal} — moderate trend`;}
-else if(adxVal>=15){adxEarned=Math.round(tw*0.2);adxNote=`ADX ${adxVal} — weak trend, choppy`;}
-else{adxEarned=0;adxNote=`ADX ${adxVal} — ranging market, signal weaker`;}
-s.adxTrendStrength={earned:adxEarned,max:tw,pass:adxVal>=20,note:adxNote};}
-// 2026-10-12: RSI Divergence — bonus points for hidden buying (CE) or selling (PE).
-// Bonus only — never penalizes if no divergence. PDF 6 Ch.05 validation.
-{const tw=SIGNAL_WEIGHTS.rsiDivergence,div=e.rsiDivergence;let divEarned=0,divNote="";
-if(!div){divEarned=0;divNote="RSI divergence: no data";}
-else if(a&&div.bullish){divEarned=tw;divNote=`🔺 ${div.note} — hidden buying, CE boost ✓`;}
-else if(!a&&div.bearish){divEarned=tw;divNote=`🔻 ${div.note} — hidden selling, PE boost ✓`;}
-else{divEarned=0;divNote=div.note||"No divergence present";}
-s.rsiDivergence={earned:divEarned,max:tw,pass:divEarned>0,note:divNote};}
-return{score:finalScore,totalEarned:parseFloat(r.toFixed(1)),totalPossible:i,breakdown:s,hardBlock:n,hardBlockReason:o}}
 
 app.post("/signal-analysis",async(e,t)=>{
   if(!isAuthenticated())return t.status(401).json({status:!1,message:"Not authenticated"});
@@ -1578,47 +1526,19 @@ app.post("/signal-analysis",async(e,t)=>{
   // oi-analysis doesn't provide), kept non-fatal so a candle-fetch failure never blocks scoring.
   // NanaLogic disabled (always 403, not needed)
   S.nanaSetup = null;
-  const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k}=scoreSignal(S,i);
-  // Real fix (2026-09-05, #11): OI category minimum gate, per explicit user request --
-  // "main category minimum pass marks... else all dummy signals". Confirmed live and
-  // mathematically today: with the expanded factor set, a stock can score MODERATE/
-  // STRONG (60-70%+) with ZERO real OI backing (dilipOIFormula + oiMomentum = 0/47),
-  // purely on technicals/KAMA/z-scores -- a "dummy" signal that contradicts your own
-  // Ramesh/Suresh/Mahesh OI framework entirely. Fix: MODERATE/STRONG now ALSO require
-  // the combined OI category to reach at least 35% of its own 47-point max (~16.5pts).
-  // If OI itself is too weak, verdict is capped at WEAK regardless of how high the
-  // rest of the score is -- same honesty principle as the regime cap from Stage 1,
-  // now applied to the framework's actual foundation (OI), not just market condition.
-  const oiCatMax=(N.oiMomentum?.max||0)+(N.dilipOIFormula?.max||0);
-  const oiCatEarned=(N.oiMomentum?.earned||0)+(N.dilipOIFormula?.earned||0);
-  const oiCatPct=oiCatMax>0?(oiCatEarned/oiCatMax*100):100;
-  const oiFloorPass=oiCatPct>=35;
-  let C,O;A?(C="BLOCKED",O=k):E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):E>=60&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):(E>=75||E>=60)?(C="WEAK",O=`Score ${E}% would reach ${E>=75?"STRONG":"MODERATE"} but OI backing is only ${oiCatPct.toFixed(0)}% (needs 35%+) -- technicals alone aren't enough, real OI confirmation is missing`):E>=42?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):(C="AVOID",O="Poor alignment — skip this signal");
-  // Real feature (2026-09-05, Stage 1): regime-aware cap -- per the framework's own rule
-  // ("TRANSITION → no entry"), a stock in the ambiguous middle zone of its own ADX history
-  // (neither clearly trending nor clearly ranging) gets its verdict capped at WEAK, even
-  // if the raw score would otherwise reach STRONG/MODERATE. This does NOT block the
-  // signal outright (still visible, still shows real score) -- it just adds the same
-  // honesty check the OI-floor logic used to provide: don't let a high score imply more
-  // confidence than the underlying market condition actually supports right now.
-  if("TRANSITION"===e.regime && !A && ("STRONG"===C || "MODERATE"===C)){
-    C="WEAK";
-    O=`Score reached ${E>=75?"STRONG":"MODERATE"} level but market regime is TRANSITION (ADX percentile ${e.regimePercentile}%, neither trending nor ranging) -- capped at WEAK per regime-aware sizing`;
-  }
-  // Real feature (2026-09-27): candle-confluence cap -- 16-parameter intraday candle
-  // structure score, validated against real AXISBANK and ZYDUSLIFE 15m sessions
-  // (score>=60 -> ~80-87% directional accuracy observed; score<50 -> near coin-flip
-  // 35-55%). Same honesty pattern as the OI-floor gate and TRANSITION regime cap above:
-  // a high SIGNAL_WEIGHTS score doesn't override weak underlying candle structure.
-  // WEAK_CAP means gate<50 -- force WEAK regardless of other scores. INSUFFICIENT_DATA
-  // (first ~3 candles of the session) never caps -- there simply isn't enough history yet.
-  if(S.candleConfluence && "WEAK_CAP"===S.candleConfluence.gate && !A && ("STRONG"===C || "MODERATE"===C)){
-    C="WEAK";
-    O=`Score reached ${E>=75?"STRONG":"MODERATE"} level but candle-structure confluence is only ${S.candleConfluence.score}% (needs 50%+) -- capped at WEAK, structural reliability too low to trust this score`;
-  }
-  // candleConfirmsFormula removed (2026-09-28): the Candle Confluence generator no
-  // longer drives anything in the Signals tab -- candleProjection now only powers
-  // the Research tab's 23-candle session projection.
+  // 11-signal system: scoreSignal now returns oiFloorPass (OI Walls + OI Change ≥35% of their max)
+  // Verdict thresholds: STRONG≥75, MODERATE≥65, WEAK≥50, AVOID<50 (2026-10-28)
+  const{score:E,totalEarned:f,totalPossible:I,breakdown:N,hardBlock:A,hardBlockReason:k,oiFloorPass}=scoreSignal(S,i);
+  let C,O;
+  A?(C="BLOCKED",O=k):
+  E>=75&&oiFloorPass?(C="STRONG",O="High conviction — trade with normal size"):
+  E>=65&&oiFloorPass?(C="MODERATE",O="Good setup — consider half position size"):
+  (E>=75||E>=65)?(C="WEAK",O=`Score ${E}% would reach ${E>=75?"STRONG":"MODERATE"} but OI backing too weak (OI Walls+OI Change need ≥35% of their max) — technicals alone aren't enough`):
+  E>=50?(C="WEAK",O="Marginal setup — watch, wait for more confirmation"):
+  (C="AVOID",O="Poor alignment — skip this signal");
+  // Regime cap and candle confluence cap are now handled inside scoreSignal (finalScore already capped).
+  // Verdict here uses the already-capped score — no need to re-apply these caps here.
+  // (2026-10-28: moved into scoreSignal as part of 11-signal system)
   let T=null,y=null,w=null;if(S.atr&&S.ltp){T="CE"===i?parseFloat((S.ltp-1.5*S.atr).toFixed(2)):parseFloat((S.ltp+1.5*S.atr).toFixed(2)),y="CE"===i?parseFloat((S.ltp+2.5*S.atr).toFixed(2)):parseFloat((S.ltp-2.5*S.atr).toFixed(2));const e=Math.abs(S.ltp-T),t=Math.abs(S.ltp-y);w=e>0?parseFloat((t/e).toFixed(2)):null}const b=Object.entries(N).filter(([,e])=>!1!==e.pass&&e.earned>0).sort((e,t)=>t[1].earned-e[1].earned).slice(0,1).map(([,e])=>e.note.replace(/✓✓|✓|★/g,"").trim()),_=Object.entries(N).filter(([,e])=>!1===e.pass).map(([,e])=>e.note);
   // LOG THE SIGNAL
   const signalId=logSignal(s,i,E,C,S.ltp,N);
