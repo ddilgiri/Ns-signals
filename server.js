@@ -608,7 +608,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   let msg = `${icon} <b>${sym}</b> — 📌 Strike: <b>${atm}${type}</b>\n`;
   msg += `🕐 ${timeStr} IST  |  Score: ${score}/100 (${verdict})\n\n`;
   msg += `📊 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n`;
-  if (optLtp) msg += `💵 Option price: ₹${optLtp}${lot && capital ? ` × ${lot} = ${capital}` : ""}\n`;
+  if (optLtp) msg += `💵 Option price: <b>₹${optLtp}</b>${lot && capital ? ` × ${lot} = <b>${capital}</b>` : ""}\n`;
   if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
   if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
   msg += `\n——————————————\n<b>DiLiP's Research Lab 🔬</b>`;
