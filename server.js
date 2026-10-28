@@ -606,22 +606,12 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   const sizeGuide = verdict==="STRONG" ? "Full size" : verdict==="MODERATE" ? "Half size" : "Small size / watch";
 
   let msg = `${icon} <b>${sym} — ${isCE?"BUY CALL":"BUY PUT"}</b>\n`;
-  msg += `🕐 ${timeStr} IST  |  Score: <b>${score}/100</b> (${verdict})\n\n`;
-
-  if (atm) {
-    msg += `📌 <b>Strike: ${atm} ${type}</b>\n`;
-    if (optLtp) msg += `💵 Option price: ₹${optLtp}`;
-    if (lot && capital) msg += ` × ${lot} lots = <b>${capital}</b>`;
-    if (optLtp || lot) msg += `\n`;
-  }
+  msg += `🕐 ${timeStr} IST  |  Score: ${score}/100 (${verdict})\n\n`;
+  msg += `📌 Strike: ${atm} ${type}\n`;
   msg += `📊 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n`;
-  if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
+  if (optLtp) msg += `💵 Option price: <b>₹${optLtp}</b>${lot && capital ? ` × ${lot} = ${capital}` : ""}\n`;
   if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
-
-  if (mp) msg += `\n📍 Max Pain: ${mp}`;
-  if (pcr) msg += `  |  PCR: ${pcr}`;
-  if (mp || pcr) msg += `\n`;
-
+  if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
   msg += `\n——————————————\n<b>DiLiP's Research Lab 🔬</b>`;
   sendTelegram(msg, { sym, type, verdict, score }).catch(() => {});
 }
