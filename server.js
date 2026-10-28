@@ -596,6 +596,27 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   // Live category total (50 max)
   const liveEarned = (bd?.vwapSignal?.earned||0)+(bd?.volumeRvol?.earned||0)+(bd?.chochSignal?.earned||0)+(bd?.oiChangeSignal?.earned||0)+(bd?.cvdSignal?.earned||0);
 
+  // Top 2 reason labels from breakdown
+  const SIGNAL_LABELS = {
+    oiWalls:            isCE ? "OI wall support" : "OI wall resistance",
+    pcr:                isCE ? "PCR bullish" : "PCR bearish",
+    vixSignal:          "VIX low",
+    cprSignal:          isCE ? "Above CPR" : "Below CPR",
+    futuresBasisSignal: isCE ? "Futures premium" : "Futures discount",
+    orbSignal:          isCE ? "ORB breakout" : "ORB breakdown",
+    vwapSignal:         isCE ? "VWAP hold" : "Below VWAP",
+    volumeRvol:         "Volume surge",
+    chochSignal:        isCE ? "CHOCH bullish" : "CHOCH bearish",
+    oiChangeSignal:     isCE ? "OI buildup" : "Put OI surge",
+    cvdSignal:          isCE ? "CVD buying" : "CVD selling",
+  };
+  const reasonLine = Object.entries(g?.breakdown || {})
+    .filter(([,v]) => (v.earned||0) > 0)
+    .sort((a,b) => (b[1].earned||0) - (a[1].earned||0))
+    .slice(0,2)
+    .map(([k]) => SIGNAL_LABELS[k] || k)
+    .join(" + ");
+
   // IST time for alert header
   const istNow = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
   const hh = String(istNow.getHours()).padStart(2,"0");
@@ -611,6 +632,7 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   if (optLtp) msg += `💵 Option price: <b>₹${optLtp}</b>${lot && capital ? ` × ${lot} = <b>${capital}</b>` : ""}\n`;
   if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
   if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
+  if (reasonLine) msg += `📝 ${reasonLine}\n`;
   msg += `\n——————————————\n<b>DiLiP's Research Lab 🔬</b>`;
   sendTelegram(msg, { sym, type, verdict, score }).catch(() => {});
 }
