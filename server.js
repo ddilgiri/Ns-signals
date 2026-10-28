@@ -596,43 +596,45 @@ function tgAlert(sym, type, score, verdict, spot, g) {
   // Live category total (50 max)
   const liveEarned = (bd?.vwapSignal?.earned||0)+(bd?.volumeRvol?.earned||0)+(bd?.chochSignal?.earned||0)+(bd?.oiChangeSignal?.earned||0)+(bd?.cvdSignal?.earned||0);
 
-  let msg = `${icon} <b>${sym} ${type}</b> — ${verdict} (${score}/100)\n`;
-  msg += `💰 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}`;
-  if (atm) msg += ` | ATM: ${atm}`;
-  msg += `\n`;
+  // IST time for alert header
+  const istNow = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+  const hh = String(istNow.getHours()).padStart(2,"0");
+  const mm = String(istNow.getMinutes()).padStart(2,"0");
+  const timeStr = `${hh}:${mm}`;
+
+  // Size guide
+  const sizeGuide = verdict==="STRONG" ? "Full size" : verdict==="MODERATE" ? "Half size" : "Small size / watch";
+
+  let msg = `${icon} <b>${sym} — ${isCE?"BUY CALL":"BUY PUT"}</b>\n`;
+  msg += `🕐 ${timeStr} IST  |  Score: <b>${score}/100</b> (${verdict})\n\n`;
 
   if (atm) {
-    msg += `🎯 Buy: <b>${atm} ${type}</b>`;
-    if (optLtp) msg += ` @ ₹${optLtp}`;
-    if (lot && capital) msg += ` | Lot:${lot}=${capital}`;
-    msg += `\n`;
+    msg += `📌 <b>Strike: ${atm} ${type}</b>\n`;
+    if (optLtp) msg += `💵 Option price: ₹${optLtp}`;
+    if (lot && capital) msg += ` × ${lot} lots = <b>${capital}</b>`;
+    if (optLtp || lot) msg += `\n`;
   }
-  if (stop && tgt) msg += `🛑 SL: ₹${stop} | 🎯 Tgt: ₹${tgt}\n`;
+  msg += `📊 Spot: ₹${spot?.toFixed ? spot.toFixed(1) : spot}\n`;
+  if (stop) msg += `🛑 Stop loss: ₹${stop}\n`;
+  if (tgt)  msg += `🎯 Target: ₹${tgt}\n`;
+  msg += `📐 Size: ${sizeGuide}\n`;
 
-  msg += `\n<b>📊 Score breakdown</b>\n`;
-  msg += `Pre-market: ${preMktEarned}/35`;
-  if (vixVal) msg += ` | VIX:${vixVal}(${vixReg||"?"})`;
-  if (cprPos) msg += ` | CPR:${cprPos}`;
-  if (fbBias) msg += ` | Fut:${fbBias}`;
-  msg += `\n`;
-  msg += `Live: ${liveEarned}/50`;
-  if (aboveVwap != null) msg += ` | VWAP:${aboveVwap?"ABOVE":"BELOW"}`;
-  if (rvol) msg += ` | RVOL:${rvol}x`;
-  if (chochDet) msg += ` | CHOCH:${chochDir||"✓"}`;
-  if (cvdBias) msg += ` | CVD:${cvdBias}`;
-  msg += `\n`;
-  if (orbNote) msg += `⏰ ORB: ${orbNote}\n`;
+  // 2-line plain-English reason (top passing signals)
+  const topSignals = [];
+  if (aboveVwap != null) topSignals.push(aboveVwap === isCE ? "price on right side of VWAP" : null);
+  if (chochDet && chochDir) topSignals.push(`structure break ${chochDir==="BULLISH"?"up":"down"}`);
+  if (cvdBias && cvdBias!=="NEUTRAL") topSignals.push(`${cvdBias==="BUYING"?"buying":"selling"} pressure building`);
+  if (g?.cpr?.position) topSignals.push(`price ${g.cpr.position.toLowerCase()} CPR`);
+  if (g?.futuresBasis?.bias==="PREMIUM" && isCE) topSignals.push("futures showing premium");
+  if (g?.futuresBasis?.bias==="DISCOUNT" && !isCE) topSignals.push("futures in discount");
+  const reasons = topSignals.filter(Boolean).slice(0,3);
+  if (reasons.length) msg += `✅ ${reasons.join(", ")}\n`;
 
-  if (pcr || mp || ceWall || peFloor) {
-    msg += `\n`;
-    if (pcr) msg += `PCR:${pcr}`;
-    if (mp)  msg += ` | MaxPain:${mp}`;
-    if (ceWall)  msg += ` | CE Wall:${ceWall}`;
-    if (peFloor) msg += ` | PE Floor:${peFloor}`;
-    msg += `\n`;
-  }
+  if (mp) msg += `\n📍 Max Pain: ${mp}`;
+  if (pcr) msg += `  |  PCR: ${pcr}`;
+  if (mp || pcr) msg += `\n`;
 
-  msg += `\n――――――――――――――――――\n<b>DiLiP's Research Lab 🔬</b>`;
+  msg += `\n——————————————\n<b>DiLiP's Research Lab 🔬</b>`;
   sendTelegram(msg, { sym, type, verdict, score }).catch(() => {});
 }
 // ─────────────────────────────────────────────────────────────────────────────
