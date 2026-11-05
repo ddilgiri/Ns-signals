@@ -526,7 +526,7 @@ app.post("/signal-outcome",(req,res)=>{
 // both use whatever the user has actually set there, not a hardcoded number.
 // Defaults to 60 to match cfgMinConf's own default until the app sends its real
 // value (right after load, and on every change).
-let MIN_CONFIDENCE = 65; // 11-signal system entry gate: ≥65/100 at 9:40 AM = valid trade (2026-10-28)
+let MIN_CONFIDENCE = 75; // 11-signal system entry gate: STRONG only ≥75/100 (2026-11-05)
 
 // ── TELEGRAM ALERTS ──────────────────────────────────────────────────────────
 const TG_TOKEN = process.env.TELEGRAM_TOKEN;
